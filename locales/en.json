@@ -8,6 +8,7 @@
   "onboarding.models.description": "Molly runs locally. Keys stay on this Mac. You need a language model and an image model to start designing.",
   "onboarding.models.unavailable": "The built-in Molly catalog is not available yet. You can skip setup and configure your connection in Settings later.",
   "onboarding.models.skip": "Skip for now",
+  "onboarding.models.catalogError": "Couldn’t read the model catalog. Retry to finish setup.",
   "onboarding.tour.seedPrompt": "Design an editable poster for a weekend flower market.",
   "design.continuation.title": "Continue this design with Molly",
   "design.continuation.description": "Create an independent Molly conversation for the same artwork. The old conversation, drafts, assets and design versions stay in place. No model request is sent by this action.",

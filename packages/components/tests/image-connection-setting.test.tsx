@@ -586,6 +586,33 @@ describe('ImageConnectionForm', () => {
     expect(view.textContent).toContain(copy('settings.readiness.keyMissing'));
   });
 
+  it('logs a failed first read and reports the connection after an explicit retry', async () => {
+    const failure = new Error('keychain locked');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    imageIpc.getImageSnapshot.mockImplementationOnce(async () => {
+      throw failure;
+    });
+    imageIpc.getImageSnapshot.mockImplementation(async () => ({ connection: storedConnection() }));
+    const reported: (ProtectedImageConnection | null)[] = [];
+    await act(async () => {
+      root?.render(
+        createElement(ImageConnectionSetting, {
+          onConnectionChange: (connection) => reported.push(connection),
+        })
+      );
+    });
+    const view = container as HTMLElement;
+    expect(view.textContent).toContain(copy('settings.models.error'));
+    expect(consoleError).toHaveBeenCalledWith('Failed to read the image connection', failure);
+    expect(reported).toEqual([]);
+
+    await click(button(view, copy('common.retry')));
+
+    expect(reported).toEqual([storedConnection()]);
+    expect(view.textContent).not.toContain(copy('settings.models.error'));
+    consoleError.mockRestore();
+  });
+
   it('keeps the row actions reachable when the stored key is missing', async () => {
     imageIpc.getImageSnapshot.mockImplementation(async () => ({
       connection: storedConnection({ enabled: false, hasApiKey: false }),

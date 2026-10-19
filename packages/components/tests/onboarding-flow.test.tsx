@@ -110,6 +110,18 @@ import { TestCloudPlatformProvider } from './test-platform';
 
 const workspaceId = 'workspace-1' as WorkspaceId;
 const machineId = 'machine-1' as MachineId;
+const SYNTHETIC_MODEL_CATALOG = {
+  models: [
+    {
+      providerPresetId: 'deepseek',
+      modelId: 'deepseek-chat',
+      name: 'deepseek-chat',
+      input: ['text'],
+      contextWindow: 128_000,
+      thinking: ['off', 'medium', 'high'],
+    },
+  ],
+};
 
 function installElectronWindowIpc() {
   mocks.getCliState.mockReturnValue(new Promise(() => undefined));
@@ -121,6 +133,7 @@ function installElectronWindowIpc() {
     value: {
       invoke: async (channel: string) => {
         if (channel === 'cli.getState') return mocks.getCliState();
+        if (channel === 'modelConnections.getModelCatalog') return SYNTHETIC_MODEL_CATALOG;
         throw new Error(`unexpected invoke ${channel}`);
       },
       on: (channel: string, listener: (payload: unknown) => void) => {

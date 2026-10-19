@@ -4,7 +4,11 @@ import React, { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentConfigId, AgentConfigMeta, MachineId } from '@molly/shared';
-import { encodeMollyModelOption, MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
+import {
+  encodeMollyModelOption,
+  MOLLY_UNSELECTED_MODEL,
+  type ModelConnection,
+} from '@molly/shared/embedded-harness';
 
 vi.mock('../src/components/onboarding/onboarding-shell', () => ({
   OnboardingShell: ({
@@ -139,6 +143,23 @@ describe('ProvidersScreenView', () => {
     expect(container.textContent).not.toContain('built-in Molly catalog is not available');
   });
 
+  it('offers a catalog Retry only after the catalog read failed', async () => {
+    await renderView({ mollyAvailable: true });
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    let retries = 0;
+    await renderView({
+      mollyAvailable: true,
+      onCatalogRetry: () => {
+        retries += 1;
+      },
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Couldn’t read the model catalog'
+    );
+    await act(async () => findButton(container, 'Retry').click());
+    expect(retries).toBe(1);
+  });
+
   it('wires Skip and Back without requiring readiness', async () => {
     const calls = await renderView({});
     await act(async () => findButton(container, 'Skip for now').click());
@@ -180,20 +201,90 @@ describe('getOnboardingDefaultModelId', () => {
     { value: encodeMollyModelOption('conn-a', 'alpha/1'), label: 'alpha' },
     { value: encodeMollyModelOption('conn-b', 'beta/1'), label: 'beta' },
   ];
+  const catalog = [
+    {
+      providerPresetId: 'openai' as const,
+      modelId: 'alpha/1',
+      name: 'alpha',
+      input: ['text' as const],
+      contextWindow: 128_000,
+      thinking: ['off' as const],
+    },
+  ];
+  const compatible = (id: string, modelIds: string[]): ModelConnection => ({
+    schemaVersion: 1,
+    id,
+    revision: 1,
+    providerPresetId: 'openai-compatible',
+    displayName: id,
+    baseUrl: 'https://compatible.example/v1',
+    credentialRef: `${id}-key`,
+    enabled: true,
+    customModels: modelIds.map((modelId) => ({
+      modelId,
+      name: modelId,
+      input: ['text'],
+      contextWindow: 128_000,
+      maxTokens: 4_096,
+      thinking: ['off'],
+      toolCalls: true,
+      maxTokensField: 'max_tokens',
+    })),
+  });
+  const native = (id: string, models?: string[]): ModelConnection => ({
+    schemaVersion: 1,
+    id,
+    revision: 1,
+    providerPresetId: 'openai',
+    displayName: id,
+    baseUrl: 'https://api.openai.com/v1',
+    credentialRef: `${id}-key`,
+    enabled: true,
+    ...(models ? { models } : {}),
+  });
 
-  it('picks the first offered model of a ready connection', () => {
-    expect(getOnboardingDefaultModelId(options, new Set(['conn-b']))).toBe(
+  it('picks the first projected model that a ready connection currently offers', () => {
+    expect(getOnboardingDefaultModelId(options, [compatible('conn-b', ['beta/1'])], catalog)).toBe(
       encodeMollyModelOption('conn-b', 'beta/1')
     );
-    expect(getOnboardingDefaultModelId(options, new Set(['conn-b', 'conn-a']))).toBe(
-      encodeMollyModelOption('conn-a', 'alpha/1')
-    );
+    expect(
+      getOnboardingDefaultModelId(
+        options,
+        [compatible('conn-b', ['beta/1']), native('conn-a')],
+        catalog
+      )
+    ).toBe(encodeMollyModelOption('conn-a', 'alpha/1'));
   });
 
   it('returns null until a ready connection has a projected model', () => {
-    expect(getOnboardingDefaultModelId(options, new Set(['conn-missing']))).toBeNull();
-    expect(getOnboardingDefaultModelId(options, new Set())).toBeNull();
-    expect(getOnboardingDefaultModelId([options[0]!], new Set(['conn-a']))).toBeNull();
+    expect(
+      getOnboardingDefaultModelId(options, [compatible('conn-missing', ['beta/1'])], catalog)
+    ).toBeNull();
+    expect(getOnboardingDefaultModelId(options, [], catalog)).toBeNull();
+    expect(getOnboardingDefaultModelId([options[0]!], [native('conn-a')], catalog)).toBeNull();
+  });
+
+  it('rejects a stale projection after a same-id edit changed the offered models', () => {
+    expect(
+      getOnboardingDefaultModelId(options, [compatible('conn-b', ['beta/2'])], catalog)
+    ).toBeNull();
+    expect(
+      getOnboardingDefaultModelId(options, [native('conn-a', ['alpha/2'])], catalog)
+    ).toBeNull();
+    expect(
+      getOnboardingDefaultModelId(
+        options,
+        [{ ...native('conn-b'), providerPresetId: 'anthropic' }],
+        [...catalog, { ...catalog[0]!, providerPresetId: 'anthropic', modelId: 'gamma/1' }]
+      )
+    ).toBeNull();
+  });
+
+  it('cannot verify a native connection before the packaged catalog is read', () => {
+    expect(getOnboardingDefaultModelId(options, [native('conn-a')], undefined)).toBeNull();
+    expect(
+      getOnboardingDefaultModelId(options, [compatible('conn-b', ['beta/1'])], undefined)
+    ).toBe(encodeMollyModelOption('conn-b', 'beta/1'));
   });
 });
 

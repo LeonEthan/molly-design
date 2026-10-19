@@ -574,6 +574,8 @@ export function ImageConnectionSetting({
   const ipc = useMemo(() => getIpcServices(), []);
   const [stored, setStored] = useState<ProtectedImageConnection>();
   const [ready, setReady] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
   const [editing, setEditing] = useState(false);
@@ -592,16 +594,22 @@ export function ImageConnectionSetting({
       .then((snapshot) => {
         if (live) {
           setStored(snapshot.connection ?? undefined);
+          setLoadFailed(false);
+          setSaveError(undefined);
           setReady(true);
         }
       })
-      .catch(() => {
-        if (live) setSaveError(t('settings.models.error'));
+      .catch((error: unknown) => {
+        console.error('Failed to read the image connection', error);
+        if (live) {
+          setLoadFailed(true);
+          setSaveError(t('settings.models.error'));
+        }
       });
     return () => {
       live = false;
     };
-  }, [ipc, t]);
+  }, [ipc, loadAttempt, t]);
   const onCheck = useCallback<ImageConnectionCheck>(
     async (input) => {
       if (!ipc) return { ok: false, reason: 'unreachable' };
@@ -698,9 +706,24 @@ export function ImageConnectionSetting({
     >
       <div className="border-t border-border/40">
         {!ready ? (
-          <p role="status" className="px-5 py-4 text-xs text-muted-foreground">
-            {saveError ?? t('settings.models.loading')}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+            <p role="status" className="min-w-0 flex-1 text-xs text-muted-foreground">
+              {saveError ?? t('settings.models.loading')}
+            </p>
+            {loadFailed ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setLoadFailed(false);
+                  setSaveError(undefined);
+                  setLoadAttempt((attempt) => attempt + 1);
+                }}
+              >
+                {t('common.retry')}
+              </Button>
+            ) : null}
+          </div>
         ) : editing ? (
           <ImageConnectionForm
             className="bg-foreground/[0.015] p-5"

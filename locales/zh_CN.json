@@ -9,6 +9,7 @@
   "onboarding.models.description": "Molly 在本机运行，密钥只保存在这台 Mac 上。开始设计前，你需要一个语言模型和一个图像模型。",
   "onboarding.models.unavailable": "内置 Molly 目录尚未就绪。可以跳过，稍后在设置中配置模型连接。",
   "onboarding.models.skip": "稍后再说",
+  "onboarding.models.catalogError": "无法读取模型目录。请重试以完成设置。",
   "onboarding.tour.seedPrompt": "为周末花市设计一张可编辑海报。",
   "design.continuation.title": "用 Molly 继续此设计",
   "design.continuation.description": "为同一作品创建独立的 Molly 会话。旧会话、草稿、素材和设计版本原地保留。此操作不会发送模型请求。",

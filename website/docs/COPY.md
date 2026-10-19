@@ -5,7 +5,9 @@ Generated from the built `dist/index.html` (rendered in each language) by `scrip
 ## Meta
 
 - EN title: Molly Design · AI design for graphic designers, in layers you can edit
-- Description (bilingual): An AI design app for graphic designers on the Mac. Describe the job and get back a layered file: real text, shapes and images you can keep editing. 给平面设计师的 Mac AI 设计工具。说清要做什么，拿回分好层的稿子，文字、形状、图片都能接着改。
+- ZH title: Molly Design · 给平面设计师的 AI 设计工具，分层设计稿可以接着改
+- EN description: An AI design app for graphic designers on the Mac. Describe the job and get back a layered file: real text, shapes and images you can keep editing.
+- ZH description: 给平面设计师的 Mac AI 设计工具。说清要做什么，拿回分好层的设计稿，文字、形状、图片都能接着改。
 
 ## top
 
@@ -109,7 +111,7 @@ Pick one of a few directions, and Molly builds that one.
 
 Stays on your Mac
 
-Design files, versions and chats stay on your Mac Your own models and keys. No Molly account
+Design files, versions and chats stay on your Mac. Your own models and keys. No Molly account.
 ```
 
 ### 中文
@@ -125,7 +127,7 @@ Design files, versions and chats stay on your Mac Your own models and keys. No M
 
 留在你的 Mac 上
 
-设计稿、版本和对话都留在你的 Mac 上 用你自己的模型和密钥，不需要 Molly 账户
+设计稿、版本和对话都留在你的 Mac 上。用你自己的模型和密钥，不需要 Molly 账户。
 ```
 
 ## demo
@@ -373,16 +375,16 @@ All made in Molly
 
 Every piece below was built and exported in Molly. Brands and campaigns are fictional.
 
-Product detail page
-A pour-over kettle for a fictional pottery brand, 1080 × 2400. Headline, details and spec table are all text layers.
-Long-form graphic
-A brew guide for a fictional coffee roaster, 1080 × 2400, in five modules you can edit one at a time.
 Key visual
 A landscape key visual for a fictional design week, 1920 × 1080.
 Social post
 An autumn special for a neighbourhood café, 1080 × 1080.
 Packaging label
 A small-batch tea label, 1080 × 1080. Even the net weight is editable text.
+Product detail page
+A pour-over kettle for a fictional pottery brand, 1080 × 2400. Headline, details and spec table are all text layers.
+Long-form graphic
+A brew guide for a fictional coffee roaster, 1080 × 2400, in five modules you can edit one at a time.
 ```
 
 ### 中文
@@ -392,16 +394,16 @@ A small-batch tea label, 1080 × 1080. Even the net weight is editable text.
 
 下面每一张都是在 Molly 里做完、直接导出的。品牌和活动都是虚构的。
 
-商品详情页
-虚构陶器品牌的手冲壶，1080 × 2400。标题、卖点和规格表都是文字图层。
-长图
-虚构咖啡品牌的冲煮指南，1080 × 2400。分成五个模块，每块都能单独改。
 活动主视觉
 虚构设计周的横版主视觉，1920 × 1080。
 社媒图
 街角咖啡馆的秋季新品方图，1080 × 1080。
 包装标签
 小批量茶叶的标签，1080 × 1080。净含量这样的小字也是能改的文字。
+商品详情页
+虚构陶器品牌的手冲壶，1080 × 2400。标题、卖点和规格表都是文字图层。
+长图
+虚构咖啡品牌的冲煮指南，1080 × 2400。分成五个模块，每块都能单独改。
 ```
 
 ## releases
@@ -587,11 +589,11 @@ GitHub
 | A ceramic kettle product page on the Molly canvas with the Export menu open, listing PNG and JPEG at 1×, 2× and 3× | Molly 画布上一张陶瓷手冲壶商品详情长图，右上角的导出菜单已展开，列出 PNG 和 JPEG 的 1×、2×、3× |
 | A ceramic kettle product page on the Molly canvas with the Export menu open, listing PNG and JPEG at 1×, 2× and 3× | Molly 画布上一张陶瓷手冲壶商品详情长图，右上角的导出菜单已展开，列出 PNG 和 JPEG 的 1×、2×、3× |
 | Diagram: artwork, versions, chats and encrypted keys stay on your Mac; model and image requests go straight to the providers you configure; no Molly cloud account. | 示意图：作品、版本、对话和加密的密钥都在你的 Mac 上；模型和图片请求直接发给你配置的服务商；不需要 Molly 云账户。 |
-| A long product page for a ceramic pour-over kettle: hero photo, headline, three details and a spec table | 陶瓷手冲壶的商品详情长图：大图、标题、三个细节和规格表 |
-| A long how-to graphic for pour-over coffee: five steps, each with an illustration and a short explanation | 手冲咖啡五步图解长图：每一步一张插图和说明 |
 | A design-week key visual: the headline IDEAS IN MOTION beside a red ribbon wrapped around a glass sphere | 设计周主视觉：IDEAS IN MOTION 大标题，右侧是红色丝带缠绕的玻璃球 |
 | A café social post: the words maple oat latte above a latte with leaf art | 咖啡馆社媒方图：maple oat latte 标题和一杯拉花拿铁 |
 | A tea label: a botanical engraving in a round window on deep green, with the name FOREST DAWN | 茶叶包装标签：深绿底上的植物版画圆窗和 FOREST DAWN 字样 |
+| A long product page for a ceramic pour-over kettle: hero photo, headline, three details and a spec table | 陶瓷手冲壶的商品详情长图：大图、标题、三个细节和规格表 |
+| A long how-to graphic for pour-over coffee: five steps, each with an illustration and a short explanation | 手冲咖啡五步图解长图：每一步一张插图和说明 |
 | Molly Design | Molly Design |
 
 ## GitHub navigation

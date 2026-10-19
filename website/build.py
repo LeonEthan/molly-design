@@ -8,19 +8,27 @@ SRC = ROOT / 'assets'
 SITE_DIR = ROOT / 'dist'
 HERE = ROOT / 'src'
 SITE = 'https://molly-design.pages.dev'
-DMG = 'https://github.com/LeonEthan/molly-design/releases/download/v0.1.1/MollyDesign-0.1.1-arm64.dmg'
+DMG_FALLBACK = 'https://github.com/LeonEthan/molly-design/releases/download/v0.1.1/MollyDesign-0.1.1-arm64.dmg'
+DMG = DMG_FALLBACK
 GH = 'https://github.com/LeonEthan/molly-design'
 DOWNLOAD = GH + '/releases/latest'
 RELEASES = GH + '/releases'
 MAN = json.loads((SRC / 'manifest.json').read_text())
-CFG = json.loads((HERE / 'slots.json').read_text().replace('@@DMG@@', DMG))
+CFG = {}
 DL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 20h14"/></svg>'
 GITHUB_MARK = '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true" focusable="false"><path d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>'
 GITHUB_LABEL = '[[在 GitHub 上查看 Molly Design||Molly Design on GitHub]]'
 CTA = '[[下载 macOS 版||Download for macOS]]'
 CTA_GH = '[[在 GitHub 看源码||View source on GitHub]]'
 WF_KEYS = ('brief', 'research', 'options', 'layers', 'edit', 'export')
-FALLBACK_RELEASES = [('v0.1.1', '2026-10-17'), ('v0.1.0', '2026-10-12')]
+FALLBACK_RELEASES = [('v0.1.1', '2026-10-17'), ('v0.1.0', '2026-10-15')]
+TITLE_EN = 'Molly Design · AI design for graphic designers, in layers you can edit'
+TITLE_ZH = 'Molly Design · 给平面设计师的 AI 设计工具，分层设计稿可以接着改'
+DESC_EN = (
+    'An AI design app for graphic designers on the Mac. Describe the job and get back a layered file: '
+    'real text, shapes and images you can keep editing.'
+)
+DESC_ZH = '给平面设计师的 Mac AI 设计工具。说清要做什么，拿回分好层的设计稿，文字、形状、图片都能接着改。'
 
 
 def pairs(s):
@@ -75,7 +83,11 @@ def S(name):
     return '[[%s||%s]]' % (v[0], v[1])
 
 
-def fetch_releases():
+def fetch_github():
+    """Latest release rows plus the current DMG asset URL. Falls back offline."""
+    global DMG, CFG
+    releases = list(FALLBACK_RELEASES)
+    dmg = DMG_FALLBACK
     try:
         req = urllib.request.Request(
             'https://api.github.com/repos/LeonEthan/molly-design/releases?per_page=3',
@@ -83,16 +95,39 @@ def fetch_releases():
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
-        out = []
+        rows = []
         for row in data[:3]:
             tag = row.get('tag_name') or ''
             published = row.get('published_at') or ''
             if not tag or not published:
                 continue
-            out.append((tag if tag.startswith('v') else 'v' + tag, published[:10]))
-        return out or FALLBACK_RELEASES
+            rows.append((tag if tag.startswith('v') else 'v' + tag, published[:10]))
+        if rows:
+            releases = rows
+        for asset in (data[0].get('assets') or []) if data else []:
+            url = asset.get('browser_download_url') or ''
+            name = asset.get('name') or ''
+            if name.endswith('.dmg') and url:
+                dmg = url
+                break
     except Exception:
-        return FALLBACK_RELEASES
+        pass
+    DMG = dmg
+    CFG = json.loads((HERE / 'slots.json').read_text().replace('@@DMG@@', DMG))
+    return releases
+
+
+def hero_h1():
+    zh, en = CFG['text']['h1']
+    zh = zh.replace('接着改。', '<span class="nobr">接着改。</span>')
+    return '[[%s||%s]]' % (zh, en)
+
+
+def trust_line():
+    a, b = CFG['text']['trust2'], CFG['text']['trust3']
+    zh = a[0].rstrip('。') + '。' + b[0].rstrip('。') + '。'
+    en = a[1].rstrip('.') + '. ' + b[1].rstrip('.') + '.'
+    return '[[%s||%s]]' % (zh, en)
 
 
 def scene_asset(key):
@@ -214,12 +249,9 @@ def wf_shot(key):
 
 
 def head():
-    desc_en = (
-        'An AI design app for graphic designers on the Mac. Describe the job and get back a layered file: '
-        'real text, shapes and images you can keep editing.'
-    )
-    desc_zh = '给平面设计师的 Mac AI 设计工具。说清要做什么，拿回分好层的稿子，文字、形状、图片都能接着改。'
-    title = 'Molly Design · AI design for graphic designers, in layers you can edit'
+    desc_en = DESC_EN
+    desc_zh = DESC_ZH
+    title = TITLE_EN
     jsonld = json.dumps(
         {
             '@context': 'https://schema.org',
@@ -243,10 +275,12 @@ def head():
     lang_boot = (
         "(function(){var l=null;try{l=localStorage.getItem('molly-lang')}catch(e){}"
         "if(l!=='zh'&&l!=='en')l=/^zh/i.test(navigator.language||'')?'zh':'en';"
-        "var r=document.documentElement;r.setAttribute('data-lang',l);r.lang=l==='zh'?'zh-CN':'en';})();"
+        "var r=document.documentElement;r.setAttribute('data-lang',l);r.lang=l==='zh'?'zh-CN':'en';"
+        "var t=r.getAttribute('data-title-'+l);if(t)document.title=t;"
+        "var md=document.querySelector('meta[name=description]');var d=r.getAttribute('data-desc-'+l);if(md&&d)md.setAttribute('content',d);})();"
     )
     return f'''<!doctype html>
-<html lang="zh-CN" data-lang="zh">
+<html lang="zh-CN" data-lang="zh" data-title-zh="{esc(TITLE_ZH)}" data-title-en="{esc(TITLE_EN)}" data-desc-zh="{esc(DESC_ZH)}" data-desc-en="{esc(DESC_EN)}">
 <head>
 <meta charset="utf-8">
 <!-- SITE_URL={SITE} -->
@@ -296,13 +330,30 @@ def body(releases):
         for tag, date in releases
     )
 
-    def wall_tile(w):
+    def wall_tile(w, cls=''):
         return (
-            '<figure class="wt"><div class="shot">%s</div><figcaption><b>[[%s||%s]]</b>[[%s||%s]]</figcaption></figure>'
-            % (pic(w['img'], w['alt'][0], w['alt'][1], sizes='(max-width:700px) 100vw, 520px'), w['title'][0], w['title'][1], w['cap'][0], w['cap'][1])
+            '<figure class="wt%s"><div class="shot">%s</div><figcaption><b>[[%s||%s]]</b>[[%s||%s]]</figcaption></figure>'
+            % (
+                (' ' + cls) if cls else '',
+                pic(w['img'], w['alt'][0], w['alt'][1], sizes='(max-width:700px) 100vw, 520px'),
+                w['title'][0],
+                w['title'][1],
+                w['cap'][0],
+                w['cap'][1],
+            )
         )
 
-    wall_html = ''.join(wall_tile(w) for col in CFG['wall'] for w in col)
+    by_img = {w['img']: w for col in CFG['wall'] for w in col}
+    wall_html = (
+        '<div class="wall-side">%s<div class="wall-sq">%s%s</div></div>%s%s'
+        % (
+            wall_tile(by_img['s-kv'], 'w-wide'),
+            wall_tile(by_img['s-social']),
+            wall_tile(by_img['s-packaging']),
+            wall_tile(by_img['s-detail'], 'w-tall'),
+            wall_tile(by_img['s-longform'], 'w-tall'),
+        )
+    )
 
     steps = ''.join(
         '<button type="button" class="wf-step%s" data-wf="%s" role="tab" aria-selected="%s" tabindex="%s"><i>%02d</i><span>[[%s||%s]]</span></button>'
@@ -336,6 +387,7 @@ def body(releases):
 <header class="top" id="top">
   <div class="wrap top-in">
     <a class="brand" href="#main" aria-label="Molly Design"><img src="@@A:brand/molly-wordmark.svg@@" width="91" height="30" alt="Molly Design"></a>
+    <div class="nav-cluster">
     <nav class="links" id="nav" aria-label="[[主导航||Main]]">
       <a href="#demo">[[演示||Demo]]</a>
       <a href="#workflow">[[工作流程||Workflow]]</a>
@@ -344,6 +396,7 @@ def body(releases):
       <a href="#faq">[[常见问题||FAQ]]</a>
     </nav>
     <span class="sp"></span>
+    <div class="nav-tools">
     <div class="lang" role="group" aria-label="Language / 语言">
       <button type="button" data-set="zh" lang="zh-CN">中</button>
       <button type="button" data-set="en" lang="en">EN</button>
@@ -351,6 +404,8 @@ def body(releases):
     <div class="theme" role="group" aria-label="[[主题||Theme]]">
       <button type="button" data-theme-set="light" aria-label="[[浅色||Light]]">☀</button>
       <button type="button" data-theme-set="dark" aria-label="[[深色||Dark]]">☾</button>
+    </div>
+    </div>
     </div>
     <a class="btn accent nav-dl" href="{DOWNLOAD}">{CTA}</a>
     <a class="btn ic nav-github" href="{GH}" target="_blank" rel="noopener noreferrer" aria-label="{GITHUB_LABEL}" title="{GITHUB_LABEL}">{GITHUB_MARK}</a>
@@ -361,7 +416,7 @@ def body(releases):
 <main id="main">
 <header class="hero">
   <div class="wrap hero-in">
-    <h1 class="serif">{S('h1')}</h1>
+    <h1 class="serif">{hero_h1()}</h1>
     <p class="hero-sub">[[拿回一份分层设计稿，改字换图都在同一份里。||Get a layered file back. Retype and swap images in the same file.]]</p>
     {hero_stage()}
   </div>
@@ -371,7 +426,7 @@ def body(releases):
   <div class="wrap strip">
     <div><h2 class="h3">[[能接着做的源文件||A real working file]]</h2><p>[[真文字、矢量形状和一层图片，都在同一份设计稿里。||Real text, vector shapes and one image layer in the same file.]]</p></div>
     <div><h2 class="h3">{S('p2_h')}</h2><p>[[几套方向并排摆出来，你选一套，它就按那套出稿。||Pick one of a few directions, and Molly builds that one.]]</p></div>
-    <div><h2 class="h3">[[留在你的 Mac 上||Stays on your Mac]]</h2><p>{S('trust2')} {S('trust3')}</p></div>
+    <div><h2 class="h3">[[留在你的 Mac 上||Stays on your Mac]]</h2><p>{trust_line()}</p></div>
   </div>
 </div>
 
@@ -468,7 +523,7 @@ def body(releases):
 
 
 def build():
-    releases = fetch_releases()
+    releases = fetch_github()
     html = pairs(head() + body(releases))
     if re.search(r'ph-tag|ph-block|placeholder|占位', html, re.I):
         sys.exit('placeholder markup left in page')
@@ -498,7 +553,7 @@ def build():
 
     nf = (HERE / '404.html').read_text()
     nf = re.sub(r'@@A:([^@]+)@@', lambda m: amap.get(m.group(1)) or sys.exit('404 uses unshipped ' + m.group(1)), nf)
-    nf = nf.replace('@@DMG@@', DMG)
+    nf = nf.replace('@@LATEST@@', DOWNLOAD)
     (SITE_DIR / '404.html').write_text(nf, encoding='utf-8')
     (SITE_DIR / 'robots.txt').write_text('User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n' % SITE)
     (SITE_DIR / 'sitemap.xml').write_text(

@@ -19,6 +19,11 @@
     document.querySelectorAll('.lang button').forEach(function (b) {
       b.setAttribute('aria-pressed', String(b.getAttribute('data-set') === l));
     });
+    var title = root.getAttribute('data-title-' + l);
+    var desc = root.getAttribute('data-desc-' + l);
+    if (title) document.title = title;
+    var meta = document.querySelector('meta[name="description"]');
+    if (meta && desc) meta.setAttribute('content', desc);
     if (save) {
       try {
         localStorage.setItem('molly-lang', l);

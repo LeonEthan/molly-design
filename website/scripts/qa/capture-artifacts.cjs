@@ -29,11 +29,37 @@ async function main() {
     );
     await page.goto(BASE, { waitUntil: 'networkidle' });
     await page.evaluate(() => document.fonts.ready);
-    await page.screenshot({
-      path: path.join(OUT, `site175-${lang}-${theme}-${width}.png`),
-      fullPage: true,
+    await page.evaluate(async () => {
+      const step = Math.max(window.innerHeight * 0.8, 400);
+      const height = document.documentElement.scrollHeight;
+      for (let y = 0; y < height; y += step) {
+        window.scrollTo(0, y);
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+      window.scrollTo(0, 0);
+      await Promise.race([
+        Promise.all(
+          [...document.images].map((image) =>
+            image.complete
+              ? Promise.resolve()
+              : new Promise((resolve) => {
+                  image.addEventListener('load', resolve, { once: true });
+                  image.addEventListener('error', resolve, { once: true });
+                })
+          )
+        ),
+        new Promise((resolve) => setTimeout(resolve, 8000)),
+      ]);
     });
+    const shot = path.join(OUT, `site175-${lang}-${theme}-${width}.png`);
+    await page.screenshot({ path: shot, fullPage: true });
+    console.log('wrote', shot);
     await page.close();
+  }
+  if (process.env.SKIP_VIDEO === '1') {
+    await browser.close();
+    console.log('artifacts written to', OUT);
+    return;
   }
 
   const videoPath = path.join(OUT, 'site175-hero-recording.webm');

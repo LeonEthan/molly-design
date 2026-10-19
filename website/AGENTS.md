@@ -16,9 +16,9 @@
   and a regenerated `docs/COPY.md`.
 - Follow the claims rules in NOTES: no version numbers in visible text; never
   call the DMG signed; no visible frame captions or hero eyebrow labels (#175).
-- Nav and closing primary download buttons link to `DOWNLOAD` (`…/releases/latest`)
-  in `build.py`. FAQ install/update answers and `404.html` still use the `DMG`
-  constant (`@@DMG@@` in `slots.json`).
+- Nav, closing, and `404.html` link to `DOWNLOAD` (`…/releases/latest`). FAQ
+  `@@DMG@@` links use the latest GitHub release `.dmg` asset, resolved at build
+  time, falling back to the pinned v0.1.1 URL when the API is unavailable.
 - Commit web-ready derivatives only: WebP images (PNG only for `og.png` and
   icons), no raw captures or masters, each file under 1 MB. Record provenance in
   `assets/manifest.json`.

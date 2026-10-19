@@ -51,6 +51,37 @@ export class SessionPage {
     expect(saved?.id, 'The deterministic model connection was not saved').toEqual(
       expect.any(String)
     );
+    await this.seedDeterministicImageConnection(port);
+  }
+
+  /**
+   * Design sessions require an image model too (#168). Saving does not probe the
+   * endpoint, and the scripted runtime never calls image tools, so this loopback
+   * connection only satisfies the landing readiness gate.
+   */
+  private async seedDeterministicImageConnection(port: number): Promise<void> {
+    const saved = await this.page.evaluate(
+      async (input) => {
+        if (!window.ipc) throw new Error('Electron IPC is unavailable');
+        return (await window.ipc.invoke('modelConnections.saveImage', input)) as {
+          id?: string;
+          enabled?: boolean;
+          hasApiKey?: boolean;
+        };
+      },
+      {
+        enabled: true,
+        protocol: 'openai-images',
+        baseUrl: `http://127.0.0.1:${port}/v1`,
+        model: 'e2e-deterministic-image',
+        apiKey: 'e2e-deterministic-image-key',
+      }
+    );
+    expect(saved, 'The deterministic image connection was not saved').toMatchObject({
+      id: expect.any(String),
+      enabled: true,
+      hasApiKey: true,
+    });
   }
 
   /** The draft composer lists the connection only after the daemon re-projects it. */

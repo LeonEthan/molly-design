@@ -12,7 +12,11 @@ import { getIpcServices } from '@/lib/electron-ipc-client';
  * Readiness describes saved configuration only: it never probes a key.
  */
 export function isModelConnectionReady(connection: ModelConnection): boolean {
-  return connection.enabled && !getModelConnectionConfigurationIssue(connection);
+  return (
+    connection.enabled &&
+    connection.oauth?.denied !== true &&
+    !getModelConnectionConfigurationIssue(connection)
+  );
 }
 
 export function getReadyModelConnections(

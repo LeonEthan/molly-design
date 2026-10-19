@@ -73,6 +73,24 @@ describe('design model readiness predicates', () => {
     ]);
   });
 
+  it('excludes an enabled OAuth connection whose refresh was denied', () => {
+    const signedIn: ModelConnection = {
+      ...connection,
+      providerPresetId: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      authType: 'openai_oauth',
+      oauth: { email: 'synthetic@example.com' },
+    };
+    const denied: ModelConnection = { ...signedIn, oauth: { ...signedIn.oauth, denied: true } };
+    expect(isModelConnectionReady(signedIn)).toBe(true);
+    expect(isModelConnectionReady({ ...signedIn, oauth: { denied: false } })).toBe(true);
+    expect(isModelConnectionReady(denied)).toBe(false);
+    expect(getReadyModelConnections([denied, signedIn])).toEqual([signedIn]);
+    expect(getMissingDesignModelClasses({ connections: [denied], imageConnection })).toEqual([
+      'language',
+    ]);
+  });
+
   it('requires an enabled image connection with a key', () => {
     expect(isImageConnectionReady(imageConnection)).toBe(true);
     expect(isImageConnectionReady({ ...imageConnection, enabled: false })).toBe(false);

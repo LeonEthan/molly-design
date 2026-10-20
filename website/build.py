@@ -145,7 +145,7 @@ def trust_line():
 
 
 def hero_stage():
-    return f'''<div class="stage"><div class="stage-fit" role="img" aria-label="[[示意静帧：横版石材画面铺满画幅。左侧是可编辑的标题和材质说明，右侧是单独的粗陶茶壶图层。||Illustration: a landscape still filling the frame. Editable headline and material specs sit on the left. A separate stoneware kettle layer sits on the right.]]">
+    return f'''<div class="stage hs"><div class="stage-fit" role="img" aria-label="[[示意：横版画面铺满画幅。茶壶图层被选中、移动、缩放，再点重新生成。标题和材质说明留在左侧。减少动态效果时保持这一静帧。||Illustration: a landscape frame filled edge to edge. The kettle layer is selected, moved, scaled, then regenerated. Headline and specs stay on the left. Reduced motion keeps this frame still.]]">
     <img class="hero-plate" src="@@A:img/hero-plate.webp@@" srcset="@@A:img/hero-plate-768.webp@@ 768w, @@A:img/hero-plate.webp@@ 1536w" sizes="(max-width:700px) calc(100vw - 40px), (max-width:1224px) calc(100vw - 64px), 1096px" width="1536" height="864" alt="" aria-hidden="true" fetchpriority="high" decoding="sync">
     <img class="hero-kettle" src="@@A:img/hero-kettle.webp@@" srcset="@@A:img/hero-kettle-480.webp@@ 480w, @@A:img/hero-kettle.webp@@ 1014w" sizes="(max-width:700px) 40vw, 438px" width="1014" height="782" alt="" aria-hidden="true">
     <div class="hero-copy">
@@ -155,6 +155,13 @@ def hero_stage():
       <p class="hs-tag">[[让日常慢下来。||For the slower moments.]]</p>
     </div>
     <p class="hs-study">[[器物研究 · 2026||Object study · 2026]]</p>
+    <div class="hs-ui" aria-hidden="true">
+      <span class="hs-clip"><span class="hs-sweep"></span></span>
+      <span class="hs-gb"><i></i><i></i><i></i><i></i></span>
+      <span class="hs-size" data-pct="100%"></span>
+      <span class="hs-pill"><em class="a">[[重新生成||Regenerate]]</em><em class="b">[[生成中…||Regenerating…]]</em></span>
+      <span class="hs-cur"><svg class="ar" viewBox="0 0 24 24"><path d="M5 3l14 8.2-6.1 1.5 3.6 6.6-2.7 1.4-3.5-6.6L5 18.5z"/></svg><svg class="rs" viewBox="0 0 24 24"><path d="M5 5h6l-2.2 2.2 8.4 8.4L19.4 13.4V19h-5.6l2.2-2.2-8.4-8.4L5.4 10.6z"/></svg></span>
+    </div>
   </div></div>'''
 
 

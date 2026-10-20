@@ -253,6 +253,23 @@ describe('composer model picker search', () => {
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
   });
 
+  it('labels ungrouped catalog rows as Other models on the provider row', async () => {
+    const plain = { value: 'plain-gpt', label: 'Plain GPT' };
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: [...twoProviderModels, plain],
+      selectedModelId: plain.value,
+    });
+    expect(rootRowText().some((text) => text.startsWith('ProviderOther models'))).toBe(true);
+    const providerRows = radioRows(await openSubmenu('Provider'));
+    expect(providerRows.map((row) => row.textContent)).toEqual([
+      'Studio',
+      'Review',
+      'Other models',
+    ]);
+    expect(providerRows[2]?.getAttribute('aria-checked')).toBe('true');
+  });
+
   it('follows the selected model when the catalog loses another connection', async () => {
     const studioNimbus = encodeMollyModelOption('studio', 'nimbus/2');
     await openRunConfigMenu({
@@ -396,7 +413,7 @@ describe('composer model picker search', () => {
     expect(onConfigOptionChange).toHaveBeenCalledWith('reasoning_effort', 'low');
   });
 
-  it('shows a disabled Reasoning placeholder when the model has no thought level', async () => {
+  it('shows Off on chip and submenu when the model publishes no reasoning levels', async () => {
     const onConfigOptionChange = vi.fn();
     await openRunConfigMenu({
       ...mollyProps,
@@ -405,10 +422,12 @@ describe('composer model picker search', () => {
       configOptionSelectors: [],
       onConfigOptionChange,
     });
-    expect(rootRowText().some((text) => text.startsWith('Reasoning'))).toBe(true);
+    expect(rootRowText().some((text) => text.includes('Reasoning') && text.includes('Off'))).toBe(
+      true
+    );
     const rows = radioRows(await openSubmenu('Reasoning'));
-    expect(rows.map((row) => row.textContent)).toEqual(['Not available']);
-    expect(rows[0]?.getAttribute('aria-disabled')).toBe('true');
+    expect(rows.map((row) => row.textContent)).toEqual(['Off']);
+    expect(rows[0]?.getAttribute('aria-disabled')).not.toBe('true');
     await clickRow(rows[0]);
     expect(onConfigOptionChange).not.toHaveBeenCalled();
   });

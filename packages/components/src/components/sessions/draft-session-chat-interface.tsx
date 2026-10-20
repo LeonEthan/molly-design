@@ -257,11 +257,11 @@ export const DraftSessionChatInterface = memo(
       );
       const thinkEffortSelector = useMemo(
         () =>
-          configOptionSelectors.find(
+          resolvedConfigOptionSelectors.find(
             (selector): selector is AcpSelectConfigOptionSelector =>
               selector.type === 'select' && isThoughtLevelSelector(selector)
           ),
-        [configOptionSelectors]
+        [resolvedConfigOptionSelectors]
       );
       const thinkEffortCurrent = thinkEffortSelector
         ? configOptionValues[thinkEffortSelector.configId]
@@ -474,7 +474,8 @@ export const DraftSessionChatInterface = memo(
                 config: sessionAgentConfig,
               })
             }
-            configOptionSelectors={configOptionSelectors}
+            configOptionSelectors={resolvedConfigOptionSelectors}
+            modelReasoningEfforts={modelReasoningEfforts}
             configOptionValues={configOptionValues}
             availableCommands={availableCommands}
             onModeChange={selectMode}

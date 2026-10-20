@@ -537,6 +537,7 @@
   "chat.runConfig.agentLabel": "Agent",
   "chat.runConfig.providerLabel": "Provider",
   "chat.runConfig.catalogProvider": "Models",
+  "chat.runConfig.ungroupedProvider": "Other models",
   "chat.runConfig.openConnections": "Connections",
   "chat.runConfig.allProviders": "All providers",
   "chat.runConfig.deepseek.delegationDiscussion": "Upstream discussion",

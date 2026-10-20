@@ -32,7 +32,10 @@ import {
   shouldShowDeepSeekDelegationWarning,
 } from '@/components/shared/deepseek-delegation-warning';
 import { orderAcpConfigOptionSelectors } from '@/lib/acp-selector-order';
-import { resolveComposerProviderHierarchy } from '@/lib/composer-provider-hierarchy';
+import {
+  COMPOSER_UNGROUPED_PROVIDER_ID,
+  resolveComposerProviderHierarchy,
+} from '@/lib/composer-provider-hierarchy';
 import { openExternalUrl } from '@/lib/native-browser';
 import { resolvePermissionModeFace } from '@/lib/permission-mode-face';
 import { cn } from '@/lib/utils';
@@ -407,6 +410,7 @@ export function DesktopRunConfigMenu({
   const modelPickerLabel = t('chat.runConfig.modelPickerLabel', 'Provider and model');
   const providerRowLabel = t('chat.runConfig.providerLabel', 'Provider');
   const catalogProviderLabel = t('chat.runConfig.catalogProvider', 'Models');
+  const ungroupedProviderLabel = t('chat.runConfig.ungroupedProvider', 'Other models');
   const connectionsLabel = t('chat.runConfig.openConnections', 'Connections');
   const modelRowLabel = t('chat.runConfig.modelLabel', 'Model');
   const modelSearchPlaceholder = t('chat.runConfig.modelSearchPlaceholder', 'Search models');
@@ -420,9 +424,13 @@ export function DesktopRunConfigMenu({
       ? reasoningOffLabel
       : value.charAt(0).toUpperCase() + value.slice(1));
 
+  const providerMenuLabel = (provider: { id: string; name: string }) =>
+    provider.id === COMPOSER_UNGROUPED_PROVIDER_ID
+      ? ungroupedProviderLabel
+      : provider.name || catalogProviderLabel;
   const duplicateProviderNames = new Set(
     hierarchy.providers
-      .map((provider) => provider.name)
+      .map((provider) => providerMenuLabel(provider))
       .filter((name, index, names) => name.length > 0 && names.indexOf(name) !== index)
   );
   const duplicateModelLabels = new Set(
@@ -433,14 +441,16 @@ export function DesktopRunConfigMenu({
   const providerValue =
     hierarchy.mode === 'empty'
       ? connectionsLabel
-      : (hierarchy.providerName ?? catalogProviderLabel);
+      : hierarchy.providerId === COMPOSER_UNGROUPED_PROVIDER_ID
+        ? ungroupedProviderLabel
+        : (hierarchy.providerName ?? catalogProviderLabel);
   const displayedReasoning =
-    hierarchy.mode === 'catalog' ? thinkingValue : hierarchy.reasoning;
+    hierarchy.mode === 'catalog' ? (thinkingValue ?? hierarchy.reasoning) : hierarchy.reasoning;
   const displayedReasoningLabel = displayedReasoning
     ? reasoningLabelFor(displayedReasoning)
     : null;
   const reasoningChoices =
-    hierarchy.mode === 'catalog'
+    hierarchy.mode === 'catalog' && (thinkingSelector?.options.length ?? 0) > 0
       ? (thinkingSelector?.options ?? [])
       : hierarchy.reasoningLevels.map((value) => ({
           value,
@@ -532,9 +542,11 @@ export function DesktopRunConfigMenu({
               {hierarchy.providers.map((provider) => (
                 <OptionItem
                   key={provider.id}
-                  label={provider.name || catalogProviderLabel}
+                  label={providerMenuLabel(provider)}
                   description={
-                    duplicateProviderNames.has(provider.name) ? provider.id : undefined
+                    duplicateProviderNames.has(providerMenuLabel(provider))
+                      ? provider.id
+                      : undefined
                   }
                   selected={hierarchy.providerId === provider.id}
                   onSelect={() => handleProviderSelect(provider.id)}

@@ -936,11 +936,11 @@ function WorkspaceChatLanding({
   // visible connection providers, on the landing and inside a session.
   const cycleThinkEffortSelector = useMemo(
     () =>
-      configOptionSelectors.find(
+      resolvedConfigOptionSelectors.find(
         (selector): selector is AcpSelectConfigOptionSelector =>
           selector.type === 'select' && isThoughtLevelSelector(selector)
       ),
-    [configOptionSelectors]
+    [resolvedConfigOptionSelectors]
   );
   const cycleThinkEffortCurrent = cycleThinkEffortSelector
     ? configOptionValues[cycleThinkEffortSelector.configId]

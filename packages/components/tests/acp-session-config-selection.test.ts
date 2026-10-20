@@ -496,6 +496,41 @@ describe('fenceAcpSessionUserEdits', () => {
     ).toBe(EMPTY_ACP_SESSION_USER_CONFIG_EDITS);
   });
 
+  it('commits the derived default model into the model config selector when unset', () => {
+    const first = encodeMollyModelOption('deepseek', 'deepseek-v4-flash');
+    const second = encodeMollyModelOption('deepseek', 'deepseek-v4-pro');
+    const resolved = resolveAcpSessionConfigSelection(
+      { edits: emptyEdits, preferences: {} },
+      {
+        capabilityAuthority: 'authoritative',
+        modeOptions: [],
+        modelOptions: [],
+        defaultModeId: null,
+        defaultModelId: null,
+        modelReasoningEfforts: {
+          [first]: ['high'],
+          [second]: ['low'],
+        },
+        configOptionSelectors: [
+          {
+            configId: 'model',
+            label: 'Model',
+            type: 'select',
+            category: 'model',
+            currentValue: MOLLY_UNSELECTED_MODEL,
+            options: [
+              { value: MOLLY_UNSELECTED_MODEL, label: 'Select' },
+              { value: first, label: 'Flash' },
+              { value: second, label: 'Pro' },
+            ],
+          },
+        ],
+      },
+      { cliType: 'builtin', agentType: 'molly' }
+    );
+    expect(resolved.configOptionValues.model).toBe(first);
+  });
+
   it('defaults a fresh Molly connection to the first provider model and high', () => {
     const first = encodeMollyModelOption('deepseek', 'deepseek-v4-flash');
     const second = encodeMollyModelOption('deepseek', 'deepseek-v4-pro');

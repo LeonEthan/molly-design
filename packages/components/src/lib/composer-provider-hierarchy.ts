@@ -9,9 +9,9 @@ import { MOLLY_UNSELECTED_MODEL, decodeMollyModelOption } from '@molly/shared/em
  *
  * A parent change keeps a child that is still valid and otherwise applies
  * {@link defaultComposerReasoning}. Visible `off` is the empty-provider row,
- * and also the row for a configured model that publishes only `off`. That
- * published value is what gets sent. A row with no connection id and no group
- * is never filed under another provider.
+ * a configured model that publishes only `off`, and a configured model that
+ * publishes no reasoning levels. That `off` value is what gets sent. A row
+ * with no connection id and no group is never filed under another provider.
  */
 
 export type ComposerModelOption = {
@@ -32,7 +32,8 @@ export type ComposerProvider = {
 export type ComposerProviderHierarchyMode = 'connections' | 'catalog' | 'empty';
 
 const CATALOG_PROVIDER_ID = '__catalog__';
-const UNGROUPED_PROVIDER_ID = '__ungrouped__';
+/** Synthetic bucket for catalog rows with no Molly connection id or ACP group. */
+export const COMPOSER_UNGROUPED_PROVIDER_ID = '__ungrouped__';
 
 export type ComposerProviderHierarchy = {
   mode: ComposerProviderHierarchyMode;
@@ -86,7 +87,7 @@ export function listComposerProviders(
   }
   if (providers.length > 0) {
     if (models.some((option) => connectionOf(option) === null)) {
-      providers.push({ id: UNGROUPED_PROVIDER_ID, name: '', kind: 'connection' });
+      providers.push({ id: COMPOSER_UNGROUPED_PROVIDER_ID, name: '', kind: 'connection' });
     }
     return providers;
   }
@@ -95,7 +96,7 @@ export function listComposerProviders(
 }
 
 function providerIdOf(option: ComposerModelOption): string {
-  return connectionOf(option)?.id ?? UNGROUPED_PROVIDER_ID;
+  return connectionOf(option)?.id ?? COMPOSER_UNGROUPED_PROVIDER_ID;
 }
 
 function levelsForModel(
@@ -125,7 +126,7 @@ function chooseReasoning(
 ): string {
   if (!hasProvider) return 'off';
   if (levels.length === 0) {
-    return current && current !== 'off' ? current : defaultComposerReasoning(undefined, true);
+    return 'off';
   }
   const offered = levels.filter((level) => level !== 'off');
   if (current && current !== 'off' && levels.includes(current)) return current;
@@ -135,6 +136,7 @@ function chooseReasoning(
 
 function visibleReasoningLevels(levels: readonly string[], hasProvider: boolean): string[] {
   if (!hasProvider) return ['off'];
+  if (levels.length === 0) return ['off'];
   const offered = levels.filter((level) => level !== 'off');
   if (offered.length > 0) return offered;
   return [...levels];
@@ -174,6 +176,10 @@ export function resolveComposerProviderHierarchy(input: {
       input.selectedModelId && models.some((option) => option.value === input.selectedModelId)
         ? input.selectedModelId
         : (models[0]?.value ?? null);
+    const catalogLevels = input.fallbackReasoningLevels ? [...input.fallbackReasoningLevels] : [];
+    const catalogReasoning =
+      input.reasoningValue ??
+      (catalogLevels.length > 0 ? defaultComposerReasoning(catalogLevels, false) : 'off');
     return {
       mode,
       providers,
@@ -181,8 +187,8 @@ export function resolveComposerProviderHierarchy(input: {
       providerName: null,
       modelId: selected,
       models,
-      reasoning: input.reasoningValue ?? '',
-      reasoningLevels: input.fallbackReasoningLevels ? [...input.fallbackReasoningLevels] : [],
+      reasoning: catalogReasoning,
+      reasoningLevels: catalogLevels.length > 0 ? catalogLevels : ['off'],
     };
   }
 

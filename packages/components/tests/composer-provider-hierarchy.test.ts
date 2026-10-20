@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { encodeMollyModelOption, MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
 import {
+  COMPOSER_UNGROUPED_PROVIDER_ID,
   composerProviderCycleTarget,
   defaultComposerReasoning,
   pickComposerProvider,
@@ -99,6 +100,7 @@ describe('composer provider hierarchy', () => {
     expect(onStudio.models.map((option) => option.value)).toEqual([studio]);
     expect(onStudio.providers.at(-1)?.id).not.toBe(onStudio.providerId);
     const trailingId = onStudio.providers.at(-1)?.id;
+    expect(trailingId).toBe(COMPOSER_UNGROUPED_PROVIDER_ID);
     const onPlain = resolveComposerProviderHierarchy({
       modelOptions: [...models, plain],
       selectedModelId: plain.value,
@@ -108,6 +110,17 @@ describe('composer provider hierarchy', () => {
     expect(onPlain.providers.map((provider) => provider.id)).toEqual(
       onStudio.providers.map((provider) => provider.id)
     );
+  });
+
+  it('uses off when a configured model publishes no reasoning levels', () => {
+    const resolved = resolveComposerProviderHierarchy({
+      modelOptions: models,
+      selectedModelId: studio,
+      reasoningValue: 'high',
+      modelReasoningEfforts: { [studio]: [] },
+    });
+    expect(resolved.reasoning).toBe('off');
+    expect(resolved.reasoningLevels).toEqual(['off']);
   });
 
   it('cycles connection providers and applies the next provider model', () => {

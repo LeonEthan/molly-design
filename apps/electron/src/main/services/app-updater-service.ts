@@ -18,8 +18,10 @@ import { sparkleEventToStatePatch } from './app-updater-sparkle-events'
 import { UPDATE_CHECK_UNANSWERED } from '@molly/shared/electron-ipc'
 import {
   UPDATE_CHECK_UNANSWERED_MS,
+  beginSparkleCheck,
   createCheckingWatchdog,
-  releaseUpdaterCheckLock,
+  nextSparkleEventGate,
+  recoverUnansweredCheck,
   shouldResetPhaseForManualCheck,
   type TimeoutHandle
 } from './app-updater-check'
@@ -94,6 +96,8 @@ export class AppUpdaterService {
   private checkTicket = 0
   private intervalRef: NodeJS.Timeout | null = null
   private sparkleBridge: SparkleBridge | null = null
+  private sparkleSessionOpen = false
+  private ignoreSparkleUntilChecking = false
   /** Package electron-updater has on disk, cleared when a newer one supersedes it. */
   private downloadedFile: string | undefined
   private errorCount = 0
@@ -190,6 +194,21 @@ export class AppUpdaterService {
           this.emitState()
           return { started: false }
         }
+        const started = beginSparkleCheck({
+          bridge: this.sparkleBridge,
+          sessionOpen: this.sparkleSessionOpen
+        })
+        this.sparkleSessionOpen = started.sessionOpen
+        this.ignoreSparkleUntilChecking =
+          started.ignoreUntilChecking || this.ignoreSparkleUntilChecking
+        if (!started.started) {
+          this.setState({
+            phase: 'error',
+            error: UPDATE_CHECK_UNANSWERED,
+            checkedAtMs: Date.now()
+          })
+          return { started: false, error: UPDATE_CHECK_UNANSWERED }
+        }
         this.setState({
           phase: 'checking',
           error: undefined,
@@ -199,7 +218,6 @@ export class AppUpdaterService {
           transferred: undefined,
           total: undefined
         })
-        this.sparkleBridge.checkForUpdates()
         return { started: true }
       } catch (error) {
         const message = formatUnknownError(error)
@@ -440,9 +458,15 @@ export class AppUpdaterService {
       return
     }
     bridge.setEventHandler((event) => {
+      const eventType = typeof event?.type === 'string' ? event.type : undefined
+      const gate = nextSparkleEventGate(this.ignoreSparkleUntilChecking, eventType)
+      this.ignoreSparkleUntilChecking = gate.ignoreUntilChecking
+      if (!gate.deliver) return
       try {
         const patch = sparkleEventToStatePatch(event, Date.now())
-        if (patch) this.setState(patch)
+        if (!patch) return
+        if (patch.phase) this.sparkleSessionOpen = patch.phase === 'checking'
+        this.setState(patch)
       } catch (error) {
         console.log(`[sparkle] event handler failed: ${formatUnknownError(error)}`)
       }
@@ -575,7 +599,13 @@ export class AppUpdaterService {
         onUnanswered: () => {
           this.checkTicket += 1
           this.checkInFlight = false
-          releaseUpdaterCheckLock(autoUpdater)
+          const recovered = recoverUnansweredCheck({
+            electronUpdater: autoUpdater,
+            sparkle: this.sparkleBridge,
+            sparkleSessionOpen: this.sparkleSessionOpen
+          })
+          this.sparkleSessionOpen = recovered.sparkleSessionOpen
+          this.ignoreSparkleUntilChecking = recovered.ignoreUntilChecking
           this.setState({
             phase: 'error',
             error: UPDATE_CHECK_UNANSWERED,

@@ -8,11 +8,61 @@ export function shouldResetPhaseForManualCheck(phase: ElectronUpdaterPhase): boo
 
 export type TimeoutHandle = { cancel(): void }
 
-/** electron-updater keeps a hung check on this field and returns the same promise. */
-export function releaseUpdaterCheckLock(updater: {
+function isUpdaterCheckLock(updater: object): updater is {
   checkForUpdatesPromise?: Promise<unknown> | null
-}): void {
+} {
+  if (!('checkForUpdatesPromise' in updater)) return false
+  const current = Reflect.get(updater, 'checkForUpdatesPromise')
+  return current == null || current instanceof Promise
+}
+
+/** electron-updater keeps a hung check on this field and returns the same promise. */
+export function releaseUpdaterCheckLock(updater: object): void {
+  if (!isUpdaterCheckLock(updater)) return
   updater.checkForUpdatesPromise = null
+}
+
+export function cancelSparkleCheck(sparkle: object): void {
+  if (!('cancelCheck' in sparkle)) return
+  const cancel = Reflect.get(sparkle, 'cancelCheck')
+  if (typeof cancel !== 'function') return
+  cancel.call(sparkle)
+}
+
+export function recoverUnansweredCheck(input: {
+  electronUpdater: object
+  sparkle: object | null
+  sparkleSessionOpen: boolean
+}): { sparkleSessionOpen: false; ignoreUntilChecking: boolean } {
+  releaseUpdaterCheckLock(input.electronUpdater)
+  const cancelOpenSparkleSession = input.sparkle !== null && input.sparkleSessionOpen
+  if (cancelOpenSparkleSession && input.sparkle) cancelSparkleCheck(input.sparkle)
+  return {
+    sparkleSessionOpen: false,
+    ignoreUntilChecking: cancelOpenSparkleSession
+  }
+}
+
+export function beginSparkleCheck(input: {
+  bridge: object & { checkForUpdates(): void }
+  sessionOpen: boolean
+}): { started: boolean; sessionOpen: boolean; ignoreUntilChecking: boolean } {
+  if (input.sessionOpen) {
+    cancelSparkleCheck(input.bridge)
+    return { started: false, sessionOpen: false, ignoreUntilChecking: true }
+  }
+  input.bridge.checkForUpdates()
+  return { started: true, sessionOpen: true, ignoreUntilChecking: false }
+}
+
+export function nextSparkleEventGate(
+  ignoreUntilChecking: boolean,
+  eventType: string | undefined
+): { deliver: boolean; ignoreUntilChecking: boolean } {
+  if (!ignoreUntilChecking || eventType === 'checking') {
+    return { deliver: true, ignoreUntilChecking: false }
+  }
+  return { deliver: false, ignoreUntilChecking: true }
 }
 
 /**

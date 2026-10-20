@@ -163,6 +163,9 @@ patchedDependencies:
   app-builder-lib@26.15.3:
     hash: 80637977dda4ea924da866a67751774a621195429af5af0f103e9129b3bec57f
     path: patches/app-builder-lib@26.15.3.patch
+  electron-sparkle-updater@0.3.0:
+    hash: 95419a87cbe3ae695c942058c45c1e6fae1bb94972e8afa74d8623fb1a8f868e
+    path: patches/electron-sparkle-updater@0.3.0.patch
   loro-repo@0.20.0:
     hash: bedebf72a3543ec16a158fa0e08d2429810f1ad56ed0190f4b446945598e6564
     path: patches/loro-repo.patch
@@ -432,7 +435,7 @@ importers:
         version: 1.0.2(electron@44.7.0)
       electron-sparkle-updater:
         specifier: 0.3.0
-        version: 0.3.0(electron@44.7.0)
+        version: 0.3.0(patch_hash=95419a87cbe3ae695c942058c45c1e6fae1bb94972e8afa74d8623fb1a8f868e)(electron@44.7.0)
       electron-updater:
         specifier: ^6.3.9
         version: 6.7.3
@@ -18891,7 +18894,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-sparkle-updater@0.3.0(electron@44.7.0):
+  electron-sparkle-updater@0.3.0(patch_hash=95419a87cbe3ae695c942058c45c1e6fae1bb94972e8afa74d8623fb1a8f868e)(electron@44.7.0):
     dependencies:
       node-addon-api: 8.9.1
       node-gyp: 13.0.2

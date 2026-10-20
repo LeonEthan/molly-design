@@ -32,12 +32,16 @@ Keep one updater snapshot. Ignore `getState` when a push arrived while it was
 in flight. Do not move `downloading` or `downloaded` back to `checking`; push
 the current snapshot again so a stale About panel recovers. After 30 seconds
 still in `checking`, publish `UPDATE_CHECK_UNANSWERED`, drop the
-electron-updater in-flight lock, and leave the button usable. `electron-updater`
-installs on quit again (`autoInstallOnAppQuit`); the explicit button still uses
-relaunch. Install and Relaunch saves open designs and stops the local CLI, and
-does not close the design worker or browser views. If installation does not
-start, the CLI is started again. Sparkle's bridge does not expose a way to
-cancel a check that never returns.
+electron-updater in-flight lock, and leave the button usable. The lock field
+is private on `AppUpdater`, so the release reads it as a structural property
+and clears it only when the value is a promise or empty. A Sparkle check that
+is still open is cancelled through the bridge's stored user-driver cancellation
+before the next check starts; events from that retired session are ignored
+until the next `checking` event. `electron-updater` installs on quit again
+(`autoInstallOnAppQuit`); the explicit button still uses relaunch. Install and
+Relaunch saves open designs and stops the local CLI, and does not close the
+design worker or browser views. If installation does not start, the CLI is
+started again.
 
 The sidebar Later action only hides the prompt. It does not answer Sparkle's
 install reply, so a declined update still applies on quit.

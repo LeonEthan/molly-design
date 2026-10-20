@@ -101,7 +101,8 @@ and native source outside the package. See [driver build](native/agent-browser/R
   them as job-level environment variables. Previous zips stay out of the published asset list. Sparkle load
   failure falls back to electron-updater. Sparkle UI stays silent; progress and
   ready-to-install go through `ElectronUpdaterState`. A manual check must not
-  reset an active download. Install and Relaunch quits only after saves finish;
+  reset an active download. An unanswered check releases its backend before
+  retry. Install and Relaunch quits only after saves finish;
   declining still installs on the next quit.
 - A downloaded package outlives a failed check or install. While
   `downloadedFile` is set, `recordError` keeps `phase: 'downloaded'`; dropping

@@ -18,7 +18,9 @@ first non-off level when `high` is missing. Reasoning is `off` only when no
 connection is configured, and that Provider row opens Settings. The Agent
 chip is removed and is not replaced; the image-model chip stays. The
 selection is stored in the existing agent-defaults cache and a session-scoped
-record so it survives restart.
+record so it survives restart. On a canvas, that record includes a model
+chosen through the model config selector, and a record for the current turn
+outranks the runtime baseline until the turn revision changes.
 
 ## Decision
 
@@ -36,9 +38,10 @@ the connection.
 
 Component tests cover provider filtering, row order, a provider whose models
 lack `high`, the empty Settings row, the removed Agent chip, and the absence
-of an Agent row. Unit tests cover the default, child re-validation, and
-revision-scoped persistence. Desktop acceptance on Linux is recorded in the
-pull request.
+of an Agent row. Unit tests cover the default, child re-validation,
+revision-scoped persistence, a stored model and reasoning beating the runtime
+baseline, and a model-selector edit producing a cache patch. Desktop
+acceptance on Linux is recorded in the pull request.
 
 ## Related
 

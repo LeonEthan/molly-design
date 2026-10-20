@@ -4,8 +4,10 @@ import {
   EMPTY_ACP_SESSION_USER_CONFIG_EDITS,
   areAcpSessionConfigPreferencesEqual,
   buildAcpSessionConfigCandidates,
+  composerSelectionPatchForConfigOption,
   fenceAcpSessionUserEdits,
   filterAcpSessionConfigOptionValues,
+  overlayComposerProviderSelection,
   resolveAcpSessionConfigSelection,
   type AcpSessionSelectorOptionsInput,
   type AcpSessionUserConfigEdits,
@@ -543,5 +545,150 @@ describe('fenceAcpSessionUserEdits', () => {
         { value: 'high', label: 'High' },
       ],
     });
+  });
+
+  it('keeps a stored composer choice ahead of a causally valid runtime baseline', () => {
+    const flash = encodeMollyModelOption('deepseek', 'deepseek-v4-flash');
+    const pro = encodeMollyModelOption('deepseek', 'deepseek-v4-pro');
+    const runtime = {
+      modelId: flash,
+      configOptionValues: { reasoning_effort: 'high' },
+    };
+    const stored = {
+      modelId: pro,
+      reasoningConfigId: 'reasoning_effort',
+      reasoning: 'max',
+    };
+    const options: AcpSessionSelectorOptionsInput = {
+      capabilityAuthority: 'authoritative',
+      modeOptions: [],
+      modelOptions: [
+        { value: flash, label: 'Flash', group: 'DeepSeek' },
+        { value: pro, label: 'Pro', group: 'DeepSeek' },
+      ],
+      defaultModeId: null,
+      defaultModelId: flash,
+      modelReasoningEfforts: {
+        [flash]: ['high'],
+        [pro]: ['high', 'max'],
+      },
+      configOptionSelectors: [
+        {
+          configId: 'reasoning_effort',
+          label: 'Reasoning',
+          type: 'select',
+          category: 'thought_level',
+          currentValue: 'high',
+          options: [
+            { value: 'high', label: 'High' },
+            { value: 'max', label: 'Max' },
+          ],
+        },
+      ],
+    };
+    const target = { cliType: 'builtin' as const, agentType: 'molly' as const };
+    const overlaid = overlayComposerProviderSelection(runtime, stored);
+    const kept = resolveAcpSessionConfigSelection(
+      {
+        edits: emptyEdits,
+        preferences: {
+          modelId: pro,
+          configOptionValues: { reasoning_effort: 'max' },
+        },
+        runtimePreferences: overlaid,
+      },
+      options,
+      target
+    );
+    expect(kept.selectedModelId).toBe(pro);
+    expect(kept.configOptionValues.reasoning_effort).toBe('max');
+
+    const runtimeWins = resolveAcpSessionConfigSelection(
+      {
+        edits: emptyEdits,
+        preferences: {
+          modelId: pro,
+          configOptionValues: { reasoning_effort: 'max' },
+        },
+        runtimePreferences: runtime,
+      },
+      options,
+      target
+    );
+    expect(runtimeWins.selectedModelId).toBe(flash);
+    expect(runtimeWins.configOptionValues.reasoning_effort).toBe('high');
+
+    const edited = resolveAcpSessionConfigSelection(
+      {
+        edits: {
+          model: { value: flash },
+          configOptions: { reasoning_effort: 'high' },
+        },
+        preferences: {
+          modelId: pro,
+          configOptionValues: { reasoning_effort: 'max' },
+        },
+        runtimePreferences: overlaid,
+      },
+      options,
+      target
+    );
+    expect(edited.selectedModelId).toBe(flash);
+    expect(edited.configOptionValues.reasoning_effort).toBe('high');
+  });
+
+  it('overlays a stored model without inventing a runtime config table', () => {
+    const runtime = { modelId: 'flash' };
+    expect(overlayComposerProviderSelection(runtime, null)).toBe(runtime);
+    expect(
+      overlayComposerProviderSelection(null, {
+        modelId: 'pro',
+        reasoningConfigId: 'reasoning_effort',
+        reasoning: 'max',
+      })
+    ).toBeNull();
+    expect(
+      overlayComposerProviderSelection(runtime, {
+        modelId: 'pro',
+        reasoningConfigId: 'reasoning_effort',
+        reasoning: 'max',
+      })
+    ).toEqual({ modelId: 'pro' });
+  });
+
+  it('persists model-selector and reasoning edits, and ignores other options', () => {
+    const selectors = [
+      {
+        configId: 'model',
+        label: 'Model',
+        type: 'select' as const,
+        category: 'model',
+        currentValue: 'flash',
+        options: [{ value: 'pro', label: 'Pro' }],
+      },
+      {
+        configId: 'reasoning_effort',
+        label: 'Reasoning',
+        type: 'select' as const,
+        category: 'thought_level',
+        currentValue: 'high',
+        options: [{ value: 'max', label: 'Max' }],
+      },
+      {
+        configId: 'fast',
+        label: 'Fast',
+        type: 'boolean' as const,
+        currentValue: false,
+        options: [] as [],
+      },
+    ];
+    expect(composerSelectionPatchForConfigOption(selectors, 'model', 'pro')).toEqual({
+      modelId: 'pro',
+    });
+    expect(composerSelectionPatchForConfigOption(selectors, 'reasoning_effort', 'max')).toEqual({
+      reasoningConfigId: 'reasoning_effort',
+      reasoning: 'max',
+    });
+    expect(composerSelectionPatchForConfigOption(selectors, 'fast', true)).toBeNull();
   });
 });

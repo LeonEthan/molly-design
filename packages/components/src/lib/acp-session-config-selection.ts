@@ -132,6 +132,52 @@ export type AcpSessionConfigSelectionInputs = {
   runtimePreferences?: AcpSessionConfigPreferences | null;
 };
 
+/**
+ * Unsent composer model/reasoning that still names the current turn.
+ * Applied onto the runtime baseline so a restart keeps the choice without an
+ * effect. A missing runtime config table stays missing: inventing one would
+ * make that table own every other option.
+ */
+export type ComposerProviderSelectionOverlay = {
+  modelId: string | null;
+  reasoningConfigId: string | null;
+  reasoning: string | null;
+};
+
+export function overlayComposerProviderSelection<T extends AcpSessionConfigPreferences>(
+  runtime: T | null | undefined,
+  stored: ComposerProviderSelectionOverlay | null
+): T | null {
+  if (!runtime || !stored) return runtime ?? null;
+  const modelId = stored.modelId ?? runtime.modelId;
+  const reasoningConfigId = stored.reasoningConfigId;
+  const reasoning = stored.reasoning;
+  const configOptionValues =
+    reasoningConfigId && reasoning !== null && runtime.configOptionValues
+      ? { ...runtime.configOptionValues, [reasoningConfigId]: reasoning }
+      : runtime.configOptionValues;
+  if (modelId === runtime.modelId && configOptionValues === runtime.configOptionValues) {
+    return runtime;
+  }
+  return { ...runtime, modelId, configOptionValues };
+}
+
+/** Model-category and thought-level selector edits that the canvas cache stores. */
+export function composerSelectionPatchForConfigOption(
+  selectors: readonly AcpConfigOptionSelector[],
+  configId: string,
+  value: AcpConfigOptionValue
+): { modelId?: string; reasoningConfigId?: string; reasoning?: string } | null {
+  if (typeof value !== 'string') return null;
+  const selector = selectors.find((entry) => entry.configId === configId);
+  if (!selector || selector.type !== 'select') return null;
+  if (selector.category === 'model') return { modelId: value };
+  if (isThoughtLevelSelector(selector)) {
+    return { reasoningConfigId: configId, reasoning: value };
+  }
+  return null;
+}
+
 export type AcpSessionConfigCandidates = {
   modeId: string | null;
   modelId: string | null;

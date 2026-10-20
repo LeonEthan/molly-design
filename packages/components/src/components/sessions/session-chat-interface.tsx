@@ -213,6 +213,10 @@ import {
   useAcpSessionConfigSelectionState,
   useResolvedAcpSessionConfigSelection,
 } from '@/hooks/use-acp-session-config-selection';
+import {
+  composerSelectionPatchForConfigOption,
+  overlayComposerProviderSelection,
+} from '@/lib/acp-session-config-selection';
 import { resolveComposerProviderHierarchy } from '@/lib/composer-provider-hierarchy';
 import {
   readComposerProviderSelection,
@@ -1599,7 +1603,10 @@ export const SessionChatInterface = memo(
       targetKey: `${session.id}:${session.cliType}:${session.agentType}:${session.design ? session.agentConfigId : ''}`,
       preferenceRevision: sessionConversationConfigRevision,
       preferences: sessionConfigPreferences,
-      runtimePreferences: sessionRuntimeConfig,
+      runtimePreferences: overlayComposerProviderSelection(
+        sessionRuntimeConfig,
+        storedComposerSelection
+      ),
       preserveUnsentUserEdits: true,
     });
     const {
@@ -1682,12 +1689,12 @@ export const SessionChatInterface = memo(
     const selectCanvasConfigOption = useCallback(
       (configId: string, value: AcpConfigOptionValue) => {
         handleConfigOptionChange(configId, value);
-        const thought = resolvedConfigOptionSelectors.find(
-          (selector) => selector.type === 'select' && isThoughtLevelSelector(selector)
+        const patch = composerSelectionPatchForConfigOption(
+          resolvedConfigOptionSelectors,
+          configId,
+          value
         );
-        if (thought?.configId === configId && typeof value === 'string') {
-          persistCanvasSelection({ reasoningConfigId: configId, reasoning: value });
-        }
+        if (patch) persistCanvasSelection(patch);
       },
       [handleConfigOptionChange, persistCanvasSelection, resolvedConfigOptionSelectors]
     );

@@ -194,18 +194,6 @@ if (hasSingleInstanceLock) {
       getLocalLoroDataPlaneSocketPath(mainPlatformKind)
     )
 
-    const appUpdaterService = new AppUpdaterService({
-      enabled: shouldConstructUpdaterEnabled({
-        localPlatform: isLocalPlatform(),
-        forceEnable:
-          (process.env.MOLLY_ELECTRON_ENABLE_UPDATER ??
-            process.env.LODY_ELECTRON_ENABLE_UPDATER) === '1',
-        platform: process.platform,
-        arch: process.arch
-      }),
-      requireSparkle: isLocalPlatform(),
-      prepareInstall: isLocalPlatform() ? prepareDesignUpdate : undefined
-    })
     const notificationService = new NotificationService(() => getMainWindow())
     const windowsTrayService = new WindowsTrayService({
       iconPath: icon,
@@ -219,6 +207,35 @@ if (hasSingleInstanceLock) {
       () => getMainWindow(),
       () => pauseActiveBrowserRuns(cliService)
     )
+    let designShutdownComplete = false
+    let cliShutdownComplete = false
+    const appUpdaterService = new AppUpdaterService({
+      enabled: shouldConstructUpdaterEnabled({
+        localPlatform: isLocalPlatform(),
+        forceEnable:
+          (process.env.MOLLY_ELECTRON_ENABLE_UPDATER ??
+            process.env.LODY_ELECTRON_ENABLE_UPDATER) === '1',
+        platform: process.platform,
+        arch: process.arch
+      }),
+      requireSparkle: isLocalPlatform(),
+      prepareInstall: isLocalPlatform() ? prepareDesignUpdate : undefined,
+      prepareToRelaunch: async () => {
+        const ready = await prepareDesignQuit()
+        if (!ready) throw new Error('Could not save your designs before updating')
+        await Promise.allSettled([
+          cliService.shutdownForQuit(),
+          publicBrowserService.shutdownForQuit()
+        ])
+        publicBrowserService.destroyAll()
+        designShutdownComplete = true
+        cliShutdownComplete = true
+      },
+      abortRelaunch: () => {
+        designShutdownComplete = false
+        cliShutdownComplete = false
+      }
+    })
     bindWindowBadgeToBrowserWindows(windowBadgeService)
 
     electronApp.setAppUserModelId(desktopInstallationProfile.desktopAppId)
@@ -299,8 +316,6 @@ if (hasSingleInstanceLock) {
     })
 
     let designQuitPending = false
-    let designShutdownComplete = false
-    let cliShutdownComplete = false
     app.on('before-quit', (event) => {
       if (!designShutdownComplete) {
         event.preventDefault()

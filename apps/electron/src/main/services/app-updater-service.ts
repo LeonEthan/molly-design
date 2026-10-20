@@ -15,6 +15,13 @@ import { formatUnknownError } from '../utils'
 import { setAppQuitting } from '../window-state'
 import { readUpdaterReleaseMetadata } from './app-updater-metadata'
 import { sparkleEventToStatePatch } from './app-updater-sparkle-events'
+import { UPDATE_CHECK_UNANSWERED } from '@molly/shared/electron-ipc'
+import {
+  UPDATE_CHECK_UNANSWERED_MS,
+  createCheckingWatchdog,
+  shouldResetPhaseForManualCheck,
+  type TimeoutHandle
+} from './app-updater-check'
 import {
   resolveSparkleAddonPath,
   resolveSparkleAppcastUrl,
@@ -90,12 +97,17 @@ export class AppUpdaterService {
   private errorCount = 0
   private preparationInFlight = false
   private configurationUnavailable = false
+  private checkingWatchdog: ReturnType<typeof createCheckingWatchdog> | null = null
 
   constructor(
     private readonly options: {
       enabled?: boolean
       requireSparkle?: boolean
       prepareInstall?: () => Promise<() => Promise<void>>
+      prepareToRelaunch?: () => Promise<void>
+      abortRelaunch?: () => void
+      checkTimeoutMs?: number
+      scheduleTimeout?: (callback: () => void, delayMs: number) => TimeoutHandle
     } = {}
   ) {}
 
@@ -130,7 +142,7 @@ export class AppUpdaterService {
 
     autoUpdater.logger = createUpdaterLogger()
     autoUpdater.autoDownload = true
-    autoUpdater.autoInstallOnAppQuit = false
+    autoUpdater.autoInstallOnAppQuit = true
 
     if (!app.isPackaged) {
       autoUpdater.forceDevUpdateConfig = true
@@ -160,6 +172,7 @@ export class AppUpdaterService {
       clearInterval(this.intervalRef)
       this.intervalRef = null
     }
+    this.checkingWatchdog?.stop()
   }
 
   async checkForUpdates(): Promise<CheckForElectronUpdateResult> {
@@ -171,6 +184,10 @@ export class AppUpdaterService {
     }
     if (this.sparkleBridge) {
       try {
+        if (!shouldResetPhaseForManualCheck(this.state.phase)) {
+          this.emitState()
+          return { started: false }
+        }
         this.setState({
           phase: 'checking',
           error: undefined,
@@ -202,10 +219,20 @@ export class AppUpdaterService {
       }
     }
 
+    if (!shouldResetPhaseForManualCheck(this.state.phase)) {
+      this.emitState()
+      return { started: false }
+    }
+
     this.checkInFlight = true
     this.setState({
       phase: 'checking',
-      error: undefined
+      error: undefined,
+      checkedAtMs: Date.now(),
+      percent: undefined,
+      bytesPerSecond: undefined,
+      transferred: undefined,
+      total: undefined
     })
 
     try {
@@ -245,6 +272,15 @@ export class AppUpdaterService {
   }
 
   private async installDownloadedUpdate(): Promise<QuitAndInstallElectronUpdateResult> {
+    try {
+      await this.options.prepareToRelaunch?.()
+    } catch (error) {
+      this.options.abortRelaunch?.()
+      const message = formatUnknownError(error)
+      this.recordError(message)
+      return { ok: false, error: message }
+    }
+
     if (this.sparkleBridge) {
       try {
         setAppQuitting(true)
@@ -252,6 +288,7 @@ export class AppUpdaterService {
         return { ok: true }
       } catch (error) {
         setAppQuitting(false)
+        this.options.abortRelaunch?.()
         const message = formatUnknownError(error)
         this.recordError(message)
         return {
@@ -269,7 +306,6 @@ export class AppUpdaterService {
     }
 
     try {
-      // Ensure macOS close handlers don't hide windows and block updater-triggered quit.
       setAppQuitting(true)
       const errorsBeforeInstall = this.errorCount
       autoUpdater.quitAndInstall(false, true)
@@ -281,6 +317,7 @@ export class AppUpdaterService {
       // user can retry.
       if (this.errorCount !== errorsBeforeInstall) {
         setAppQuitting(false)
+        this.options.abortRelaunch?.()
         return {
           ok: false,
           error: this.state.error ?? 'update_install_failed'
@@ -289,11 +326,9 @@ export class AppUpdaterService {
       return { ok: true }
     } catch (error) {
       setAppQuitting(false)
+      this.options.abortRelaunch?.()
       const message = formatUnknownError(error)
-      this.setState({
-        phase: 'error',
-        error: message
-      })
+      this.recordError(message)
       return {
         ok: false,
         error: message
@@ -519,6 +554,31 @@ export class AppUpdaterService {
       currentVersion: app.getVersion()
     }
     this.emitState()
+    this.syncCheckingWatchdog()
+  }
+
+  private syncCheckingWatchdog(): void {
+    if (!this.checkingWatchdog) {
+      const schedule =
+        this.options.scheduleTimeout ??
+        ((callback: () => void, delayMs: number): TimeoutHandle => {
+          const timer = setTimeout(callback, delayMs)
+          return { cancel: () => clearTimeout(timer) }
+        })
+      this.checkingWatchdog = createCheckingWatchdog({
+        delayMs: this.options.checkTimeoutMs ?? UPDATE_CHECK_UNANSWERED_MS,
+        schedule,
+        isChecking: () => this.state.phase === 'checking',
+        onUnanswered: () => {
+          this.setState({
+            phase: 'error',
+            error: UPDATE_CHECK_UNANSWERED,
+            checkedAtMs: Date.now()
+          })
+        }
+      })
+    }
+    this.checkingWatchdog.sync(this.state.phase)
   }
 
   private emitState(): void {

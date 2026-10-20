@@ -70,7 +70,7 @@ export function SidebarUpdateBanner({
         {isDownloading ? null : (
           <Button type="button" size="sm" className="h-7 px-2.5" onClick={onRestart}>
             {isRestarting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-            {t('sidebar.updateReady.restart', 'Update & Restart')}
+            {t('sidebar.updateReady.restart', 'Ready — Install and Relaunch')}
           </Button>
         )}
       </div>

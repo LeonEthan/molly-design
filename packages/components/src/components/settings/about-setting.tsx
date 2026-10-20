@@ -1,8 +1,12 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAtom } from 'jotai';
-import { Loader2, CheckCircle2, AlertCircle, Download, ExternalLink } from 'lucide-react';
-import type { ElectronUpdaterPhase } from '@molly/shared';
+import { Loader2, AlertCircle, Download, ExternalLink } from 'lucide-react';
+import type { UpdaterCheckPresentation } from '@/lib/updater-check-presentation';
+import {
+  readUpdaterCheckPresentation,
+  UPDATE_CHECK_UNANSWERED,
+} from '@/lib/updater-check-presentation';
 import { Button } from '@/ui/button';
 import { Switch } from '@/ui/switch';
 import { CompactRow, CompactSection } from './compact-layout';
@@ -37,50 +41,36 @@ function formatBuildDate(isoDate: string, intlLocale: string): string {
   }
 }
 
-function UpdateStatusText({
-  phase,
-  percent,
-  t,
-}: {
-  phase: ElectronUpdaterPhase;
-  percent?: number;
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
-  if (phase === 'up_to_date') {
-    return (
-      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-        <CheckCircle2 className="h-3.5 w-3.5 text-status-success" />
-        {t('settings.about.upToDate')}
-      </span>
-    );
+function updateActionLabel(
+  presentation: UpdaterCheckPresentation,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  switch (presentation.kind) {
+    case 'checking':
+      return t('settings.about.checking');
+    case 'up_to_date':
+      return t('settings.about.upToDate');
+    case 'downloading':
+      return presentation.percent == null
+        ? t('settings.about.downloadingUnknown')
+        : t('settings.about.downloading', { percent: String(presentation.percent) });
+    case 'ready':
+      return t('settings.about.updateAndRestart');
+    default:
+      return t('settings.about.checkForUpdates');
   }
+}
 
-  if (phase === 'error') {
-    return (
-      <span className="flex items-center gap-1 text-xs text-destructive">
-        <AlertCircle className="h-3.5 w-3.5" />
-        {t('settings.about.updateError')}
-      </span>
-    );
+function readableUpdateError(
+  message: string,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  if (!message || message === UPDATE_CHECK_UNANSWERED) {
+    return message === UPDATE_CHECK_UNANSWERED
+      ? t('settings.about.checkUnanswered')
+      : t('settings.about.updateError');
   }
-
-  if (phase === 'downloading') {
-    const p = percent != null ? Math.round(percent) : 0;
-    return (
-      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        {t('settings.about.downloading', { percent: String(p) })}
-      </span>
-    );
-  }
-
-  if (phase === 'disabled') {
-    return (
-      <span className="text-xs text-muted-foreground">{t('settings.about.updaterDisabled')}</span>
-    );
-  }
-
-  return null;
+  return message;
 }
 
 export function AboutSettingsComponent() {
@@ -114,11 +104,7 @@ export function AboutSettingsComponent() {
     }
   }, []);
 
-  const phase = updaterState?.phase;
-  const isChecking = phase === 'checking';
-  const isDownloaded = phase === 'downloaded';
-  const showStatus =
-    phase === 'up_to_date' || phase === 'error' || phase === 'downloading' || phase === 'disabled';
+  const presentation = readUpdaterCheckPresentation(updaterState);
   const showDeveloperModeSwitch = developerModeEnabled || developerModeRevealed;
   // Electron reports its running version through the updater; on the web there
   // is no updater, so fall back to the build-time linked client version.
@@ -195,48 +181,41 @@ export function AboutSettingsComponent() {
             />
           </CompactRow>
         )}
-        {updaterState && phase !== 'disabled' && (
+        {presentation && (
           <CompactRow label={t('settings.about.checkForUpdates')}>
-            {showStatus && <UpdateStatusText phase={phase} percent={updaterState.percent} t={t} />}
-            {isDownloaded && updaterState.error && (
-              <span
-                className="flex items-center gap-1 text-xs text-destructive"
-                title={updaterState.error}
-              >
+            {presentation.kind === 'error' ||
+            (presentation.kind === 'ready' && presentation.error) ? (
+              <span className="flex items-center gap-1 text-xs text-destructive">
                 <AlertCircle className="h-3.5 w-3.5" />
-                {t('settings.about.updateError')}
-              </span>
-            )}
-            {isDownloaded ? (
-              <Button
-                size="sm"
-                className="h-7 px-2.5"
-                onClick={() => {
-                  void handleQuitAndInstall();
-                }}
-                disabled={isInstalling}
-              >
-                {isInstalling ? (
-                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Download className="mr-1 h-3.5 w-3.5" />
+                {readableUpdateError(
+                  presentation.kind === 'error' ? presentation.message : presentation.error || '',
+                  t
                 )}
-                {t('settings.about.updateAndRestart')}
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2.5"
-                onClick={() => {
-                  void handleCheckForUpdates();
-                }}
-                disabled={isChecking || phase === 'downloading'}
-              >
-                {isChecking && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                {t('settings.about.checkForUpdates')}
-              </Button>
-            )}
+              </span>
+            ) : null}
+            <Button
+              size="sm"
+              variant={presentation.kind === 'ready' ? 'default' : 'outline'}
+              className="h-7 px-2.5"
+              disabled={
+                presentation.kind === 'checking' ||
+                presentation.kind === 'downloading' ||
+                (presentation.kind === 'ready' && isInstalling)
+              }
+              onClick={() => {
+                if (presentation.kind === 'ready') void handleQuitAndInstall();
+                else void handleCheckForUpdates();
+              }}
+            >
+              {presentation.kind === 'checking' ||
+              presentation.kind === 'downloading' ||
+              (presentation.kind === 'ready' && isInstalling) ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : presentation.kind === 'ready' ? (
+                <Download className="mr-1 h-3.5 w-3.5" />
+              ) : null}
+              {updateActionLabel(presentation, t)}
+            </Button>
           </CompactRow>
         )}
       </CompactSection>

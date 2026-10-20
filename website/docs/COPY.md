@@ -52,7 +52,8 @@ Every layer stays editable.
 Stillwater Clay
 Everyday objects / 01
 
-Time, well spent.
+Time,
+well spent.
 
 MATERIAL
 Stoneware
@@ -62,6 +63,7 @@ MADE
 Hand-finished
 
 For the slower moments.
+
 Object study · 2026
 ```
 
@@ -74,7 +76,8 @@ Object study · 2026
 Stillwater Clay
 日常器物 / 01
 
-留一点时间，慢慢来。
+留一点时间，
+慢慢来。
 
 材质
 粗陶
@@ -84,6 +87,7 @@ Stillwater Clay
 手工修坯
 
 让日常慢下来。
+
 器物研究 · 2026
 ```
 

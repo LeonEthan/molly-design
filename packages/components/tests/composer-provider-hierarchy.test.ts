@@ -63,6 +63,18 @@ describe('composer provider hierarchy', () => {
     expect(replaced.reasoning).toBe('max');
   });
 
+  it('keeps off as the wire value and hides it when that is the only published level', () => {
+    const resolved = resolveComposerProviderHierarchy({
+      modelOptions: models,
+      selectedModelId: studio,
+      reasoningValue: 'off',
+      modelReasoningEfforts: { [studio]: ['off'] },
+    });
+    expect(resolved.mode).toBe('connections');
+    expect(resolved.reasoning).toBe('off');
+    expect(resolved.reasoningLevels).toEqual([]);
+  });
+
   it('uses off only when no provider is configured', () => {
     expect(defaultComposerReasoning(['high', 'low'], false)).toBe('off');
     const empty = resolveComposerProviderHierarchy({

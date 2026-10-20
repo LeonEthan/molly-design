@@ -127,9 +127,7 @@ function chooseReasoning(
 
 function visibleReasoningLevels(levels: readonly string[], hasProvider: boolean): string[] {
   if (!hasProvider) return ['off'];
-  const offered = levels.filter((level) => level !== 'off');
-  if (offered.length > 0) return offered;
-  return [...levels];
+  return levels.filter((level) => level !== 'off');
 }
 
 export function resolveComposerProviderHierarchy(input: {

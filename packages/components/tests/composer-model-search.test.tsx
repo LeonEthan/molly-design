@@ -313,8 +313,10 @@ describe('composer model picker search', () => {
       'DeepSeek',
     ]);
     expect(radioRows(await openSubmenu('Reasoning')).map((row) => row.textContent)).toEqual([
-      'Off',
+      'Not available',
     ]);
+    expect(rootRowText().find((text) => text.startsWith('Reasoning'))).toContain('Not available');
+    expect(container?.textContent).not.toContain('Off');
     expect(radioRows(await openSubmenu('Model')).map((row) => row.textContent)).toEqual([
       'DeepSeek V4 Pro',
     ]);

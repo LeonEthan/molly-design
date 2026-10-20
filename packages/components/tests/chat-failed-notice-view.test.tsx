@@ -154,7 +154,9 @@ describe('ChatFailedNoticeView model request failures', () => {
       canRetry: true,
       retry: () => undefined,
     });
-    expect(document.body.textContent).toContain("The model connection's key was rejected");
+    expect(document.body.textContent).toContain(
+      'The key was rejected. Check the key and try again.'
+    );
     expect(document.body.textContent).toContain('Check the connection in Settings.');
     expect(buttonWithExactText('Retry')).toBeUndefined();
     expect(document.body.textContent).not.toContain('View details');

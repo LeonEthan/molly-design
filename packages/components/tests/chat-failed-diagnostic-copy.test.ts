@@ -18,6 +18,8 @@ const zhCN = loadLocale('zh_CN.json');
 const MODEL_CODES: ModelRequestFailureCode[] = [
   'model_temporarily_unavailable',
   'model_auth_rejected',
+  'model_endpoint_not_found',
+  'model_server_unreachable',
   'model_quota_exceeded',
   'model_context_overflow',
   'model_content_blocked',
@@ -38,6 +40,18 @@ describe('getChatFailedDiagnosticCopy', () => {
         expect(zhCN[copy.actionKey], copy.actionKey).toBeTruthy();
       }
     }
+  });
+
+  it('uses the same 401/404/network copy as the connection check (#181)', () => {
+    expect(getChatFailedDiagnosticCopy('model_auth_rejected')?.title).toBe(
+      en['settings.check.modelFailures.key_rejected']
+    );
+    expect(getChatFailedDiagnosticCopy('model_endpoint_not_found')?.title).toBe(
+      en['settings.check.failures.not_found']
+    );
+    expect(getChatFailedDiagnosticCopy('model_server_unreachable')?.title).toBe(
+      en['settings.check.modelFailures.unreachable']
+    );
   });
 
   it('gives the transient codes a title only, so the notice stays one line', () => {

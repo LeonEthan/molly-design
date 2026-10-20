@@ -11,6 +11,7 @@ import {
   HarnessSessionBindingSchema,
   MOLLY_BUILTIN_MCP_CONNECTION,
   encodeMollyModelOption,
+  compatibleConnectionApiRequiresKey,
   type HarnessRunOutcome,
   type HarnessRunSnapshot,
   type HarnessSessionBinding,
@@ -399,6 +400,7 @@ export class PiAcpHost {
     if (
       !grant.apiKey &&
       (this.config.connection.providerPresetId !== 'openai-compatible' ||
+        compatibleConnectionApiRequiresKey(this.config.connection.compatibleApi) ||
         this.config.connection.authType === 'openai_oauth' ||
         grant.oauthConnectionId !== undefined ||
         grant.oauthAccountId !== undefined)

@@ -1,5 +1,7 @@
 import {
   DiscoveredModelSchema,
+  compatibleConnectionApiRequiresKey,
+  type CompatibleConnectionApi,
   type DiscoveredModel,
   type DiscoverModelConnection,
   type DiscoverModelConnectionResult
@@ -22,10 +24,20 @@ const MAX_TOKEN_LIMIT = 16_777_216
 const NON_CHAT_ID_PATTERN =
   /(?:^|[/:._-])(embed|embedding|tts|whisper|transcribe|speech|audio|realtime|sora|dall-e|babbage|davinci|moderation|rerank|guard)(?:[/:._-]|$)|(?:^|\/)(?:text-embedding|whisper|dall-e|tts)-/i
 
-function isChatModel(entry: Record<string, unknown>, id: string): boolean {
+function isChatModel(
+  entry: Record<string, unknown>,
+  id: string,
+  api?: CompatibleConnectionApi
+): boolean {
+  if (api === 'google-generative-ai' && Array.isArray(entry.supportedGenerationMethods))
+    return entry.supportedGenerationMethods.includes('generateContent')
   const endpointTypes = entry.supported_endpoint_types
   if (Array.isArray(endpointTypes) && endpointTypes.every((type) => typeof type === 'string')) {
-    return endpointTypes.some((type) => type === 'chat' || type === 'chat.completions')
+    return endpointTypes.some((type) =>
+      api === 'openai-responses'
+        ? type === 'responses'
+        : type === 'chat' || type === 'chat.completions'
+    )
   }
   return !NON_CHAT_ID_PATTERN.test(id)
 }
@@ -38,12 +50,14 @@ function tokenLimit(value: unknown): number | undefined {
 /** Context/output limits ship under at least five different field names across providers. */
 function entryLimits(entry: Record<string, unknown>) {
   const contextWindow =
+    tokenLimit(entry.inputTokenLimit) ??
     tokenLimit(entry.context_length) ??
     tokenLimit(entry.context_window) ??
     tokenLimit(entry.max_context_length) ??
     tokenLimit(entry.max_model_len)
   const topProvider = entry.top_provider
   const maxTokens =
+    tokenLimit(entry.outputTokenLimit) ??
     tokenLimit(entry.max_output_tokens) ??
     tokenLimit(entry.max_completion_tokens) ??
     (topProvider && typeof topProvider === 'object'
@@ -53,34 +67,43 @@ function entryLimits(entry: Record<string, unknown>) {
 }
 
 /** Locates the model array across `{object,data}`, `{data}` (OpenRouter) and bare arrays (Together). */
-function listEntries(data: unknown): unknown[] | null {
+function listEntries(data: unknown, api?: CompatibleConnectionApi): unknown[] | null {
   if (Array.isArray(data)) return data
   if (!data || typeof data !== 'object') return null
-  const entries = (data as { data?: unknown }).data
+  const entries =
+    api === 'google-generative-ai'
+      ? (data as { models?: unknown }).models
+      : (data as { data?: unknown }).data
   return Array.isArray(entries) ? entries : null
 }
 
-export function parseDiscoveredModels(data: unknown): {
+export function parseDiscoveredModels(
+  data: unknown,
+  api?: CompatibleConnectionApi
+): {
   models: DiscoveredModel[]
   filteredNonChat: number
 } | null {
-  const entries = listEntries(data)
+  const entries = listEntries(data, api)
   if (!entries) return null
   const seen = new Set<string>()
   const models: DiscoveredModel[] = []
   let filteredNonChat = 0
   for (const entry of entries) {
     if (!entry || typeof entry !== 'object') continue
-    const id = (entry as { id?: unknown }).id
+    const record = entry as Record<string, unknown>
+    const id =
+      api === 'google-generative-ai' && typeof record.name === 'string'
+        ? record.name.replace(/^models\//, '')
+        : record.id
     if (typeof id !== 'string' || id.length === 0 || id.length > MAX_MODEL_ID) continue
-    if (!isChatModel(entry as Record<string, unknown>, id)) {
+    if (!isChatModel(record, id, api)) {
       filteredNonChat += 1
       continue
     }
     if (seen.has(id)) continue
     seen.add(id)
-    const record = entry as Record<string, unknown>
-    const displayName = record.display_name ?? record.name
+    const displayName = record.displayName ?? record.display_name ?? record.name
     const { contextWindow, maxTokens } = entryLimits(record)
     const parsed = DiscoveredModelSchema.safeParse({
       modelId: id,
@@ -136,6 +159,11 @@ export async function discoverModelConnection(
   }
   const compatibleApi =
     input.providerPresetId === 'openai-compatible' ? input.compatibleApi : undefined
+  if (
+    compatibleConnectionApiRequiresKey(compatibleApi) &&
+    (apiKey === undefined || apiKey.length === 0)
+  )
+    return { ok: false, reason: 'needs_key' }
   const { url, headers } = buildCompatibleListModelsRequest(input.baseUrl, compatibleApi, apiKey)
   let response: Response
   try {
@@ -157,7 +185,7 @@ export async function discoverModelConnection(
   try {
     const text = await readBounded(response)
     if (text === null) return { ok: false, reason: 'invalid_response' }
-    const parsed = parseDiscoveredModels(JSON.parse(text))
+    const parsed = parseDiscoveredModels(JSON.parse(text), compatibleApi)
     if (!parsed) return { ok: false, reason: 'invalid_response' }
     return { ok: true, models: parsed.models, filteredNonChat: parsed.filteredNonChat }
   } catch {

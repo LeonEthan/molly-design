@@ -12,6 +12,7 @@ describe('static model failure categories', () => {
     ['403 authentication failed', 'auth'],
     ['403 invalid api key', 'auth'],
     ['Authentication failed', 'auth'],
+    ['400 API_KEY_INVALID: API key not valid. Please pass a valid API key.', 'auth'],
     ['{"type":"authentication_error"}', 'auth'],
     ['Provider returned error: 401 invalid api key', 'auth'],
     ['429 insufficient_quota', 'quota'],
@@ -40,15 +41,15 @@ describe('static model failure categories', () => {
     ['403 Your request violates the provider policy', 'content_policy'],
     ['403 forbidden', 'auth'],
     ['400 invalid_request', 'invalid_request'],
-    ['Provider returned error: 404 model not found', 'invalid_request'],
+    ['Provider returned error: 404 model not found', 'not_found'],
     ['422 request rejected', 'invalid_request'],
     ['529 overloaded', 'transient'],
     ['500 internal_server_error', 'transient'],
     ['429 too many requests', 'transient'],
-    ['Connection error. ECONNRESET', 'transient'],
+    ['Connection error. ECONNRESET', 'unreachable'],
     ['opaque response failure', 'unknown'],
     ['529', 'unknown'],
-    ['ECONNRESET', 'unknown'],
+    ['ECONNRESET', 'unreachable'],
   ])('classifies %s as %s', (errorMessage, category) => {
     const message = fauxAssistantMessage('', { stopReason: 'error', errorMessage });
     expect(classifyModelError(message, 200000)).toBe(category);

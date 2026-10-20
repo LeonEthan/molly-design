@@ -8,7 +8,9 @@ import {
 const MODEL_ERROR_DETAILS: Record<ModelErrorCategory, string> = {
   context_overflow:
     'The conversation exceeds the model context limit. Your draft files are preserved.',
-  auth: 'The model service rejected the credentials. Your conversation and draft files are preserved.',
+  auth: 'The key was rejected. Check the key and try again.',
+  not_found: 'Endpoint or model not found. Check the base URL and model ID.',
+  unreachable: "Can't reach the server from your computer. Check the URL and your network.",
   quota:
     'The model service usage or billing limit was reached. Your conversation and draft files are preserved.',
   content_policy:
@@ -41,10 +43,19 @@ export function classifyModelError(
   )
     return 'content_policy';
   if (
-    /\b(?:401|403|unauthori[sz]ed|authentication(?:_error)?)\b|invalid[ _-]api[ _-]key/i.test(text)
+    /\b(?:401|403|unauthori[sz]ed|authentication(?:_error)?)\b|invalid[ _-]api[ _-]key|api[ _-]key[ _-](?:invalid|not[ _-]valid)/i.test(
+      text
+    )
   )
     return 'auth';
-  if (/\b(?:400|404|405|410|413|415|422)\b|invalid[ _-]request|\bbad request\b/i.test(text))
+  if (/\b404\b|\b(?:model|endpoint)[ _-]not[ _-]found\b/i.test(text)) return 'not_found';
+  if (
+    /connection[ _-]error|fetch failed|failed to fetch|network|\b(?:ECONNRESET|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ETIMEDOUT|timeout|timed out)\b/i.test(
+      text
+    )
+  )
+    return 'unreachable';
+  if (/\b(?:400|405|410|413|415|422)\b|invalid[ _-]request|\bbad request\b/i.test(text))
     return 'invalid_request';
   if (isRetryableAssistantError(message)) return 'transient';
   return 'unknown';

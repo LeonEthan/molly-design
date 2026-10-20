@@ -15,8 +15,9 @@ Read [README](README.md) before changing session construction, packages or the b
   destructive-command floor with `CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1`. The managed package set is single-session: `pi-subagents`
   and its launch/configuration surfaces are retired (#72). Preserve shared task history.
   Never infer an answer from timeout, cancellation or a late reply; terminal-only UI stays unavailable.
-- Compatible empty keys use the same run grant; resolve only stored credentials, omit
-  Authorization and never fall back to ambient keys.
+- Compatible Anthropic Messages/Chat Completions empty keys use the same run grant;
+  resolve only stored credentials, omit Authorization and never use ambient keys.
+  Responses/Gemini require nonempty keys before persistence, admission or transport.
 - Model keys arrive on fd 3 per run and stay in the worker's in-memory credential store;
   model catalogs/configuration also stay in memory. The managed runtime neither reads
   nor publishes profile auth/model files. Reject a changed key before runtime mutation;
@@ -28,6 +29,11 @@ Read [README](README.md) before changing session construction, packages or the b
   model's. The host checks the selected model's resolved endpoint. A connection's
   `models`, when present, is the only native catalog it offers; refuse any other model.
   `PROVIDER_PRESET_CHECKS` must match each preset's SDK protocol (tested).
+  Compatible Responses/Gemini reuse shared URL normalization and native Pi adapters;
+  their explicit Settings check must verify the selected model response.
+  Their native stream/streamSimple options refuse redirects; complete/extraction inherit
+  that policy. Pi 1.3.0 resolves scoped Google SDK 2.23.0 for its public fetch hook;
+  update the override and staging version assertion together when reviewing compatibility.
   Compatible endpoints request streaming usage only when explicitly declared; preserve
   saved `usageInStreaming` values and default unknown support to false.
 - A run is fenced by exclusive creation of its run record before credentials or

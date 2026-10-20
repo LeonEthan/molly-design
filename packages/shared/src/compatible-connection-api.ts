@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * Wire protocol for an OpenAI-compatible (custom) model connection. Matches pi-ai
- * provider `api` values; gated entries stay in the schema for forward compatibility.
+ * provider `api` values.
  */
 export const CompatibleConnectionApiSchema = z.enum([
   'anthropic-messages',
@@ -15,6 +15,8 @@ export type CompatibleConnectionApi = z.infer<typeof CompatibleConnectionApiSche
 export const SHIPPED_COMPATIBLE_CONNECTION_APIS = [
   'anthropic-messages',
   'openai-completions',
+  'openai-responses',
+  'google-generative-ai',
 ] as const satisfies readonly CompatibleConnectionApi[];
 
 export type ShippedCompatibleConnectionApi = (typeof SHIPPED_COMPATIBLE_CONNECTION_APIS)[number];
@@ -29,6 +31,28 @@ export function normalizeCompatibleConnectionApi(
   api: CompatibleConnectionApi | undefined
 ): CompatibleConnectionApi {
   return api ?? 'openai-completions';
+}
+
+export function compatibleConnectionApiRequiresKey(
+  api: CompatibleConnectionApi | undefined
+): boolean {
+  return api === 'openai-responses' || api === 'google-generative-ai';
+}
+
+export function normalizeCompatibleConnectionBaseUrl(
+  baseUrl: string,
+  api: CompatibleConnectionApi | undefined
+): string {
+  const base = baseUrl.trim().replace(/\/+$/, '');
+  if (api !== 'openai-responses' && api !== 'google-generative-ai') return base;
+  const url = new URL(base);
+  let path = url.pathname.replace(/\/+$/, '');
+  if (api === 'openai-responses') path = path.replace(/(?:\/responses)+$/, '');
+  else
+    path = path.replace(/(?:\/models)+(?:\/[^/]+:(?:streamGenerateContent|generateContent))?$/, '');
+  path = path.replace(/(\/v\d+(?:beta\d*)?)(?:\1)+(?=\/|$)/g, '$1');
+  url.pathname = path;
+  return url.toString().replace(/\/+$/, '');
 }
 
 export type CompatibleConnectionPreset = {
@@ -51,6 +75,18 @@ export type CompatibleConnectionPreset = {
 
 /** One-click setup rows (cc-switch style): base URL, API family, and model metadata. */
 export const COMPATIBLE_CONNECTION_PRESETS: readonly CompatibleConnectionPreset[] = [
+  {
+    id: 'openai-responses',
+    labelKey: 'settings.models.compatiblePresets.openaiResponses',
+    api: 'openai-responses',
+    baseUrl: 'https://api.openai.com/v1',
+  },
+  {
+    id: 'google-gemini',
+    labelKey: 'settings.models.compatiblePresets.googleGemini',
+    api: 'google-generative-ai',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+  },
   {
     id: 'deepseek-chat',
     labelKey: 'settings.models.compatiblePresets.deepseekChat',

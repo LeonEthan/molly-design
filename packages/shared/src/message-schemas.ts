@@ -3142,6 +3142,8 @@ export const ChatFailedCodeSchema = z.enum([
   'model_context_overflow',
   'model_content_blocked',
   'model_request_rejected',
+  'model_endpoint_not_found',
+  'model_server_unreachable',
   'model_request_failed',
 ]);
 

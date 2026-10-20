@@ -93,6 +93,27 @@ export const CompatibleMissingModels: Story = {
   args: { stored: { ...Compatible.args!.stored!, customModels: undefined } },
 };
 export const CompatibleSaving: Story = { args: { ...Compatible.args, busy: true } };
+/** OpenAI Responses / Gemini Native checks run one explicit model request on click. */
+export const CompatibleResponses: Story = {
+  args: {
+    stored: {
+      ...Compatible.args!.stored!,
+      compatibleApi: 'openai-responses',
+      baseUrl: 'https://api.openai.com/v1',
+    },
+    onCheck: async () => ({ ok: true }),
+  },
+};
+export const CompatibleGemini: Story = {
+  args: {
+    stored: {
+      ...Compatible.args!.stored!,
+      compatibleApi: 'google-generative-ai',
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    },
+    onCheck: async () => ({ ok: false, reason: 'unreachable' as const }),
+  },
+};
 export const ProviderDefaultEndpoint: Story = {
   args: {
     stored: {

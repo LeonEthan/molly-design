@@ -218,3 +218,98 @@ void test('discoverModelConnection: maps 404 to unsupported, other statuses to h
   )
   assert.deepEqual(denied, { ok: false, reason: 'http_error', status: 401 })
 })
+
+void test('Gemini discovery reads native metadata and filters models without generateContent', async () => {
+  const data = {
+    models: [
+      {
+        name: 'models/gemini-synthetic',
+        displayName: 'Synthetic Gemini',
+        inputTokenLimit: 1048576,
+        outputTokenLimit: 8192,
+        supportedGenerationMethods: ['generateContent', 'countTokens']
+      },
+      { name: 'models/embedding', supportedGenerationMethods: ['embedContent'] },
+      { name: 'models/gemini-synthetic', supportedGenerationMethods: ['generateContent'] }
+    ]
+  }
+  const parsed = parseDiscoveredModels(data, 'google-generative-ai')
+  assert.deepEqual(parsed, {
+    models: [
+      {
+        modelId: 'gemini-synthetic',
+        name: 'Synthetic Gemini',
+        contextWindow: 1048576,
+        maxTokens: 8192
+      }
+    ],
+    filteredNonChat: 1
+  })
+  let request
+  const result = await discoverModelConnection(
+    {},
+    {
+      providerPresetId: 'openai-compatible',
+      compatibleApi: 'google-generative-ai',
+      baseUrl: 'https://gateway.invalid/v1beta/v1beta/',
+      apiKey: 'synthetic-key'
+    },
+    async (url, init) => {
+      request = { url, ...init }
+      return Response.json(data)
+    }
+  )
+  assert.deepEqual(result, { ok: true, ...parsed })
+  assert.equal(request.url, 'https://gateway.invalid/v1beta/models')
+  assert.equal(request.headers['x-goog-api-key'], 'synthetic-key')
+  assert.equal(request.headers.authorization, undefined)
+})
+
+void test('Responses discovery uses /models and protocol-specific endpoint declarations', async () => {
+  const data = {
+    data: [
+      { id: 'responses-model', supported_endpoint_types: ['responses'] },
+      { id: 'chat-only', supported_endpoint_types: ['chat.completions'] }
+    ]
+  }
+  let destination
+  const result = await discoverModelConnection(
+    {},
+    {
+      providerPresetId: 'openai-compatible',
+      compatibleApi: 'openai-responses',
+      baseUrl: 'https://gateway.invalid/v1/responses/responses/',
+      apiKey: 'synthetic-key'
+    },
+    async (url) => {
+      destination = url
+      return Response.json(data)
+    }
+  )
+  assert.equal(destination, 'https://gateway.invalid/v1/models')
+  assert.deepEqual(result, {
+    ok: true,
+    models: [{ modelId: 'responses-model' }],
+    filteredNonChat: 1
+  })
+})
+
+for (const compatibleApi of ['openai-responses', 'google-generative-ai']) {
+  void test(`${compatibleApi} discovery refuses missing keys before transport`, async () => {
+    const outbound = []
+    const result = await discoverModelConnection(
+      {},
+      {
+        providerPresetId: 'openai-compatible',
+        compatibleApi,
+        baseUrl: 'https://synthetic.invalid/v1'
+      },
+      async (url) => {
+        outbound.push(url)
+        return Response.json({ data: [] })
+      }
+    )
+    assert.deepEqual(result, { ok: false, reason: 'needs_key' })
+    assert.deepEqual(outbound, [])
+  })
+}

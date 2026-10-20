@@ -1,5 +1,6 @@
 import {
   PROVIDER_PRESET_CHECKS,
+  normalizeCompatibleConnectionBaseUrl,
   type CheckImageConnection,
   type CheckModelConnection,
   type ConnectionCheckResult
@@ -146,6 +147,91 @@ export async function runConnectionCheck(
   return runModelListHttpCheck(url, { ...headers, accept: 'application/json' }, style, transport)
 }
 
+async function checkCompatibleModelResponse(
+  input: CheckModelConnection,
+  apiKey: string,
+  transport: typeof fetch
+): Promise<ConnectionCheckResult> {
+  if (!input.modelId) return { ok: false, reason: 'invalid_response' }
+  if (!apiKey) return { ok: false, reason: 'needs_key' }
+  const base = normalizeCompatibleConnectionBaseUrl(input.baseUrl, input.compatibleApi)
+  const google = input.compatibleApi === 'google-generative-ai'
+  const url = google
+    ? `${base}/models/${encodeURIComponent(input.modelId.replace(/^models\//, ''))}:generateContent`
+    : `${base}/responses`
+  const body = google
+    ? {
+        contents: [{ role: 'user', parts: [{ text: 'Reply OK.' }] }],
+        generationConfig: { maxOutputTokens: 512 }
+      }
+    : { model: input.modelId, input: 'Reply OK.', max_output_tokens: 512, store: false }
+  let response: Response
+  try {
+    response = await transport(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        ...(google ? { 'x-goog-api-key': apiKey } : { authorization: `Bearer ${apiKey}` })
+      },
+      body: JSON.stringify(body),
+      redirect: 'error',
+      signal: AbortSignal.timeout(15_000)
+    })
+  } catch {
+    return { ok: false, reason: 'unreachable' }
+  }
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined)
+    const status = response.status
+    if (status === 401 || status === 403) return { ok: false, reason: 'key_rejected', status }
+    if (status === 404 || status === 405 || status === 501)
+      return { ok: false, reason: 'unsupported', status }
+    if (status === 429) return { ok: false, reason: 'rate_limited', status }
+    return { ok: false, reason: 'http_error', status }
+  }
+  let text: string | null
+  try {
+    text = await readBounded(response)
+  } catch {
+    return { ok: false, reason: 'unreachable' }
+  }
+  try {
+    if (text === null) return { ok: false, reason: 'invalid_response' }
+    const data = JSON.parse(text)
+    if (!google && (data.status !== 'completed' || data.error || data.incomplete_details))
+      return { ok: false, reason: 'invalid_response' }
+    const parts = google
+      ? data.candidates
+          ?.filter((candidate: { finishReason?: unknown }) => candidate.finishReason === 'STOP')
+          .flatMap(
+            (candidate: { content?: { parts?: unknown[] } }) => candidate.content?.parts ?? []
+          )
+      : data.output
+          ?.filter(
+            (item: { type?: unknown; status?: unknown }) =>
+              item.type === 'message' && item.status === 'completed'
+          )
+          .flatMap((item: { content?: unknown[] }) => item.content ?? [])
+    const responded =
+      Array.isArray(parts) &&
+      parts.some(
+        (part: unknown) =>
+          part !== null &&
+          typeof part === 'object' &&
+          (google
+            ? !('thought' in part && part.thought === true)
+            : 'type' in part && part.type === 'output_text') &&
+          'text' in part &&
+          typeof part.text === 'string' &&
+          part.text.trim().length > 0
+      )
+    return responded ? { ok: true } : { ok: false, reason: 'invalid_response' }
+  } catch {
+    return { ok: false, reason: 'invalid_response' }
+  }
+}
+
 export async function checkModelConnection(
   store: ModelConnectionStore,
   input: CheckModelConnection,
@@ -170,6 +256,11 @@ export async function checkModelConnection(
     apiKey = saved.apiKey
   }
   if (input.providerPresetId === 'openai-compatible') {
+    if (
+      input.compatibleApi === 'openai-responses' ||
+      input.compatibleApi === 'google-generative-ai'
+    )
+      return checkCompatibleModelResponse(input, apiKey, transport)
     const { url, headers } = buildCompatibleListModelsRequest(
       input.baseUrl,
       input.compatibleApi,

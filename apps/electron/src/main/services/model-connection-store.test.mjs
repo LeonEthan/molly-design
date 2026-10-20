@@ -645,31 +645,52 @@ void test('host heartbeats continue during refresh and retain a report arriving 
   ])
 })
 
-void test('compatibleApi persists for openai-compatible connections', async (t) => {
-  const { directory, store } = await fixture(t)
-  const customModels = [
-    {
-      modelId: 'vendor/custom',
-      name: 'Custom',
-      input: ['text'],
-      contextWindow: 8192,
-      maxTokens: 1024,
-      thinking: ['off'],
-      toolCalls: false,
-      maxTokensField: 'max_tokens'
-    }
-  ]
-  const saved = await store.save({
-    ...input,
-    providerPresetId: 'openai-compatible',
-    compatibleApi: 'anthropic-messages',
-    customModels
+for (const compatibleApi of [
+  'anthropic-messages',
+  'openai-completions',
+  'openai-responses',
+  'google-generative-ai',
+  undefined
+]) {
+  void test(`compatibleApi ${compatibleApi ?? 'legacy'} survives save, reload, unchanged save and runtime grant`, async (t) => {
+    const { directory, store } = await fixture(t)
+    const customModels = [
+      {
+        modelId: 'vendor/custom',
+        name: 'Custom',
+        input: ['text'],
+        contextWindow: 8192,
+        maxTokens: 1024,
+        thinking: ['off'],
+        toolCalls: false,
+        maxTokensField: 'max_tokens'
+      }
+    ]
+    const saved = await store.save({
+      ...input,
+      providerPresetId: 'openai-compatible',
+      ...(compatibleApi ? { compatibleApi } : {}),
+      customModels
+    })
+    const expectedApi = compatibleApi ?? 'openai-completions'
+    assert.equal(saved.compatibleApi, expectedApi)
+    const reopened = new ModelConnectionStore(directory, cipher)
+    const roundTrip = await reopened.snapshot()
+    assert.equal(roundTrip.connections[0].compatibleApi, expectedApi)
+    const resaved = await reopened.save({
+      ...input,
+      id: saved.id,
+      expectedRevision: saved.revision,
+      providerPresetId: 'openai-compatible',
+      compatibleApi: roundTrip.connections[0].compatibleApi,
+      customModels
+    })
+    const relaunched = new ModelConnectionStore(directory, cipher)
+    const granted = await relaunched.acquireForRun(resaved.id, resaved.revision)
+    assert.equal(granted.connection.compatibleApi, expectedApi)
+    assert.equal(granted.apiKey, input.apiKey)
   })
-  assert.equal(saved.compatibleApi, 'anthropic-messages')
-  const reopened = new ModelConnectionStore(directory, cipher)
-  const roundTrip = await reopened.snapshot()
-  assert.equal(roundTrip.connections[0].compatibleApi, 'anthropic-messages')
-})
+}
 
 void test('compatible model metadata persists with revision CAS and no public credential', async (t) => {
   const { directory, store } = await fixture(t)
@@ -1611,3 +1632,31 @@ void test('saving a connection keeps its place in the list', async (t) => {
   )
   assert.equal((await store.acquireForRun(second.id, 1)).apiKey, input.apiKey)
 })
+
+for (const compatibleApi of ['openai-responses', 'google-generative-ai']) {
+  void test(`${compatibleApi} cannot inherit an empty legacy credential`, async (t) => {
+    const { store } = await fixture(t)
+    const legacy = {
+      ...input,
+      providerPresetId: 'openai-compatible',
+      compatibleApi: 'openai-completions',
+      apiKey: '',
+      enabled: false
+    }
+    const saved = await store.save(legacy)
+    await assert.rejects(
+      store.save({
+        ...legacy,
+        compatibleApi,
+        id: saved.id,
+        expectedRevision: saved.revision,
+        apiKey: undefined
+      }),
+      { message: 'model_connection_credential_required' }
+    )
+    await assert.rejects(store.save({ ...legacy, compatibleApi }), {
+      message: 'invalid_model_connection'
+    })
+    assert.equal((await store.snapshot()).connections[0].compatibleApi, 'openai-completions')
+  })
+}

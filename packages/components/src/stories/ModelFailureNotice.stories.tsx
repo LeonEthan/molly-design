@@ -121,3 +121,47 @@ export const PermanentAuth: Story = {
   },
   render: renderRow,
 };
+
+export const EndpointNotFound: Story = {
+  args: {
+    message: {
+      ...transientMessage,
+      id: 'model-not-found-notice',
+      items: [
+        {
+          type: 'system_notice',
+          name: 'chat_failed',
+          meta: {
+            reason: 'acp_upstream_api_error',
+            code: 'model_endpoint_not_found',
+            message: 'Model request failed: 404 Not Found',
+          },
+        },
+      ],
+    } as SessionHistoryParsed,
+    sessionId,
+  },
+  render: renderRow,
+};
+
+export const ServerUnreachable: Story = {
+  args: {
+    message: {
+      ...transientMessage,
+      id: 'model-unreachable-notice',
+      items: [
+        {
+          type: 'system_notice',
+          name: 'chat_failed',
+          meta: {
+            reason: 'acp_upstream_api_error',
+            code: 'model_server_unreachable',
+            message: 'Model request failed: fetch failed',
+          },
+        },
+      ],
+    } as SessionHistoryParsed,
+    sessionId,
+  },
+  render: renderRow,
+};

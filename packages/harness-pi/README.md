@@ -106,8 +106,15 @@ processes, revoke old provider keys or erase old profiles. Detached-process sett
 not been validated by this retirement's synthetic checks.
 
 [model-connection.ts](src/model-connection.ts) registers the selected connection in memory,
-including declared OpenAI-compatible models. Compatible connections accept an explicit
-empty key through the existing bound run grant. A credential-only native provider keeps the
+including declared compatible models for Anthropic Messages, OpenAI Chat Completions,
+OpenAI Responses and Gemini Native generateContent. Runtime, discovery and response checks
+share base-URL normalization for Responses/Gemini: trailing slashes, repeated version segments
+and a pasted resource suffix do not duplicate the request path. Gemini keeps the version
+in the base URL and uses Pi's native Google adapter, including its streaming/tool/thinking
+and abort handling. Compatible Anthropic Messages and Chat Completions connections accept an explicit
+empty key through the existing bound run grant. Responses/Gemini reject empty keys
+before persistence, admission and transport; missing credentials never become a
+placeholder key. A credential-only native provider keeps the
 SDK catalog/transport and omits Authorization for an empty stored key; it never reads an
 ambient key. The SDK's nonempty placeholder is internal to request construction and never
 becomes a persisted or brokered credential. Compatible models preserve saved
@@ -131,6 +138,23 @@ free key check follows `PROVIDER_PRESET_CHECKS`, which a test keeps in step with
 SDK protocol. Model and thinking selection are fixed per
 worker; hooks in [host.ts](src/host.ts) retire the worker if an extension changes them.
 
+Responses/Gemini keep the unmodified Pi wire adapters. The existing native provider
+registration composes both `stream` and `streamSimple`: Responses receives a fetch
+that forces `redirect: 'error'` after request options; Gemini awaits the existing
+payload callback, preserves its replacement, then forces the same policy through
+`config.httpOptions.fetch`. Caller fetch/payload options cannot replace enforcement.
+Completion helpers, native compaction and personal-memory extraction use these same
+registered methods. Existing protocols and native presets retain their transport.
+
+Pi remains 1.3.0. The exact pnpm override
+`@earendil-works/pi-ai@1.3.0>@google/genai: 2.23.0` supplies Google's published public
+fetch hook; mem0ai's Google 1.52.0 graph is unchanged. Molly owns compatibility of
+this override: changes require native streaming/tool/reasoning/cancel and redirect
+regressions, Pi-relative resolution in the staged closure, manifest/hash verification
+and the existing packaged synthetic smoke. `build-embedded-harness.mjs` asserts the
+staged Pi-relative Google version; update that assertion with the reviewed override.
+There is no SDK patch, global fetch replacement or worker dispatcher policy.
+
 ## ACP adapter
 
 [agent.ts](src/agent.ts) and [session.ts](src/session.ts) adapt the lifecycle of
@@ -141,9 +165,13 @@ settlement and a final assistant entry; cancellation, truncation and handled com
 reported distinctly. Native usage is projected to Core usage notifications
 ([usage.ts](src/usage.ts)).
 
+For the compatible Responses/Gemini types, Settings checks the selected model with one
+unretried generation request; it may incur provider usage. Model discovery remains a
+separate GET request and does not establish that the selected model can respond.
+
 Final managed model errors use the static ACP diagnostic `harness_model_request_failed`
 with a category: context overflow, authentication, quota, content policy, invalid request,
-transient (retries exhausted), or unknown. HTTP 402, payment-required and exhausted-credit
+endpoint/model not found, server unreachable, transient (retries exhausted), or unknown. HTTP 402, payment-required and exhausted-credit
 errors map to quota. Explicit blocked-request, policy, prompt-injection, moderation,
 safety or guardrail evidence takes precedence over HTTP 403's authentication fallback.
 Permanent evidence takes precedence over Pi's transient classifier. The shared `embedded-run-contract` owns the category vocabulary and exhaustive mapping to

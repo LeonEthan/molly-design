@@ -34,7 +34,7 @@ Preserve historical catalog fields when editing unrelated values.
   catalogs. Discovery sends one `GET /models` to the typed/stored destination; filters non-chat
   rows, fills drafts from responses/packaged models.dev; saved declarations win. Reset discovery
   and discovered drafts on endpoint/key changes; reject late results. Manual rows cover unlistable
-  services. Empty compatible keys mean no auth; omission retains keys. Changed destinations
+  services. Responses/Gemini require keys; other types allow keyless use. Omission retains keys. Changed destinations
   require explicit input.
 - Bundled capability inventory describes shipped resources and conditional activation,
   not live-session enablement. Failed reads stay unknown; no default plugin claim,
@@ -50,10 +50,10 @@ Preserve historical catalog fields when editing unrelated values.
   endpoints. On/Off saves immediately; credential forms keep Save. Confirm deletion.
   OpenAI sign-out retains a disabled reconnectable row; refresh snapshots, block checks/enabling,
   report unconfirmed revocation. Delete forgets its registration.
-- A key is checked for free once it settles (`connection-check.tsx`): a typed key only
-  against the shown destination, a saved key only against its own provider and endpoint.
-  Checks list models or validate the key, never send a model request or DashScope call,
-  and show only real failures. Native connections offer
+- Responses/Gemini checks are explicit, possibly billed, and require visible model text.
+  Other checks settle automatically and validate keys/list models for free, without
+  model or DashScope requests. Typed keys target the shown
+  destination; saved keys target their saved provider/endpoint. Native connections offer
   All or a chosen `models` list under Advanced with the endpoint and name; listed
   IDs sort first and keep the not-listed tag, never select. Choose pre-checks the full
   packaged catalog, not the key-check listing, so a one-model key cannot shrink the

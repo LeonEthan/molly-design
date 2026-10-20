@@ -59,7 +59,7 @@ function fixture() {
           ready = true
           return true
         }
-        scripts.push({ ready, script })
+        scripts.push({ ready, script, retired: leases.at(-1)?.disposed ?? false })
         if (!ready) throw new Error('Canvas API not ready')
         return true
       }
@@ -182,7 +182,7 @@ void test('overlapping attachments share initial document load and product API r
     false
   )
   assert.equal(f.view().getVisible(), true)
-  f.destroyDesign('artwork')
+  await f.destroyDesign('artwork')
 })
 
 void test('hiding a shared pending attachment keeps the ready canvas hidden', async () => {
@@ -200,7 +200,7 @@ void test('hiding a shared pending attachment keeps the ready canvas hidden', as
     f.scripts.some((entry) => !entry.ready),
     false
   )
-  f.destroyDesign('artwork')
+  await f.destroyDesign('artwork')
 })
 
 void test('a failed initial load rejects every waiting attachment', async () => {
@@ -302,10 +302,19 @@ void test('a hidden editor still publishes its edited and cleared notes', async 
 void test('notes-sync from a destroyed or replaced canvas instance is refused', async () => {
   const f = await openedCanvas()
   const retired = f.leases.at(-1)
-  f.destroyDesign('artwork')
+  await f.destroyDesign('artwork')
   assert.equal((await f.postToolbar(retired, { type: 'notes-sync', notes: [] })).status, 400)
   await f.attachDesign(f.owner, 'artwork', { x: 0, y: 0, width: 800, height: 600 })
   const replacement = f.leases.at(-1)
   assert.equal((await f.postToolbar(retired, { type: 'notes-sync', notes: [] })).status, 400)
   assert.equal((await f.postToolbar(replacement, { type: 'notes-sync', notes: [] })).status, 200)
+})
+
+void test('closing a canvas asks it to publish unsent notes before disposal', async () => {
+  const f = await openedCanvas()
+  const lease = f.leases.at(-1)
+  await f.destroyDesign('artwork')
+  const flush = f.scripts.find((entry) => entry.script.includes('flushNotes'))
+  assert.equal(flush?.retired, false)
+  assert.equal(lease.disposed, true)
 })

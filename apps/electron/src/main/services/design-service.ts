@@ -559,8 +559,9 @@ async function retireDesignInstance(key: string) {
     )
   destroyDesignInstance(key)
 }
-export function destroyDesign(id: string) {
-  for (const [key, record] of records) if (record.artworkId === id) destroyDesignInstance(key)
+export async function destroyDesign(id: string) {
+  const keys = [...records].filter(([, record]) => record.artworkId === id).map(([key]) => key)
+  await Promise.all(keys.map(retireDesignInstance))
 }
 /**
  * Selection summary a remounted shell can reseed its composer selection from. Returns null

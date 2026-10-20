@@ -81,7 +81,7 @@ export async function verifyDesignVersions(directory: string) {
     const protection = versions.at(-1)!
     assert.equal(protection.kind, 'before-restore')
     assert.equal(protection.baseVersionId, v3.commitId)
-    destroyDesign(id)
+    await destroyDesign(id)
     await attachDesign(owner, id, bounds)
     assert.equal((await readDesignCanvasState(id)).baseVersionId, v2.commitId)
     assert.deepEqual(await designRequest({ operation: 'history-list', sessionId: id }), versions)
@@ -123,7 +123,7 @@ export async function verifyDesignVersions(directory: string) {
       )
     )
   } finally {
-    destroyDesign(id)
+    await destroyDesign(id)
     owner.destroy()
   }
 }

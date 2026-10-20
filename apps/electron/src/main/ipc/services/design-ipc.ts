@@ -256,7 +256,7 @@ export class DesignIpc extends IpcService {
     owner()
     const key = id.parse(sessionId)
     if (!(await leaveDesign(key))) return false
-    destroyDesign(key)
+    await destroyDesign(key)
     await forgetDesignThumbnail(key)
     return true
   }

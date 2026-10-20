@@ -14,10 +14,11 @@ Provider, Model, and Reasoning, in that order, as one submenu each. Model
 lists only the selected provider's models, and Reasoning lists only that
 model's levels. Changing a provider or model keeps a child that is still
 valid and otherwise selects the first model and reasoning `high`, or the
-first non-off level when `high` is missing. Reasoning is `off` only when no
-connection is configured, and that Provider row opens Settings. A configured
-model that publishes only `off` keeps that value on the wire and shows
-Reasoning as unavailable. The Agent
+first non-off level when `high` is missing. With no connection, Reasoning is
+`off` and that Provider row opens Settings. A configured
+model that publishes only `off` shows Reasoning Off and sends `off`. A model
+with no connection id and no group is a provider of its own, after the
+connection providers. `session.cycleProvider` cycles those providers. The Agent
 chip is removed and is not replaced; the image-model chip stays. The
 selection is stored in the existing agent-defaults cache and a session-scoped
 record so it survives restart. On a canvas, that record includes a model
@@ -43,7 +44,8 @@ lack `high`, the empty Settings row, the removed Agent chip, and the absence
 of an Agent row. Unit tests cover the default, child re-validation,
 revision-scoped persistence, a stored model and reasoning beating the runtime
 baseline, a model-selector edit producing a cache patch, and a model that
-publishes only `off` showing Reasoning as unavailable. Desktop
+publishes only `off` showing Reasoning Off, an ungrouped row staying out of
+the first provider, and the provider cycle command. Desktop
 acceptance on Linux is recorded in the pull request.
 
 ## Related

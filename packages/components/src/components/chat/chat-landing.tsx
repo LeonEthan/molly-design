@@ -76,7 +76,6 @@ import {
 import { useOnlineMachineIds } from '@/hooks/use-machine-online-status';
 import { useResolvedWorkspaceScope } from '@/hooks/use-resolved-workspace-scope';
 import {
-  getChatLandingAgentSelectionsForMachine,
   readChatLandingDefaults,
   resolvePreferredChatLandingAgentSelection,
 } from '@/lib/chat-landing-defaults';
@@ -171,6 +170,7 @@ import {
   type AcpSelectConfigOptionSelector,
 } from '@/components/shared/acp-selector-options';
 import { useComposerCycleCommands } from '@/hooks/use-composer-cycle-commands';
+import { useComposerProviderCycle } from '@/hooks/use-composer-provider-cycle';
 
 import {
   buildChatLandingPreSelectionKey,
@@ -932,8 +932,8 @@ function WorkspaceChatLanding({
     [selectedConfig?.cliType, selectedConfig?.agentType, selectedAgent?.machineId]
   );
 
-  // Keyboard cyclers shared with the in-session composer. The chat landing is also where
-  // the agent provider can be cycled (it's fixed once a session exists).
+  // Keyboard cyclers shared with the in-session composer. Provider cycles the
+  // visible connection providers, on the landing and inside a session.
   const cycleThinkEffortSelector = useMemo(
     () =>
       configOptionSelectors.find(
@@ -945,11 +945,15 @@ function WorkspaceChatLanding({
   const cycleThinkEffortCurrent = cycleThinkEffortSelector
     ? configOptionValues[cycleThinkEffortSelector.configId]
     : undefined;
-  const cycleProviderSelections = useMemo(
-    () =>
-      getChatLandingAgentSelectionsForMachine(executorConfigs, selectedAgent?.machineId ?? null),
-    [executorConfigs, selectedAgent?.machineId]
-  );
+  const providerCycle = useComposerProviderCycle({
+    modelOptions,
+    selectedModelId,
+    configOptionSelectors: resolvedConfigOptionSelectors,
+    configOptionValues,
+    modelReasoningEfforts,
+    onModelChange: selectLandingModel,
+    onConfigOptionChange: selectLandingConfigOption,
+  });
   useComposerCycleCommands({
     mode: {
       values: modeOptions.map((option) => option.value),
@@ -973,18 +977,7 @@ function WorkspaceChatLanding({
           onSelect: (value) => selectLandingConfigOption(cycleThinkEffortSelector.configId, value),
         }
       : null,
-    provider: selectedAgent
-      ? {
-          values: cycleProviderSelections.map((selection) => selection.agentId),
-          current: selectedAgent.agentId,
-          onSelect: (agentId) => {
-            const nextSelection = cycleProviderSelections.find(
-              (selection) => selection.agentId === agentId
-            );
-            if (nextSelection) setSelectedAgent(nextSelection);
-          },
-        }
-      : null,
+    provider: providerCycle,
   });
 
   // ── Machine online check (context-dependent) ──

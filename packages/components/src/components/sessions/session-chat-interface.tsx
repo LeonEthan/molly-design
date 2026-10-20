@@ -208,6 +208,7 @@ import {
   type AcpSelectConfigOptionSelector,
 } from '@/components/shared/acp-selector-options';
 import { useComposerCycleCommands } from '@/hooks/use-composer-cycle-commands';
+import { useComposerProviderCycle } from '@/hooks/use-composer-provider-cycle';
 import { useSessionAcpSelectorContext } from '@/hooks/use-session-acp-selector-context';
 import {
   useAcpSessionConfigSelectionState,
@@ -1947,8 +1948,7 @@ export const SessionChatInterface = memo(
       [browserOnline, isMachineRemoved, sessionMachineOnlineStatus, sessionMachine?.name]
     );
 
-    // Keyboard cyclers (⇧Tab mode + rebindable model / thinking). The agent provider is
-    // fixed once a session exists, so it isn't cyclable here (only on the chat landing).
+    // Keyboard cyclers (⇧Tab mode + rebindable provider / model / thinking).
     const thinkEffortSelector = useMemo(
       () =>
         resolvedConfigOptionSelectors.find(
@@ -1960,6 +1960,15 @@ export const SessionChatInterface = memo(
     const thinkEffortCurrent = thinkEffortSelector
       ? configOptionValues[thinkEffortSelector.configId]
       : undefined;
+    const providerCycle = useComposerProviderCycle({
+      modelOptions,
+      selectedModelId,
+      configOptionSelectors: resolvedConfigOptionSelectors,
+      configOptionValues,
+      modelReasoningEfforts,
+      onModelChange: selectCanvasModel,
+      onConfigOptionChange: selectCanvasConfigOption,
+    });
     useComposerCycleCommands({
       // Session detail keeps its toolbar and inactive tabs mounted. Only the active
       // conversation may own these duplicate command ids.
@@ -1993,7 +2002,7 @@ export const SessionChatInterface = memo(
               onSelect: (value) => selectCanvasConfigOption(thinkEffortSelector.configId, value),
             }
           : null,
-      provider: null,
+      provider: hideMessageArea ? null : providerCycle,
     });
 
     const initStatusLabel = useMemo<string | null>(() => {

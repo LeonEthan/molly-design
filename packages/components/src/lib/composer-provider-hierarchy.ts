@@ -8,8 +8,10 @@ import { MOLLY_UNSELECTED_MODEL, decodeMollyModelOption } from '@molly/shared/em
  * no Molly connection id). This does not read the connection-list API.
  *
  * A parent change keeps a child that is still valid and otherwise applies
- * {@link defaultComposerReasoning}. `off` is the reasoning value only when
- * no provider is configured.
+ * {@link defaultComposerReasoning}. Visible `off` is the empty-provider row,
+ * and also the row for a configured model that publishes only `off`. That
+ * published value is what gets sent. A row with no connection id and no group
+ * is never filed under another provider.
  */
 
 export type ComposerModelOption = {
@@ -30,6 +32,7 @@ export type ComposerProvider = {
 export type ComposerProviderHierarchyMode = 'connections' | 'catalog' | 'empty';
 
 const CATALOG_PROVIDER_ID = '__catalog__';
+const UNGROUPED_PROVIDER_ID = '__ungrouped__';
 
 export type ComposerProviderHierarchy = {
   mode: ComposerProviderHierarchyMode;
@@ -81,13 +84,18 @@ export function listComposerProviders(
     seen.add(connection.id);
     providers.push({ id: connection.id, name: connection.name, kind: 'connection' });
   }
-  if (providers.length > 0) return providers;
+  if (providers.length > 0) {
+    if (models.some((option) => connectionOf(option) === null)) {
+      providers.push({ id: UNGROUPED_PROVIDER_ID, name: '', kind: 'connection' });
+    }
+    return providers;
+  }
   if (models.length === 0) return [];
   return [{ id: CATALOG_PROVIDER_ID, name: '', kind: 'catalog' }];
 }
 
-function providerIdOf(option: ComposerModelOption, providers: readonly ComposerProvider[]): string {
-  return connectionOf(option)?.id ?? providers[0]?.id ?? CATALOG_PROVIDER_ID;
+function providerIdOf(option: ComposerModelOption): string {
+  return connectionOf(option)?.id ?? UNGROUPED_PROVIDER_ID;
 }
 
 function levelsForModel(
@@ -127,7 +135,9 @@ function chooseReasoning(
 
 function visibleReasoningLevels(levels: readonly string[], hasProvider: boolean): string[] {
   if (!hasProvider) return ['off'];
-  return levels.filter((level) => level !== 'off');
+  const offered = levels.filter((level) => level !== 'off');
+  if (offered.length > 0) return offered;
+  return [...levels];
 }
 
 export function resolveComposerProviderHierarchy(input: {
@@ -181,10 +191,9 @@ export function resolveComposerProviderHierarchy(input: {
       ? input.providerId
       : null;
   const selectedOption = models.find((option) => option.value === input.selectedModelId);
-  const providerId =
-    requested ?? (selectedOption ? providerIdOf(selectedOption, providers) : providers[0]!.id);
+  const providerId = requested ?? (selectedOption ? providerIdOf(selectedOption) : providers[0]!.id);
   const provider = providers.find((entry) => entry.id === providerId) ?? providers[0]!;
-  const scoped = models.filter((option) => providerIdOf(option, providers) === provider.id);
+  const scoped = models.filter((option) => providerIdOf(option) === provider.id);
   const modelId =
     input.selectedModelId && scoped.some((option) => option.value === input.selectedModelId)
       ? input.selectedModelId
@@ -205,5 +214,43 @@ export function resolveComposerProviderHierarchy(input: {
     models: scoped,
     reasoning,
     reasoningLevels: visibleReasoningLevels(levels, true),
+  };
+}
+
+/** Connection providers the composer cycle command walks, in menu order. */
+export function composerProviderCycleTarget(input: {
+  modelOptions: readonly ComposerModelOption[];
+  selectedModelId: string | null;
+  reasoningValue?: string | null;
+  modelReasoningEfforts?: Record<string, readonly string[] | undefined>;
+  fallbackReasoningLevels?: readonly string[];
+}): { values: string[]; current: string | null } {
+  const hierarchy = resolveComposerProviderHierarchy(input);
+  if (hierarchy.mode !== 'connections') return { values: [], current: null };
+  return {
+    values: hierarchy.providers.map((provider) => provider.id),
+    current: hierarchy.providerId,
+  };
+}
+
+/**
+ * Model and reasoning to write when the cycle command lands on `providerId`.
+ * A null field means that value already matches.
+ */
+export function pickComposerProvider(input: {
+  modelOptions: readonly ComposerModelOption[];
+  selectedModelId: string | null;
+  reasoningValue?: string | null;
+  modelReasoningEfforts?: Record<string, readonly string[] | undefined>;
+  fallbackReasoningLevels?: readonly string[];
+  providerId: string;
+}): { modelId: string | null; reasoning: string | null } {
+  const next = resolveComposerProviderHierarchy(input);
+  return {
+    modelId: next.modelId && next.modelId !== input.selectedModelId ? next.modelId : null,
+    reasoning:
+      next.mode === 'connections' && next.reasoning !== (input.reasoningValue ?? null)
+        ? next.reasoning
+        : null,
   };
 }

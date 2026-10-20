@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { encodeMollyModelOption, MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
 import {
+  composerProviderCycleTarget,
   defaultComposerReasoning,
+  pickComposerProvider,
   resolveComposerProviderHierarchy,
 } from '../src/lib/composer-provider-hierarchy';
 import {
@@ -63,7 +65,7 @@ describe('composer provider hierarchy', () => {
     expect(replaced.reasoning).toBe('max');
   });
 
-  it('keeps off as the wire value and hides it when that is the only published level', () => {
+  it('shows off and sends off when that is the only published level', () => {
     const resolved = resolveComposerProviderHierarchy({
       modelOptions: models,
       selectedModelId: studio,
@@ -72,7 +74,7 @@ describe('composer provider hierarchy', () => {
     });
     expect(resolved.mode).toBe('connections');
     expect(resolved.reasoning).toBe('off');
-    expect(resolved.reasoningLevels).toEqual([]);
+    expect(resolved.reasoningLevels).toEqual(['off']);
   });
 
   it('uses off only when no provider is configured', () => {
@@ -86,6 +88,52 @@ describe('composer provider hierarchy', () => {
     expect(empty.providerName).toBeNull();
     expect(empty.modelId).toBeNull();
     expect(empty.reasoning).toBe('off');
+  });
+
+  it('places a non-connection row after the real providers', () => {
+    const plain = { value: 'plain-gpt', label: 'Plain' };
+    const onStudio = resolveComposerProviderHierarchy({
+      modelOptions: [...models, plain],
+      selectedModelId: studio,
+    });
+    expect(onStudio.models.map((option) => option.value)).toEqual([studio]);
+    expect(onStudio.providers.at(-1)?.id).not.toBe(onStudio.providerId);
+    const trailingId = onStudio.providers.at(-1)?.id;
+    const onPlain = resolveComposerProviderHierarchy({
+      modelOptions: [...models, plain],
+      selectedModelId: plain.value,
+    });
+    expect(onPlain.providerId).toBe(trailingId);
+    expect(onPlain.models.map((option) => option.value)).toEqual([plain.value]);
+    expect(onPlain.providers.map((provider) => provider.id)).toEqual(
+      onStudio.providers.map((provider) => provider.id)
+    );
+  });
+
+  it('cycles connection providers and applies the next provider model', () => {
+    const current = composerProviderCycleTarget({
+      modelOptions: models,
+      selectedModelId: studio,
+      reasoningValue: 'high',
+      modelReasoningEfforts: {
+        [studio]: ['high'],
+        [review]: ['max'],
+      },
+    });
+    expect(current.values).toEqual(['studio', 'review']);
+    expect(current.current).toBe('studio');
+    expect(
+      pickComposerProvider({
+        modelOptions: models,
+        selectedModelId: studio,
+        reasoningValue: 'high',
+        modelReasoningEfforts: {
+          [studio]: ['high'],
+          [review]: ['max'],
+        },
+        providerId: 'review',
+      })
+    ).toEqual({ modelId: review, reasoning: 'max' });
   });
 
   it('leaves an ungrouped catalog unscoped and keeps its reasoning', () => {

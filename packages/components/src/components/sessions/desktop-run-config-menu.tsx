@@ -436,15 +436,9 @@ export function DesktopRunConfigMenu({
       : (hierarchy.providerName ?? catalogProviderLabel);
   const displayedReasoning =
     hierarchy.mode === 'catalog' ? thinkingValue : hierarchy.reasoning;
-  const reasoningHasNoSelectableLevel =
-    hierarchy.mode === 'connections' &&
-    hierarchy.reasoning === 'off' &&
-    hierarchy.reasoningLevels.length === 0;
-  const displayedReasoningLabel = reasoningHasNoSelectableLevel
-    ? reasoningUnavailableLabel
-    : displayedReasoning
-      ? reasoningLabelFor(displayedReasoning)
-      : null;
+  const displayedReasoningLabel = displayedReasoning
+    ? reasoningLabelFor(displayedReasoning)
+    : null;
   const reasoningChoices =
     hierarchy.mode === 'catalog'
       ? (thinkingSelector?.options ?? [])

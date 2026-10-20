@@ -81,9 +81,10 @@ Files: [README.md](README.md). Scopes:
 - Every click shows Provider, Model, and Reasoning, even with one option
   each. Model lists that provider's models; Reasoning lists that model's
   levels. Default is the first provider's first model and `high`, else its
-  first non-off level. `off` only with no provider; that row opens Settings.
+  first non-off level. `off` opens Settings with no provider, and a model that
+  publishes only `off` shows Off.
   No Agent chip. Plan/Fast selectors stay out. Fast is retired from recents.
-  Keep opaque model ids. Roles stay retired: no selection, creation, prompt
+  Opaque model ids. Roles stay retired: no selection, creation, prompt
   prefix, or replay.
   Rationale: [provider hierarchy](../../../../../.agents/notes/implemented/bug-fix/2026-10-20-composer-provider-hierarchy.md).
 - New composer Turns freeze `agentRoleId: null`; historical Session provenance

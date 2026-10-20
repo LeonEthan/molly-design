@@ -86,8 +86,8 @@ Index and rationale: [README.md](README.md).
   selections (`event.preventDefault`).
 - Desktop landing's machine/project menus always open upward with collision
   flipping disabled. Their top-row labels and glyphs, share the same neutral foreground level.
-- The ACP provider cycle command uses the same single-machine scope as the visible
-  provider menu. Never cycle all workspace configs while retaining the old machine id.
+- `session.cycleProvider` cycles the visible connection providers in menu order,
+  on the landing and in a session. It does not cycle agent config ids.
 - Keep raw local Git, Machine RPC, and Streams failures out of landing status copy;
   retain them for submit blocking, telemetry, logging, and scoped retry. Status copy
   is for actionable validation and selected-machine project guidance.

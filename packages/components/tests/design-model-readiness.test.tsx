@@ -73,6 +73,24 @@ describe('design model readiness predicates', () => {
     ]);
   });
 
+  it('excludes an enabled OAuth connection that was signed out', () => {
+    const signedIn: ModelConnection = {
+      ...connection,
+      providerPresetId: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      authType: 'openai_oauth',
+      oauth: { email: 'synthetic@example.com' },
+    };
+    const signedOut: ModelConnection = {
+      ...signedIn,
+      oauth: { ...signedIn.oauth, signedOut: true },
+    };
+    expect(isModelConnectionReady(signedOut)).toBe(false);
+    expect(getMissingDesignModelClasses({ connections: [signedOut], imageConnection })).toEqual([
+      'language',
+    ]);
+  });
+
   it('excludes an enabled OAuth connection whose refresh was denied', () => {
     const signedIn: ModelConnection = {
       ...connection,

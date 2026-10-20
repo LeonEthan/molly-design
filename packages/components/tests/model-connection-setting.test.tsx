@@ -127,6 +127,7 @@ describe('encrypted model connection form', () => {
       { ...stored, providerPresetId: 'openai-compatible', customModels }
     );
     expect(host.textContent).toContain(en['settings.models.compatibleLead']);
+    expect(host.textContent).toContain(en['settings.models.keyLocalHint']);
     expect(host.textContent).not.toContain(en['settings.models.compatibleHint']);
     const limit = host.querySelector<HTMLInputElement>('input[id$="-maxTokens"]')!;
     await change(limit, '65536');
@@ -143,6 +144,40 @@ describe('encrypted model connection form', () => {
     });
     expect(writes[0].apiKey).toBeUndefined();
     expect(host.innerHTML).not.toContain(stored.credentialRef);
+  });
+
+  it('keeps anthropic-messages compatibleApi when saving a stored compatible connection', async () => {
+    const writes: SaveModelConnection[] = [];
+    const customModels: NonNullable<ModelConnection['customModels']> = [
+      {
+        modelId: 'vendor/custom',
+        name: 'Custom',
+        input: ['text'],
+        contextWindow: 32768,
+        maxTokens: 4096,
+        thinking: ['off'],
+        toolCalls: true,
+        maxTokensField: 'max_tokens',
+      },
+    ];
+    await render(
+      async (input) => {
+        writes.push(input);
+      },
+      {
+        ...stored,
+        providerPresetId: 'openai-compatible',
+        compatibleApi: 'anthropic-messages',
+        customModels,
+      }
+    );
+    expect(host.textContent).toContain(en['settings.models.compatibleApi.anthropicMessages']);
+    await act(async () => {
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(writes[0]?.compatibleApi).toBe('anthropic-messages');
   });
 
   it('requires explicit model fields and permits adding and removing a compatible model', async () => {

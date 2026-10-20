@@ -1,4 +1,5 @@
 import {
+  decodeMollyModelOption,
   getModelConnectionConfigurationIssue,
   ModelConnectionSchema,
   type ModelConnection,
@@ -11,10 +12,18 @@ import { getIpcServices } from '@/lib/electron-ipc-client';
  * onboarding, and the landing composer so the three surfaces can never drift.
  * Readiness describes saved configuration only: it never probes a key.
  */
+export function getModelConnectionOAuthSendBlock(
+  connection: ModelConnection
+): 'denied' | 'signed_out' | null {
+  if (connection.oauth?.denied) return 'denied';
+  if (connection.oauth?.signedOut) return 'signed_out';
+  return null;
+}
+
 export function isModelConnectionReady(connection: ModelConnection): boolean {
   return (
     connection.enabled &&
-    connection.oauth?.denied !== true &&
+    getModelConnectionOAuthSendBlock(connection) === null &&
     !getModelConnectionConfigurationIssue(connection)
   );
 }
@@ -57,6 +66,25 @@ export function getMissingDesignModelClasses(input: {
  * could not be read (for example Keychain access was denied); callers block
  * the send rather than treat an unread snapshot as ready.
  */
+export async function readLanguageModelOAuthSendBlock(
+  selectedModelId: string | null | undefined
+): Promise<'denied' | 'signed_out' | null> {
+  if (!selectedModelId) return null;
+  const decoded = decodeMollyModelOption(selectedModelId);
+  if (!decoded?.connectionId) return null;
+  const ipc = getIpcServices();
+  if (!ipc) return null;
+  try {
+    const snapshot = await ipc.modelConnections.getSnapshot();
+    const connections = ModelConnectionSchema.array().parse(snapshot.connections);
+    const connection = connections.find((entry) => entry.id === decoded.connectionId);
+    return connection ? getModelConnectionOAuthSendBlock(connection) : null;
+  } catch (error) {
+    console.error('Failed to read model connection OAuth state', error);
+    return 'denied';
+  }
+}
+
 export async function readMissingDesignModelClasses(): Promise<DesignModelClass[] | null> {
   const ipc = getIpcServices();
   if (!ipc) return [];

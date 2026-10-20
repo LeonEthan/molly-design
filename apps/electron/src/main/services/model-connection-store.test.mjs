@@ -645,6 +645,32 @@ void test('host heartbeats continue during refresh and retain a report arriving 
   ])
 })
 
+void test('compatibleApi persists for openai-compatible connections', async (t) => {
+  const { directory, store } = await fixture(t)
+  const customModels = [
+    {
+      modelId: 'vendor/custom',
+      name: 'Custom',
+      input: ['text'],
+      contextWindow: 8192,
+      maxTokens: 1024,
+      thinking: ['off'],
+      toolCalls: false,
+      maxTokensField: 'max_tokens'
+    }
+  ]
+  const saved = await store.save({
+    ...input,
+    providerPresetId: 'openai-compatible',
+    compatibleApi: 'anthropic-messages',
+    customModels
+  })
+  assert.equal(saved.compatibleApi, 'anthropic-messages')
+  const reopened = new ModelConnectionStore(directory, cipher)
+  const roundTrip = await reopened.snapshot()
+  assert.equal(roundTrip.connections[0].compatibleApi, 'anthropic-messages')
+})
+
 void test('compatible model metadata persists with revision CAS and no public credential', async (t) => {
   const { directory, store } = await fixture(t)
   const customModels = [

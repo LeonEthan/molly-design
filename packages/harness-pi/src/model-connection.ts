@@ -35,7 +35,6 @@ export function configureModelConnection(
     const wireApi: CompatibleConnectionApi = normalizeCompatibleConnectionApi(
       connection.compatibleApi
     );
-    const thinkingFormat = wireApi === 'anthropic-messages' ? 'openrouter' : 'openai';
     runtime.registerProvider(providerId, {
       baseUrl: connection.baseUrl,
       api: wireApi,
@@ -55,8 +54,12 @@ export function configureModelConnection(
         ),
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         compat: {
-          thinkingFormat,
-          supportsReasoningEffort: model.thinking.some((level) => level !== 'off'),
+          ...(wireApi === 'anthropic-messages'
+            ? { supportsReasoningEffort: false }
+            : {
+                thinkingFormat: 'openai' as const,
+                supportsReasoningEffort: model.thinking.some((level) => level !== 'off'),
+              }),
           supportsStore: false,
           supportsDeveloperRole: false,
           supportsUsageInStreaming: model.usageInStreaming ?? false,

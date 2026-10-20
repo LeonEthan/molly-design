@@ -27,15 +27,12 @@ describe('LandingDesignConfigChips', () => {
     root = null;
   });
 
-  it('renders collapsed chips and expands on click', async () => {
+  it('always shows full agent and image model labels without a collapse control', async () => {
     await act(async () =>
       root?.render(<LandingDesignConfigChips agentLabel="Molly" imageModelId="gpt-image-1" />)
     );
-    const buttons = container.querySelectorAll('button[aria-expanded]');
-    expect(buttons.length).toBe(2);
-    expect(buttons[0]?.getAttribute('aria-expanded')).toBe('false');
-    await act(async () => buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(buttons[1]?.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelectorAll('button').length).toBe(0);
+    expect(container.textContent).toContain('Molly');
     expect(container.textContent).toContain('gpt-image-1');
   });
 });

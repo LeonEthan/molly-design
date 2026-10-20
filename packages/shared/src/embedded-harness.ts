@@ -627,6 +627,7 @@ export const CheckModelConnectionSchema = z
   .object({
     providerPresetId: ProviderPresetIdSchema,
     baseUrl: ModelEndpointSchema,
+    compatibleApi: CompatibleConnectionApiSchema.optional(),
     apiKey: z.string().trim().min(1).max(16_384).optional(),
     stored: z.object({ id: identifier, revision }).strict().optional(),
   })

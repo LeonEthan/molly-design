@@ -423,15 +423,18 @@ export function ModelConnectionForm({
   const checkRequest = useMemo<CheckModelConnection | null>(() => {
     if (provider === '' || configurationIssue || !ModelEndpointSchema.safeParse(endpoint).success)
       return null;
-    if (typedKey) return { providerPresetId: provider, baseUrl: endpoint, apiKey: typedKey };
+    const compatible =
+      provider === 'openai-compatible' ? { compatibleApi } : {};
+    if (typedKey) return { providerPresetId: provider, baseUrl: endpoint, apiKey: typedKey, ...compatible };
     if (stored && !requiresKey && !useNoKey)
       return {
         providerPresetId: provider,
         baseUrl: endpoint,
         stored: { id: stored.id, revision: stored.revision },
+        ...compatible,
       };
     return null;
-  }, [configurationIssue, endpoint, provider, requiresKey, stored, typedKey, useNoKey]);
+  }, [compatibleApi, configurationIssue, endpoint, provider, requiresKey, stored, typedKey, useNoKey]);
   const check = useConnectionCheck(checkRequest, onCheck);
   // Keyless endpoints (Ollama, LM Studio) can be discovered without a key or stored row.
   const discoverable =
@@ -815,6 +818,7 @@ export function ModelConnectionForm({
                 }
                 onChange={(event) => setApiKey(event.target.value)}
               />
+              <p className="text-xs text-muted-foreground">{t('settings.models.keyLocalHint')}</p>
               <ConnectionCheckError state={check} baseUrl={endpoint} />
               {provider === 'openai-compatible' && stored ? (
                 <label className="flex items-center gap-2 text-xs text-muted-foreground">

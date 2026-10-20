@@ -143,6 +143,7 @@ void test('discoverModelConnection: anthropic messages uses /v1/models and x-api
   )
   assert.equal(seen[0].url, 'https://api.deepseek.com/anthropic/v1/models')
   assert.equal(seen[0].headers['x-api-key'], 'sk-synthetic')
+  assert.equal(seen[0].headers['anthropic-version'], '2023-06-01')
   assert.equal(seen[0].headers.authorization, undefined)
 })
 

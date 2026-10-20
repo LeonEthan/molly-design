@@ -78,7 +78,7 @@ export const COMPATIBLE_CONNECTION_PRESETS: readonly CompatibleConnectionPreset[
       input: ['text'],
       contextWindow: 65536,
       maxTokens: 8192,
-      thinking: ['off', 'high'],
+      thinking: ['off'],
       toolCalls: true,
       maxTokensField: 'max_tokens',
     },

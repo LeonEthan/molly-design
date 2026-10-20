@@ -12,8 +12,7 @@ Preserve unrelated changes. Report outcomes, evidence and limits.
 
 ## Design principles and migration scope
 
-From first principles: question requirements, delete unnecessary mechanisms, then simplify and
-optimize. Build only what is needed now; completed code and concept images do not establish necessity.
+Question requirements, delete unnecessary mechanisms, then simplify and optimize. Build only what is needed now; completed code and concept images do not establish necessity.
 
 - Modular, decoupled design. Before proposing any solution, climb the
   **reuse ladder**: reuse an existing component, then reuse with adaptation,
@@ -91,10 +90,9 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
 - Before daemon negotiation, MCP/Role catalogs or their UI consumers, per-turn MCP
   selection, or Role creation/dispatch, read [shared contracts](packages/shared/AGENTS.md).
 - Default workspace/CI uses ACP core, DSH capability contracts and Bento.
-  Claude/Codex/Grok/Kimi submodules under `vendor/` are retained
-  upstream material, outside root pnpm. Initialize them explicitly only for
-  scoped historical work;
-  never duplicate shared ACP contracts or add legacy runtime installs to desktop setup.
+  Claude/Codex/Grok/Kimi `vendor/` submodules stay upstream, outside root pnpm.
+  Initialize them only for scoped historical work. Never duplicate shared ACP
+  contracts or add legacy runtime installs to desktop setup.
   Historical Kimi packaging still uses a separately built, checksummed runtime artifact.
 - Package-scope or cloud/local composition changes require `pnpm check:public-boundary`.
 
@@ -113,6 +111,10 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
 - Test observable behavior with explicit signals, injected clocks, fake timers and
   deterministic fixtures. No real sleeps, wall-clock races, network, machine load
   or scheduler luck; do not assert mock call counts.
+- Molly testing and verification that calls DeepSeek uses Flash only
+  (`deepseek-v4-flash` or `deepseek-flash`). Never Pro (`deepseek-v4-pro`): it has
+  no multimodal support.
+  [Decision](.agents/notes/implemented/testing/2026-10-20-deepseek-flash-verification.md).
 - Keep edits traceable, contracts explicit; remove only unused code. Update the
   nearest public `AGENTS.md` for changed invariants/boundaries.
 - No local comments: rename, extract, or retype; external constraints cite the issue/Spec.
@@ -129,6 +131,6 @@ Details: [.github/codex-review.md](.github/codex-review.md).
 
 ## Shared agent material
 
-Track `.agents/` in Git so clones and worktrees receive the same maintenance
-workflows, explanations and decision records. Keep its public-source boundaries;
-never add private records, captured transcripts, secrets or machine-local state.
+Track `.agents/` in Git so clones and worktrees share maintenance workflows,
+explanations and decisions. Keep public-source boundaries; no private records,
+captured transcripts, secrets, or machine-local state.

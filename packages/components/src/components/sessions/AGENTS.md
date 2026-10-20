@@ -78,15 +78,12 @@ Files: [README.md](README.md). Scopes:
 
 ## Run config
 
-- Desktop run config is one flat menu of value rows: Recently used, Provider
-  (only with multiple user-configured connections; picking one scopes the
-  Model submenu; scopes key on the decoded connection id, never the display
-  name), Model (submenu catalog with search), Reasoning (submenu
-  option list) — Plan/Fast/interaction/extra selectors no longer render here.
-  Fast is retired from recents: never displayed or replayed; Fast-only runs
-  dedupe. Preserve opaque model ids and
-  model-specific reasoning capabilities. Roles are retired: no selection,
-  creation, prompt prefix, draft restoration or recent-Role replay.
+- Every click shows Agent, Reasoning, and Model rows, even with one option
+  each. Provider scopes Model only for several connections, keyed by
+  connection id. Plan/Fast/interaction/extra selectors stay out. Fast is
+  retired from recents. Keep opaque model ids and model-specific reasoning.
+  Roles stay retired: no selection, creation, prompt prefix, or replay.
+  Rationale: [three-level picker](../../../../../.agents/notes/implemented/bug-fix/2026-10-19-model-picker-three-levels.md).
 - New composer Turns freeze `agentRoleId: null`; historical Session provenance
   stays untouched. Child drafts inherit explicit run config, not Role identity.
 - Derive selection with `useAcpSessionConfigSelectionState`; never store or

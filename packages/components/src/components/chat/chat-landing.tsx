@@ -1739,6 +1739,7 @@ function WorkspaceChatLanding({
           modelOptions={modelOptions}
           selectedModelId={selectedModelId}
           onModelChange={setSelectedModelName}
+          onAgentChange={setSelectedAgent}
           configOptionSelectors={configOptionSelectors}
           configOptionValues={configOptionValues}
           onConfigOptionChange={handleConfigOptionChange}

@@ -14,7 +14,7 @@ import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/ui
  * displays nor replays) — so picking one is a single click instead of walking
  * three submenus. The row therefore reads like the
  * run-config trigger face (icon · model · reasoning · plan glyph) and, unlike the
- * Provider/Model/Reasoning option rows, CLOSES the menu: it is a terminal
+ * Agent/Reasoning/Model option rows, CLOSES the menu: it is a terminal
  * "run it like this" action, not one knob among several.
  *
  * Presentation only. The caller decides which entries exist, drops the one
@@ -109,11 +109,7 @@ export function RecentRunConfigMenuGroup({
               down the list instead of hunted at the end of each phrase. */}
           <span className="ml-auto flex shrink-0 items-center gap-1 pl-2">
             {item.planOn ? (
-              <ListChecks
-                className="h-3.5 w-3.5 text-ring"
-                strokeWidth={1.8}
-                aria-hidden="true"
-              />
+              <ListChecks className="h-3.5 w-3.5 text-ring" strokeWidth={1.8} aria-hidden="true" />
             ) : null}
           </span>
         </DropdownMenuItem>

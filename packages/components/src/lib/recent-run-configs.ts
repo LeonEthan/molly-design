@@ -42,7 +42,7 @@ export const getRecentRunConfigsStorageKey = (workspaceId: string): string =>
 /** Stored deeper than the menu shows: dropping to exactly three would let one
  * one-off run evict a combination the user alternates with every day. */
 export const MAX_STORED_RECENT_RUN_CONFIGS = 12;
-/** Rows in the menu. The group sits above Agent/Model/Reasoning, so it has to
+/** Rows in the menu. The group sits above Agent/Reasoning/Model, so it has to
  * stay short enough that the actual knobs are still the first thing seen. */
 export const MAX_VISIBLE_RECENT_RUN_CONFIGS = 3;
 

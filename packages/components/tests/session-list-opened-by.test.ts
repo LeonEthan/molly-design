@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import React from 'react';
+import React, { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
@@ -17,7 +17,32 @@ import {
 import { sidebarCollapsedOpenedBySessionsAtom } from '../src/atoms/focus-layer';
 import { initI18n } from '../src/i18n';
 
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
 const REPO = 'loro-dev/lody';
+
+const SCHEDULER_DRAIN_TURNS = 4;
+
+async function cancelPendingSchedulerWork(): Promise<void> {
+  await act(async () => {
+    for (let turn = 0; turn < SCHEDULER_DRAIN_TURNS; turn += 1) {
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+    }
+  });
+}
+
+async function restoreTimersBeforeTeardown(): Promise<void> {
+  if (vi.isFakeTimers()) {
+    await act(() => {
+      vi.runOnlyPendingTimers();
+    });
+  }
+  vi.useRealTimers();
+}
 
 function makeRow(overrides: Partial<SessionListRow> & { sessionId: string }): SessionListRow {
   return {
@@ -148,19 +173,36 @@ describe('SessionList opened-by rendering', () => {
     });
   });
 
-  afterEach(() => {
-    if (root) {
+  afterEach(async () => {
+    await act(async () => {
+      if (!root) return;
       flushSync(() => {
         root?.unmount();
       });
-    }
+    });
     root = undefined;
     container?.remove();
     container = undefined;
+    await restoreTimersBeforeTeardown();
+    await cancelPendingSchedulerWork();
     vi.restoreAllMocks();
   });
 
-  function renderList(sessions: SessionListRow[], collapsed: Record<string, boolean> = {}) {
+  async function renderList(
+    sessions: SessionListRow[],
+    collapsed: Record<string, boolean> = {},
+    selectedSessionId?: string
+  ) {
+    await act(async () => {
+      if (!root) return;
+      flushSync(() => {
+        root?.unmount();
+      });
+    });
+    root = undefined;
+    container?.remove();
+    container = undefined;
+
     const store = createStore();
     store.set(sidebarCollapsedOpenedBySessionsAtom, collapsed);
     const onSelectSession = vi.fn();
@@ -168,21 +210,35 @@ describe('SessionList opened-by rendering', () => {
     document.body.appendChild(container);
     root = createRoot(container);
 
-    flushSync(() => {
-      root?.render(
-        React.createElement(
-          Provider,
-          { store },
-          React.createElement(SessionList, {
-            sessions,
-            repos: [{ repoFullName: REPO, collapsed: false }],
-            onSelectSession,
-          })
-        )
-      );
+    await act(async () => {
+      flushSync(() => {
+        root?.render(
+          React.createElement(
+            Provider,
+            { store },
+            React.createElement(SessionList, {
+              sessions,
+              repos: [{ repoFullName: REPO, collapsed: false }],
+              selectedSessionId,
+              onSelectSession,
+            })
+          )
+        );
+      });
     });
 
     return { onSelectSession, store };
+  }
+
+  async function dispatchPointer(
+    target: EventTarget | null | undefined,
+    type: 'click' | 'contextmenu'
+  ) {
+    await act(async () => {
+      flushSync(() => {
+        target?.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));
+      });
+    });
   }
 
   function depthOf(sessionId: string): string | null | undefined {
@@ -195,16 +251,16 @@ describe('SessionList opened-by rendering', () => {
     return row?.closest('[data-session-tree-depth]')?.getAttribute('data-session-tree-indent');
   }
 
-  it('marks opened sessions at depth 1 and their opener at depth 0', () => {
-    renderList(makeOpenerGroupRows());
+  it('marks opened sessions at depth 1 and their opener at depth 0', async () => {
+    await renderList(makeOpenerGroupRows());
     expect(depthOf('opener')).toBe('0');
     expect(depthOf('opened-1')).toBe('1');
     expect(depthOf('opened-3')).toBe('1');
     expect(depthOf('unrelated')).toBe('0');
   });
 
-  it('keeps every top-level row aligned and indents only children with tree connectors', () => {
-    renderList(makeOpenerGroupRows());
+  it('keeps every top-level row aligned and indents only children with tree connectors', async () => {
+    await renderList(makeOpenerGroupRows());
     expect(indentOf('opener')).toBeNull();
     expect(indentOf('opened-1')).toBe('child');
     expect(indentOf('unrelated')).toBeNull();
@@ -230,26 +286,24 @@ describe('SessionList opened-by rendering', () => {
     expect(openerSlot?.querySelector('button[aria-label="More actions"]')).not.toBeNull();
   });
 
-  it('renders no tree gutter for a list without any opened session', () => {
-    renderList([makeRow({ sessionId: 'a' }), makeRow({ sessionId: 'b' })]);
+  it('renders no tree gutter for a list without any opened session', async () => {
+    await renderList([makeRow({ sessionId: 'a' }), makeRow({ sessionId: 'b' })]);
     expect(container?.querySelector('[data-session-tree-depth]')).toBeNull();
   });
 
-  it('renders exactly one disclosure toggle, on the opener row', () => {
-    renderList(makeOpenerGroupRows());
+  it('renders exactly one disclosure toggle, on the opener row', async () => {
+    await renderList(makeOpenerGroupRows());
     const toggles = container?.querySelectorAll('[data-session-opened-by-toggle]') ?? [];
     expect(toggles).toHaveLength(1);
     expect(toggles[0]?.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('collapsing the opener hides its opened rows and keeps the opener visible', () => {
-    renderList(makeOpenerGroupRows());
+  it('collapsing the opener hides its opened rows and keeps the opener visible', async () => {
+    await renderList(makeOpenerGroupRows());
     const toggle = container?.querySelector<HTMLButtonElement>('[data-session-opened-by-toggle]');
     expect(toggle).not.toBeNull();
 
-    flushSync(() => {
-      toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    });
+    await dispatchPointer(toggle, 'click');
 
     expect(container?.querySelector('[data-sidebar-session-id="opener"]')).not.toBeNull();
     expect(container?.querySelector('[data-sidebar-session-id="opened-1"]')).toBeNull();
@@ -258,31 +312,25 @@ describe('SessionList opened-by rendering', () => {
     ).toBe('false');
   });
 
-  it('does not navigate when the disclosure toggle is clicked', () => {
-    const { onSelectSession } = renderList(makeOpenerGroupRows());
+  it('does not navigate when the disclosure toggle is clicked', async () => {
+    const { onSelectSession } = await renderList(makeOpenerGroupRows());
     const toggle = container?.querySelector<HTMLButtonElement>('[data-session-opened-by-toggle]');
-    flushSync(() => {
-      toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    });
+    await dispatchPointer(toggle, 'click');
     expect(onSelectSession).not.toHaveBeenCalled();
   });
 
-  it('offers the same collapse action from the opener context menu', () => {
-    renderList(makeOpenerGroupRows());
+  it('offers the same collapse action from the opener context menu', async () => {
+    await renderList(makeOpenerGroupRows());
     const opener = container?.querySelector('[data-sidebar-session-id="opener"]');
 
-    flushSync(() => {
-      opener?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    });
+    await dispatchPointer(opener, 'contextmenu');
 
     const collapseItem = Array.from(document.querySelectorAll('[role="menuitem"]')).find((item) =>
       item.textContent?.includes('Hide opened sessions')
     );
     expect(collapseItem).toBeDefined();
 
-    flushSync(() => {
-      collapseItem?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    });
+    await dispatchPointer(collapseItem, 'click');
 
     expect(container?.querySelector('[data-sidebar-session-id="opened-1"]')).toBeNull();
     expect(
@@ -290,8 +338,8 @@ describe('SessionList opened-by rendering', () => {
     ).toBe('false');
   });
 
-  it('keeps the disclosure on a working opener and marks status at the row end', () => {
-    renderList([
+  it('keeps the disclosure on a working opener and marks status at the row end', async () => {
+    await renderList([
       makeRow({ sessionId: 'opener', isWorking: true }),
       makeRow({ sessionId: 'opened-1', openedBySessionId: 'opener' }),
     ]);
@@ -306,33 +354,29 @@ describe('SessionList opened-by rendering', () => {
     expect(openerEnd?.querySelector('[data-session-working-spinner]')).not.toBeNull();
   });
 
-  it('keeps collapse reachable from the context menu while the opener is working', () => {
-    renderList([
+  it('keeps collapse reachable from the context menu while the opener is working', async () => {
+    await renderList([
       makeRow({ sessionId: 'opener', isWorking: true }),
       makeRow({ sessionId: 'opened-1', openedBySessionId: 'opener' }),
     ]);
     const opener = container?.querySelector('[data-sidebar-session-id="opener"]');
 
-    flushSync(() => {
-      opener?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    });
+    await dispatchPointer(opener, 'contextmenu');
 
     const collapseItem = Array.from(document.querySelectorAll('[role="menuitem"]')).find((item) =>
       item.textContent?.includes('Hide opened sessions')
     );
     expect(collapseItem).toBeDefined();
 
-    flushSync(() => {
-      collapseItem?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    });
+    await dispatchPointer(collapseItem, 'click');
 
     expect(container?.querySelector('[data-sidebar-session-id="opened-1"]')).toBeNull();
   });
 
-  it('keeps tree connectors on an active child and moves its status to the row end', () => {
+  it('keeps tree connectors on an active child and moves its status to the row end', async () => {
     // The regression this locks: a working or unread child used to drop its ├/└,
     // so the rows a user actually watches were the ones that lost their nesting.
-    renderList(makeOpenerGroupRows());
+    await renderList(makeOpenerGroupRows());
 
     const rowOf = (sessionId: string) =>
       container?.querySelector(`[data-sidebar-session-id="${sessionId}"]`);
@@ -352,11 +396,11 @@ describe('SessionList opened-by rendering', () => {
     expect(endOf('opened-3')?.querySelector('[data-session-row-indicator] span')).not.toBeNull();
   });
 
-  it('keeps the disclosure AND the status mark for an unread or waiting opener', () => {
+  it('keeps the disclosure AND the status mark for an unread or waiting opener', async () => {
     // The two no longer compete for one node, so neither may be dropped: the
     // disclosure stays at the leading edge and the status mark at the row end.
     for (const status of [{ hasUnreadMessages: true }, { isWaitingPermission: true }] as const) {
-      renderList([
+      await renderList([
         makeRow({ sessionId: 'opener', ...status }),
         makeRow({ sessionId: 'opened-1', openedBySessionId: 'opener' }),
       ]);
@@ -377,10 +421,10 @@ describe('SessionList opened-by rendering', () => {
     }
   });
 
-  it('drops the resting metric cluster while a row carries a status', () => {
+  it('drops the resting metric cluster while a row carries a status', async () => {
     // "Only status at the right edge": the diff numbers a running row would
     // otherwise show are what made the end slot compete with the status mark.
-    renderList([
+    await renderList([
       makeRow({ sessionId: 'idle', addedLines: 12, deletedLines: 3 }),
       makeRow({ sessionId: 'busy', addedLines: 12, deletedLines: 3, isWorking: true }),
     ]);
@@ -395,25 +439,8 @@ describe('SessionList opened-by rendering', () => {
     expect(endOf('busy')?.querySelector('[data-session-working-spinner]')).not.toBeNull();
   });
 
-  it('renders an active opened session as the selected row', () => {
-    const store = createStore();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = createRoot(container);
-    flushSync(() => {
-      root?.render(
-        React.createElement(
-          Provider,
-          { store },
-          React.createElement(SessionList, {
-            sessions: makeOpenerGroupRows(),
-            repos: [{ repoFullName: REPO, collapsed: false }],
-            selectedSessionId: 'opened-2',
-            onSelectSession: vi.fn(),
-          })
-        )
-      );
-    });
+  it('renders an active opened session as the selected row', async () => {
+    await renderList(makeOpenerGroupRows(), {}, 'opened-2');
 
     const row = container?.querySelector('[data-sidebar-session-id="opened-2"]');
     expect(row?.className).toContain('bg-sidebar-selection');

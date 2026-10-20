@@ -37,9 +37,10 @@ const createHandler = async (
   options?: {
     agentConfigId?: string;
     agentConfigMeta?: { titleGeneration?: { configOptionValues: Record<string, string> } } | null;
+    logger?: Logger;
   }
 ) => {
-  const logger = createSilentLogger();
+  const logger = options?.logger ?? createSilentLogger();
 
   const sessionDoc = {
     getMetaState: vi
@@ -337,10 +338,9 @@ describe('MessageHandler title generation', () => {
         '  - internal tool guidance'
     );
 
-    expect(sessionDoc.setTitleIfSourceIn).toHaveBeenCalledWith('Fix flaky login', 'generated', [
-      'draft',
-      'generated',
-    ]);
+    expect(sessionDoc.setTitleIfSourceIn).toHaveBeenCalledWith(
+      'Fix flaky login', 'generated', ['draft', 'generated'], expect.any(AbortSignal)
+    );
   });
 
   it('does not store an ACP title containing only Molly internal instructions', async () => {
@@ -379,6 +379,83 @@ describe('MessageHandler title generation', () => {
     expect(mockedGenerateTitleIsolated).toHaveBeenCalledTimes(1);
     expect(mockedGenerateTitleIsolated).toHaveBeenCalledWith(
       expect.objectContaining({ titleConfig: undefined })
+    );
+  });
+
+  it('replaces an Untitled design draft for Molly and keeps a manual rename', async () => {
+    const untitled = await createHandler('Untitled design', 'draft');
+    const untitledHost = untitled.handler as unknown as {
+      maybeGenerateAndStoreSessionTitle: (
+        sessionId: SessionId,
+        cliType: string,
+        agentType: string,
+        taskPrompt: string
+      ) => Promise<void>;
+    };
+    await untitledHost.maybeGenerateAndStoreSessionTitle(
+      's-untitled' as SessionId,
+      'builtin',
+      'molly',
+      '优化一下这个构图'
+    );
+    expect(untitled.sessionDoc.setTitleIfSourceIn).toHaveBeenCalledWith(
+      'Generated Title',
+      'generated',
+      ['draft'],
+      expect.any(AbortSignal)
+    );
+
+    const renamed = await createHandler('Poster study', 'user', {
+      title: 'Poster study',
+      titleSource: 'user',
+    });
+    const renamedHost = renamed.handler as unknown as {
+      maybeGenerateAndStoreSessionTitle: (
+        sessionId: SessionId,
+        cliType: string,
+        agentType: string,
+        taskPrompt: string
+      ) => Promise<void>;
+    };
+    await renamedHost.maybeGenerateAndStoreSessionTitle(
+      's-renamed' as SessionId,
+      'builtin',
+      'molly',
+      '优化一下这个构图'
+    );
+    expect(mockedGenerateTitleIsolated).toHaveBeenCalledTimes(1);
+    expect(renamed.sessionDoc.setTitleIfSourceIn).not.toHaveBeenCalled();
+  });
+
+  it('keeps Untitled design and logs when Molly title generation fails', async () => {
+    mockedGenerateTitleIsolated.mockRejectedValueOnce(new Error('title unavailable'));
+    const debug = vi.fn();
+    const logger = createSilentLogger();
+    logger.debug = debug;
+    logger.child = () => logger;
+    const { handler, sessionDoc } = await createHandler('Untitled design', 'draft', undefined, {
+      logger,
+    });
+    const titleHost = handler as unknown as {
+      maybeGenerateAndStoreSessionTitle: (
+        sessionId: SessionId,
+        cliType: string,
+        agentType: string,
+        taskPrompt: string
+      ) => Promise<void>;
+    };
+
+    await expect(
+      titleHost.maybeGenerateAndStoreSessionTitle(
+        's-fail' as SessionId,
+        'builtin',
+        'molly',
+        '优化一下这个构图'
+      )
+    ).resolves.toBeUndefined();
+    expect(sessionDoc.setTitleIfSourceIn).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to generate/store session title')
     );
   });
 });
@@ -438,4 +515,30 @@ it('cleanup cancels and drains titles, blocks late publication and new isolated 
   await Promise.all([generation, cleanup]);
   expect(published).toEqual([]);
   expect(finished).toBe(true);
+});
+
+it('keeps a user rename or committed artwork title when an embedded title arrives late', async () => {
+  for (const titleSource of ['draft', 'user', 'generated'] as const) {
+    const { handler, sessionDoc } = await createHandler('Untitled design', 'draft');
+    let current = { title: titleSource === 'draft' ? 'Untitled design' : 'Poster study', titleSource };
+    const ready = deferred<void>();
+    const release = deferred<void>();
+    sessionDoc.getMetaState.mockReset().mockImplementation(async () => {
+      ready.resolve();
+      await release.promise;
+      return current;
+    });
+    sessionDoc.setTitleIfSourceIn.mockImplementation(async (title, _source, allowed) => {
+      if (!allowed.includes(current.titleSource)) return false;
+      current = { title, titleSource: 'generated' };
+      return true;
+    });
+    const titleHost = handler as unknown as { maybeStoreAgentSessionTitle: (sessionId: SessionId, title: string, draftOnly: boolean) => Promise<void> };
+    const publishing = titleHost.maybeStoreAgentSessionTitle('s-title-race' as SessionId, 'Warm Jazz Night', true);
+    await ready.promise;
+    release.resolve();
+    await publishing;
+    expect(current).toEqual(titleSource === 'draft' ? { title: 'Warm Jazz Night', titleSource: 'generated' } : { title: 'Poster study', titleSource });
+    expect(sessionDoc.setTitleIfSourceIn).toHaveBeenCalledWith('Warm Jazz Night', 'generated', ['draft'], expect.any(AbortSignal));
+  }
 });

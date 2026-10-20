@@ -220,11 +220,14 @@ export async function managed(
       pluginSetHash: binding.pluginSetHash,
       permissionProfileId: config.permissionProfileId,
     };
-    const prompt = (text = 'Hello', override = snapshot) =>
+    const prompt = (text = 'Hello', override = snapshot, titlePrompt?: string) =>
       agent.prompt({
         sessionId: response.sessionId,
         prompt: [{ type: 'text', text }],
-        _meta: { mollyRunSnapshot: override },
+        _meta: {
+          mollyRunSnapshot: override,
+          ...(titlePrompt !== undefined ? { mollyTitlePrompt: titlePrompt } : {}),
+        },
       });
     return { response, binding, snapshot, prompt };
   }

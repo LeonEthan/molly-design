@@ -361,6 +361,7 @@ export const ACPSessionConfigSchema = z
     agentConfigId: z.string().trim().min(1).optional(),
     prompt: z.string(),
     inputBlocks: SessionInputBlocksSchema.optional(),
+    titlePrompt: z.string().max(4000).optional(),
     cliType: AgentConfigCliTypeSchema,
     agentType: z.string().trim().min(1),
     customAcp: CustomAcpLaunchSpecSchema.optional(),
@@ -429,6 +430,9 @@ export const normalizeSessionTurnInputConfig = (
   if (prompt) {
     normalized.prompt = prompt;
   }
+
+  const titlePrompt = maybeParseField(z.string().max(4000), record.titlePrompt);
+  if (titlePrompt !== undefined) normalized.titlePrompt = titlePrompt;
 
   const inputBlocks = maybeParseField(SessionInputBlocksSchema, record.inputBlocks);
   if (inputBlocks) {

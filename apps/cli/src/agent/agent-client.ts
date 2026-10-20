@@ -624,7 +624,7 @@ export interface AgentClientOptions {
   onRateLimitUpdate?(limits: RateLimit): void;
   onThreadGoalUpdated?(goal: SessionGoalContent): void;
   onThreadGoalCleared?(threadId: string): void;
-  onSessionTitleUpdate?(title: string): void;
+  onSessionTitleUpdate?(title: string, draftOnly?: boolean): void;
   onAgentWarning?(warning: AgentSessionWarning): void;
   /**
    * Starts loading the workspace MCP catalog. Invoked BEFORE `initialize`, so
@@ -1834,7 +1834,11 @@ export class AgentClient implements acp.Client {
     if (!title) {
       return;
     }
-    this.options.onSessionTitleUpdate?.(title);
+    const draftOnly =
+      this.options.agentConfig?.cliType === 'builtin' &&
+      this.options.agentConfig.agentType === 'molly';
+    if (draftOnly) this.options.onSessionTitleUpdate?.(title, true);
+    else this.options.onSessionTitleUpdate?.(title);
   }
 
   private isCodexAgent(): boolean {

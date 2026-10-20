@@ -214,7 +214,8 @@ export interface ISession {
   promptEmbeddedHarness?(
     turnId: string,
     prompt: import('@agentclientprotocol/sdk').ContentBlock[],
-    signal: AbortSignal
+    signal: AbortSignal,
+    titlePrompt?: string
   ): Promise<import('@agentclientprotocol/sdk').PromptResponse>;
   assertEmbeddedModelSelection?(selection: unknown): void;
   needsEmbeddedRuntimeReplacement?(selection: unknown, mcpServerIds?: readonly string[]): boolean;
@@ -315,7 +316,7 @@ export interface CreateAgentConfig {
   onRateLimitUpdate: (limits: RateLimit) => void;
   onThreadGoalUpdated: (goal: Extract<MessageContent, { type: 'goal' }>) => void;
   onThreadGoalCleared: (threadId: string) => void;
-  onSessionTitleUpdate: (title: string) => void;
+  onSessionTitleUpdate: (title: string, draftOnly?: boolean) => void;
   onAgentWarning: (warning: AgentSessionWarning) => void;
   loadExternalMcpServers: NonNullable<AgentClientOptions['loadExternalMcpServers']>;
   onImageGenerationBegin: (event: ImageGenerationBeginEvent) => void;
@@ -361,7 +362,7 @@ interface SessionManagerEvents {
     goal: Extract<MessageContent, { type: 'goal' }>
   ) => void;
   onThreadGoalCleared: (sessionId: SessionId, threadId: string) => void;
-  onSessionTitleUpdate: (sessionId: SessionId, title: string) => void;
+  onSessionTitleUpdate: (sessionId: SessionId, title: string, draftOnly?: boolean) => void;
   onAgentWarning: (sessionId: SessionId, warning: AgentSessionWarning) => void;
   onImageGenerationBegin: (sessionId: SessionId, event: ImageGenerationBeginEvent) => void;
   onImageGenerationEnd: (sessionId: SessionId, event: ImageGenerationEndEvent) => void;
@@ -1302,8 +1303,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         dispatchEvent(() => this.emit('onThreadGoalUpdated', sessionId, goal)),
       onThreadGoalCleared: (threadId) =>
         dispatchEvent(() => this.emit('onThreadGoalCleared', sessionId, threadId)),
-      onSessionTitleUpdate: (title) =>
-        dispatchEvent(() => this.emit('onSessionTitleUpdate', sessionId, title)),
+      onSessionTitleUpdate: (title, draftOnly) =>
+        dispatchEvent(() => this.emit('onSessionTitleUpdate', sessionId, title, draftOnly)),
       onAgentWarning: (warning) =>
         dispatchEvent(() => this.emit('onAgentWarning', sessionId, warning)),
       loadExternalMcpServers: () =>

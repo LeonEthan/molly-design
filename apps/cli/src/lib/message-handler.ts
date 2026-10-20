@@ -3442,8 +3442,8 @@ export class MessageHandler {
       );
     });
 
-    this.sessionManager.on('onSessionTitleUpdate', (sessionId, title) => {
-      void this.maybeStoreAgentSessionTitle(sessionId, title);
+    this.sessionManager.on('onSessionTitleUpdate', (sessionId, title, draftOnly) => {
+      void this.maybeStoreAgentSessionTitle(sessionId, title, draftOnly);
     });
 
     this.sessionManager.on('onAgentWarning', (sessionId, warning) => {
@@ -7942,7 +7942,12 @@ export class MessageHandler {
    * its only generated source. Never overwrites a user-set title; the conditional
    * write guards against renames racing in via sync.
    */
-  private async maybeStoreAgentSessionTitle(sessionId: SessionId, title: string): Promise<void> {
+  private async maybeStoreAgentSessionTitle(
+    sessionId: SessionId,
+    title: string,
+    draftOnly = false
+  ): Promise<void> {
+    if (this.cleanedUp) return;
     try {
       const sessionDoc = await this.workspaceDocument.getOrCreateSessionDoc(sessionId);
       const sanitized = sanitizeTitle(sanitizeMollyInternalInstructions(title));
@@ -7953,10 +7958,13 @@ export class MessageHandler {
       if (meta?.title?.trim() === sanitized) {
         return;
       }
-      const applied = await sessionDoc.setTitleIfSourceIn(sanitized, 'generated', [
-        'draft',
+      if (this.cleanedUp) return;
+      const applied = await sessionDoc.setTitleIfSourceIn(
+        sanitized,
         'generated',
-      ]);
+        draftOnly ? ['draft'] : ['draft', 'generated'],
+        this.titleGenerationAbort.signal
+      );
       if (applied) {
         this.logger.debug(`[${sessionId}] Session title updated from agent: ${sanitized}`);
       }

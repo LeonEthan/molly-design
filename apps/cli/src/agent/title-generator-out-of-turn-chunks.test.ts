@@ -56,7 +56,7 @@ const createSilentLogger = (): Logger =>
     close: async () => {},
   }) as unknown as Logger;
 
-it('uses only the first local user sentence for embedded Molly titles without launching ACP', async () => {
+it('leaves embedded Molly naming to its selected-model worker without launching ACP', async () => {
   const launches: string[] = [];
   mocks.startLocalAcpAgent.mockImplementation(async () => {
     launches.push('unexpected-title-worker');
@@ -69,7 +69,7 @@ it('uses only the first local user sentence for embedded Molly titles without la
       taskPrompt: '合成测试标题。第二句不应成为标题。',
       logger: createSilentLogger(),
     })
-  ).toBe('合成测试标题');
+  ).toBeNull();
   expect(launches).toEqual([]);
 });
 

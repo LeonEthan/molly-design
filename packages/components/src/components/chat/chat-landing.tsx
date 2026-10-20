@@ -1,5 +1,5 @@
 import { CanvasFormatTiles, CanvasSizeSelector } from './canvas-size-selector';
-import { buildCanvasSubmission } from './canvas-submission';
+import { buildCanvasSubmission, designSessionTitleBrief } from './canvas-submission';
 import { usePendingDesignRecovery } from '@/components/sessions/design-canvas';
 import { chatLandingCanvasDraftAtomFamily } from '@/atoms/chat-landing-draft';
 import { writeStoredLastActiveTabState } from '@/lib/session-draft-tabs';
@@ -1391,6 +1391,7 @@ function WorkspaceChatLanding({
       const inputConfig = buildSessionTurnInputConfig({
         inputBlocks,
         prompt: promptPayload,
+        titlePrompt: designSessionTitleBrief(prompt, pastedTextDrafts) || undefined,
         cliType: selectedConfig.cliType,
         agentType: selectedConfig.agentType,
         modeId: modeOptions.length > 0 ? (selectedModeId ?? undefined) : undefined,

@@ -1651,6 +1651,7 @@ export type ACPSessionConfig = {
   agentConfigId?: AgentConfigId;
   prompt: string;
   inputBlocks?: SessionInputBlock[];
+  titlePrompt?: string;
   cliType: AgentConfigCliType;
   agentType: AgentType;
   /** Launch spec for `cliType: 'custom'` agents; resolved from the agent config / session meta. */

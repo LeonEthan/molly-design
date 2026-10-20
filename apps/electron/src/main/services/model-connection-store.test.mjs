@@ -878,6 +878,7 @@ void test('a DashScope connection keeps its protocol and is never checked over t
     expectedRevision: 1
   })
   assert.equal((await store.imageSnapshot()).connection?.protocol, 'dashscope')
+  assert.equal(Boolean((await store.imageCredentialForCheck(saved.revision))?.apiKey), true)
   assert.deepEqual(
     await checkImageConnection(
       store,
@@ -887,6 +888,20 @@ void test('a DashScope connection keeps its protocol and is never checked over t
       }
     ),
     { ok: false, reason: 'unsupported' }
+  )
+  assert.deepEqual(
+    await checkImageConnection(
+      store,
+      {
+        protocol: 'openai-images',
+        baseUrl: legacyImage.baseUrl,
+        expectedRevision: saved.revision
+      },
+      async () => {
+        throw Error('unexpected network request')
+      }
+    ),
+    { ok: false, reason: 'needs_key' }
   )
 })
 

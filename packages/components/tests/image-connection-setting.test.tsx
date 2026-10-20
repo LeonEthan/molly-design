@@ -20,6 +20,7 @@ import {
   createImageConnectionFormDraft,
   imageConnectionCheckMessageKey,
   imageConnectionDraftIssues,
+  imageConnectionUsesStoredKey,
   type ImageConnectionFormDraft,
 } from '../src/components/settings/image-connection-setting';
 import { CONNECTION_CHECK_DELAY_MS } from '../src/components/settings/connection-check';
@@ -175,12 +176,34 @@ describe('image connection form values', () => {
     expect(createImageConnectionFormDraft(storedConnection()).baseUrl).toBe(
       storedConnection().baseUrl
     );
+    const dashscope = storedConnection({
+      protocol: 'dashscope',
+      baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+    });
+    expect(imageConnectionUsesStoredKey(createImageConnectionFormDraft(dashscope), dashscope)).toBe(
+      true
+    );
+    expect(
+      imageConnectionUsesStoredKey(
+        applyImageProtocolChoice(createImageConnectionFormDraft(dashscope), 'openai-images'),
+        dashscope
+      )
+    ).toBe(false);
   });
   it('maps image check failures to plain copy', () => {
     expect(imageConnectionCheckMessageKey({ ok: false, reason: 'key_rejected', status: 401 })).toBe(
       'settings.imageConnection.check.keyRejected'
     );
     expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 404 })).toBe(
+      null
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 405 })).toBe(
+      null
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 501 })).toBe(
+      null
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'http_error', status: 404 })).toBe(
       'settings.imageConnection.check.notFound'
     );
     expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unreachable' })).toBe(
@@ -280,12 +303,10 @@ describe('ImageConnectionForm', () => {
     });
   };
 
-  /** The address lives under More options; open that section when it starts closed. */
   const baseUrlInput = async (view: HTMLElement): Promise<HTMLInputElement> => {
     const existing = view.querySelector<HTMLInputElement>('input[id$="-base-url"]');
-    if (existing) return existing;
-    await click(button(view, copy('settings.models.moreOptions')));
-    return await baseUrlInput(view);
+    expect(existing).not.toBeNull();
+    return existing as HTMLInputElement;
   };
 
   it('keeps an unsaved draft on rerender and saves only a public CAS update', async () => {
@@ -534,6 +555,68 @@ describe('ImageConnectionForm', () => {
       }
     );
 
+    it('keeps a key typed before the address and does not reuse one after the protocol changes', async () => {
+      const requests: CheckImageConnection[] = [];
+      const fresh = await renderForm({
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true, models: [] };
+        },
+      });
+      await typeInto(apiKeyInput(fresh), 'synthetic-typed-key');
+      await typeInto(await baseUrlInput(fresh), 'https://images.example.com/v1');
+      expect(apiKeyInput(fresh).value).toBe('synthetic-typed-key');
+      await settle();
+      expect(requests).toEqual([
+        {
+          protocol: 'openai-images',
+          baseUrl: 'https://images.example.com/v1',
+          apiKey: 'synthetic-typed-key',
+        },
+      ]);
+
+      const stored = storedConnection({
+        protocol: 'dashscope',
+        baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+      });
+      const switched = await renderForm({
+        stored,
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true };
+        },
+      });
+      await settle();
+      await click(button(switched, copy('settings.imageConnection.protocols.openaiImages')));
+      await settle();
+      expect(requests).toHaveLength(1);
+      expect(switched.textContent).toContain(copy('settings.models.keyRequired'));
+      expect(button(switched, copy('common.save')).disabled).toBe(true);
+      await typeInto(apiKeyInput(switched), 'synthetic-typed-key');
+      await settle();
+      expect(requests[1]).toEqual({
+        protocol: 'openai-images',
+        baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+        apiKey: 'synthetic-typed-key',
+      });
+    });
+
+    it('drops a key that was typed for a different address', async () => {
+      const requests: CheckImageConnection[] = [];
+      const view = await renderForm({
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true };
+        },
+      });
+      await typeInto(await baseUrlInput(view), 'https://images.example.com/v1');
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      await typeInto(await baseUrlInput(view), 'https://elsewhere.example.com/v1');
+      expect(apiKeyInput(view).value).toBe('');
+      await settle();
+      expect(requests).toEqual([]);
+    });
+
     it('shows an example placeholder and blocks an empty address before any check', async () => {
       const requests: CheckImageConnection[] = [];
       const view = await renderForm({
@@ -552,10 +635,21 @@ describe('ImageConnectionForm', () => {
       expect(view.textContent).toContain(copy('settings.imageConnection.check.enterBaseUrl'));
     });
 
-    it('says when the address was not found or the computer cannot reach it', async () => {
+    it('stays quiet when the service has no model list', async () => {
       const view = await renderForm({
         stored: storedConnection(),
         onCheck: async () => ({ ok: false, reason: 'unsupported', status: 404 }),
+      });
+      await settle();
+      expect(view.querySelector('[role="alert"]')).toBeNull();
+      expect(view.textContent).not.toContain(copy('settings.imageConnection.check.notFound'));
+      expect(view.textContent).not.toContain("This service can't be checked for free");
+    });
+
+    it('says when the address was not found or the computer cannot reach it', async () => {
+      const view = await renderForm({
+        stored: storedConnection(),
+        onCheck: async () => ({ ok: false, reason: 'http_error', status: 404 }),
       });
       await settle();
       expect(view.textContent).toContain(copy('settings.imageConnection.check.notFound'));

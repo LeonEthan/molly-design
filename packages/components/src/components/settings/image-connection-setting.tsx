@@ -3,6 +3,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -34,7 +35,6 @@ import {
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
 import {
-  ChevronDown,
   CircleAlert,
   CircleCheck,
   Ellipsis,
@@ -43,7 +43,6 @@ import {
   Trash2,
   X,
 } from '@/ui/icons';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
 import { Input } from '@/ui/input';
 import { Switch } from '@/ui/switch';
 import { CompactSection } from './compact-layout';
@@ -78,14 +77,29 @@ export const imageProtocolLabelKey = (connection: Pick<ImageConnectionView, 'pro
   PROTOCOL_COPY[imageConnectionProtocol(connection)].label;
 
 /**
- * Switching the connection type keeps the address already in the field.
+ * Switching the connection type keeps the address and anything the user typed.
  * An empty address stays empty — the field has no vendor default to swap in.
+ * A saved key does not follow: the form treats the new protocol as a new destination.
  */
 export function applyImageProtocolChoice(
   draft: ImageConnectionFormDraft,
   protocol: ImageConnectionProtocol
 ): ImageConnectionFormDraft {
   return { ...draft, protocol };
+}
+
+/** A saved credential belongs to one protocol and one address. */
+export function imageConnectionUsesStoredKey(
+  draft: Pick<ImageConnectionFormDraft, 'protocol' | 'baseUrl' | 'apiKey' | 'clearApiKey'>,
+  stored: Pick<ImageConnectionView, 'protocol' | 'baseUrl' | 'hasApiKey'> | undefined
+): boolean {
+  return Boolean(
+    stored?.hasApiKey &&
+    !draft.clearApiKey &&
+    draft.apiKey.trim().length === 0 &&
+    imageConnectionProtocol(stored) === draft.protocol &&
+    stored.baseUrl === draft.baseUrl.trim()
+  );
 }
 
 export type ImageConnectionFormDraft = {
@@ -136,7 +150,11 @@ export function buildImageConnectionSave(
 
 const IMAGE_NOT_FOUND_STATUSES = new Set([404, 405, 501]);
 
-/** Copy for image-check failures that must stay in plain language. Other reasons use the shared check line. */
+/**
+ * Copy for image-check failures that must stay in plain language.
+ * A missing optional model list (`unsupported`, including 404/405/501) is not a failure.
+ * Other reasons use the shared check line.
+ */
 export function imageConnectionCheckMessageKey(
   result: Extract<ConnectionCheckResult, { ok: false }>
 ):
@@ -144,6 +162,7 @@ export function imageConnectionCheckMessageKey(
   | 'settings.imageConnection.check.notFound'
   | 'settings.imageConnection.check.unreachable'
   | null {
+  if (result.reason === 'unsupported') return null;
   if (result.reason === 'key_rejected') return 'settings.imageConnection.check.keyRejected';
   if (result.status !== undefined && IMAGE_NOT_FOUND_STATUSES.has(result.status)) {
     return 'settings.imageConnection.check.notFound';
@@ -275,10 +294,14 @@ export function ImageConnectionForm({
   const { t } = useTranslation();
   const fieldId = useId();
   const [draft, setDraft] = useState(() => createImageConnectionFormDraft(stored));
+  // The address present when the user last typed a key. Empty means the key was
+  // entered before any address, so filling that address must keep it.
+  const keyBoundUrl = useRef<string | null>(null);
 
   // The stored row is the reset point: after a save, the container hands back the
   // row it wrote and the form shows exactly that.
   useEffect(() => {
+    keyBoundUrl.current = null;
     setDraft(createImageConnectionFormDraft(stored));
   }, [stored]);
 
@@ -288,18 +311,23 @@ export function ImageConnectionForm({
   const hasStoredKey = Boolean(stored?.hasApiKey);
   const baseUrl = draft.baseUrl.trim();
   const typedKey = draft.apiKey.trim();
+  const usesStoredKey = imageConnectionUsesStoredKey(draft, stored);
   const destinationNeedsKey = Boolean(
-    stored && stored.baseUrl !== baseUrl && !draft.clearApiKey && !typedKey
+    stored &&
+    !usesStoredKey &&
+    !draft.clearApiKey &&
+    !typedKey &&
+    (stored.baseUrl !== baseUrl || imageConnectionProtocol(stored) !== draft.protocol)
   );
   const protocolCopy = PROTOCOL_COPY[draft.protocol];
   const checkRequest = useMemo<CheckImageConnection | null>(() => {
     if (draft.protocol === 'dashscope' || !ImageConnectionEndpointSchema.safeParse(baseUrl).success)
       return null;
     if (typedKey) return { protocol: draft.protocol, baseUrl, apiKey: typedKey };
-    if (stored?.revision && hasStoredKey && !draft.clearApiKey && stored.baseUrl === baseUrl)
+    if (stored?.revision && imageConnectionUsesStoredKey(draft, stored))
       return { protocol: draft.protocol, baseUrl, expectedRevision: stored.revision };
     return null;
-  }, [baseUrl, draft.clearApiKey, draft.protocol, hasStoredKey, stored, typedKey]);
+  }, [baseUrl, draft, stored, typedKey]);
   const check = useConnectionCheck(checkRequest, onCheck);
   const checkMessageKey =
     check.phase === 'done' && !check.result.ok
@@ -308,12 +336,12 @@ export function ImageConnectionForm({
   // A key with no address must not leave the machine. Say why the check did not run.
   const blockEmptyBaseUrl =
     baseUrl.length === 0 && (typedKey.length > 0 || (hasStoredKey && !draft.clearApiKey));
-  const [advancedOpen, setAdvancedOpen] = useState(true);
   const listed = check.phase === 'done' && check.result.ok ? (check.result.models ?? []) : [];
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (invalid || destinationNeedsKey || saving) return;
+    keyBoundUrl.current = null;
     setDraft((current) => ({ ...current, apiKey: '' }));
     void onSave(draft, check);
   };
@@ -339,6 +367,42 @@ export function ImageConnectionForm({
         </Field>
 
         <Field
+          htmlFor={`${fieldId}-base-url`}
+          label={t('settings.imageConnection.baseUrl')}
+          icon={
+            <InfoTip>
+              {t(protocolCopy.baseUrlHint)} {t('settings.imageConnection.endpointTransportHint')}
+            </InfoTip>
+          }
+          hint={
+            issues.baseUrl && baseUrl.length > 0
+              ? t('settings.imageConnection.invalidBaseUrl')
+              : undefined
+          }
+        >
+          <Input
+            id={`${fieldId}-base-url`}
+            disabled={saving}
+            autoComplete="off"
+            spellCheck={false}
+            className="font-mono text-xs"
+            placeholder={t('settings.imageConnection.baseUrlPlaceholder')}
+            value={draft.baseUrl}
+            onChange={(event) => {
+              const next = event.target.value;
+              const bound = keyBoundUrl.current;
+              const clearTypedKey = bound !== null && bound.trim() !== '' && bound !== next;
+              if (clearTypedKey) keyBoundUrl.current = null;
+              setDraft((current) => ({
+                ...current,
+                baseUrl: next,
+                apiKey: clearTypedKey ? '' : current.apiKey,
+              }));
+            }}
+          />
+        </Field>
+
+        <Field
           htmlFor={`${fieldId}-api-key`}
           label={t('settings.imageConnection.apiKey')}
           hint={destinationNeedsKey ? t('settings.models.keyRequired') : undefined}
@@ -356,13 +420,14 @@ export function ImageConnectionForm({
                   hasStoredKey ? t('settings.imageConnection.apiKeyPlaceholderStored') : 'sk-...'
                 }
                 value={draft.apiKey}
-                onChange={(event) =>
+                onChange={(event) => {
+                  keyBoundUrl.current = draft.baseUrl;
                   setDraft((current) => ({
                     ...current,
                     apiKey: event.target.value,
                     clearApiKey: false,
-                  }))
-                }
+                  }));
+                }}
               />
               {hasStoredKey ? (
                 <Button
@@ -374,6 +439,7 @@ export function ImageConnectionForm({
                   title={t('settings.imageConnection.removeApiKey')}
                   disabled={saving}
                   onClick={() => {
+                    keyBoundUrl.current = null;
                     setDraft((current) => ({ ...current, apiKey: '', clearApiKey: true }));
                     void onClearApiKey();
                   }}
@@ -423,54 +489,6 @@ export function ImageConnectionForm({
             />
           </div>
         </Field>
-
-        <Collapsible open={advancedOpen || issues.baseUrl} onOpenChange={setAdvancedOpen}>
-          <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={saving}
-              className="group gap-1.5 px-0 text-xs text-muted-foreground"
-            >
-              <ChevronDown
-                aria-hidden
-                className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
-              />
-              {t('settings.models.moreOptions')}
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-3">
-            <Field
-              htmlFor={`${fieldId}-base-url`}
-              label={t('settings.imageConnection.baseUrl')}
-              icon={
-                <InfoTip>
-                  {t(protocolCopy.baseUrlHint)}{' '}
-                  {t('settings.imageConnection.endpointTransportHint')}
-                </InfoTip>
-              }
-              hint={
-                issues.baseUrl && baseUrl.length > 0
-                  ? t('settings.imageConnection.invalidBaseUrl')
-                  : undefined
-              }
-            >
-              <Input
-                id={`${fieldId}-base-url`}
-                disabled={saving}
-                autoComplete="off"
-                spellCheck={false}
-                className="font-mono text-xs"
-                placeholder={t('settings.imageConnection.baseUrlPlaceholder')}
-                value={draft.baseUrl}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, baseUrl: event.target.value, apiKey: '' }))
-                }
-              />
-            </Field>
-          </CollapsibleContent>
-        </Collapsible>
 
         {saveError ? (
           <p

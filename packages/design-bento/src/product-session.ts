@@ -1,7 +1,9 @@
-import type {
-  DesignHighlight,
-  DesignSelectionSummary,
-  DesignToolbarPresentation,
+import {
+  DESIGN_NOTES_KEEPALIVE_BODY_LIMIT,
+  type DesignHighlight,
+  type DesignNote,
+  type DesignSelectionSummary,
+  type DesignToolbarPresentation,
 } from '@molly/shared/design-selection-commands';
 import {
   arrowShapeIcon,
@@ -9,8 +11,10 @@ import {
   ellipseIcon,
   imageIcon,
   lineIcon,
+  messageSquareIcon,
   minusIcon,
   mousePointer2Icon,
+  penLineIcon,
   plusIcon,
   rectangleIcon,
   redo2Icon,
@@ -21,7 +25,6 @@ import {
   type UiIconNode,
 } from '@molly/shared/ui-icons';
 import { createElementHighlight } from './element-highlight';
-import { createImageMarks } from './image-marks';
 import { createNotePins } from './note-pins';
 import { createLayersPanel, type LayerElement } from './layers-panel';
 import { createSelectionToolbar } from './selection-toolbar';
@@ -45,6 +48,8 @@ const COPY = {
   finishComposing: ['canvasFinishComposing', 'Finish text input first'],
   versionConflict: ['canvasVersionConflict', 'This artwork changed elsewhere; your edits are kept'],
   select: ['toolSelect', 'Select'],
+  comment: ['toolComment', 'Comment (C)'],
+  brush: ['toolBrush', 'Brush (B)'],
   undo: ['toolUndo', 'Undo (⌘Z)'],
   redo: ['toolRedo', 'Redo (⇧⌘Z)'],
   text: ['toolText', 'Text (T)'],
@@ -85,28 +90,34 @@ export function createProductSession(options: {
     if (expected !== undefined && expected !== selectionEpoch)
       throw Error('Selection changed; select the current elements again');
   };
-  const request = async (input: unknown) => {
-    const response = await fetch(`/ws/${encodeURIComponent(options.sessionId)}/toolbar`, {
+  const post = (input: unknown, keepalive = false) =>
+    fetch(`/ws/${encodeURIComponent(options.sessionId)}/toolbar`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(input),
+      keepalive,
     });
-    return response.json();
+  const request = async (input: unknown) => (await post(input)).json();
+  const publishNotes = async (notes: DesignNote[], keepalive: boolean) => {
+    const input = { type: 'notes-sync', notes };
+    const sendKeepalive =
+      keepalive &&
+      new TextEncoder().encode(JSON.stringify(input)).byteLength < DESIGN_NOTES_KEEPALIVE_BODY_LIMIT;
+    const response = await post(input, sendKeepalive);
+    if (!response.ok) throw Error(`Notes sync failed with status ${response.status}`);
   };
   const highlight = createElementHighlight();
   const pins = createNotePins({
     request,
+    publish: publishNotes,
     selectedIds: () => selectedIds,
-    elementIds: () => options.elements().map((element) => element.id),
+    elements: options.elements,
     highlight,
+    onTool: () => syncTool(),
   });
-  const marks = createImageMarks({ request });
   const toolbar = createSelectionToolbar({
     request,
     addNote: (text) => pins.add(selectedIds, text),
-    markImage: (elementId, expected) => {
-      if (expected === selectionEpoch) marks.open(elementId, expected);
-    },
   });
   const layers = createLayersPanel({
     request,
@@ -114,12 +125,13 @@ export function createProductSession(options: {
     select: options.select,
     onToggle: (open) => layersButton.classList.toggle('on', open),
   });
+  const keys = new AbortController();
   window.addEventListener(
     'pagehide',
     () => {
+      keys.abort();
       toolbar.dispose();
       pins.dispose();
-      marks.dispose();
       highlight.dispose();
     },
     { once: true }
@@ -213,7 +225,8 @@ export function createProductSession(options: {
     button.title = say(label);
     button.setAttribute('aria-label', say(label));
     if (extraClass) button.className = extraClass;
-    button.disabled = readonly && (extraClass === 'create' || extraClass === 'history');
+    button.disabled =
+      readonly && ['create', 'history', 'comment', 'brush'].includes(extraClass);
     button.onclick = onClick;
     dock.append(button);
     return button;
@@ -227,7 +240,40 @@ export function createProductSession(options: {
     options.commitPending();
     options.applyCommands({ verb: 'add-element', ...payload });
   };
-  dockButton(renderUiIconSvg(mousePointer2Icon), COPY.select, () => {}, 'on');
+  const selectButton = dockButton(
+    renderUiIconSvg(mousePointer2Icon),
+    COPY.select,
+    () => setTool('select'),
+    'on'
+  );
+  const commentButton = dockButton(
+    renderUiIconSvg(messageSquareIcon),
+    COPY.comment,
+    () => setTool(pins.tool() === 'comment' ? 'select' : 'comment'),
+    'comment'
+  );
+  const brushButton = dockButton(
+    renderUiIconSvg(penLineIcon),
+    COPY.brush,
+    () => setTool(pins.tool() === 'brush' ? 'select' : 'brush'),
+    'brush'
+  );
+  const syncTool = () => {
+    const tool = pins.tool();
+    for (const [button, value] of [
+      [selectButton, 'select'],
+      [commentButton, 'comment'],
+      [brushButton, 'brush'],
+    ] as const) {
+      button.classList.toggle('on', tool === value);
+      button.setAttribute('aria-pressed', String(tool === value));
+    }
+  };
+  const setTool = (value: 'select' | 'comment' | 'brush') => {
+    pins.setTool(value);
+    syncTool();
+  };
+  syncTool();
   dockButton(
     renderUiIconSvg(undo2Icon),
     COPY.undo,
@@ -447,7 +493,9 @@ export function createProductSession(options: {
   };
   const setReadonly = (value: boolean, message?: string) => {
     readonlyMessage = message ?? COPY.readonly;
-    for (const button of dock.querySelectorAll<HTMLButtonElement>('button.create,button.history'))
+    for (const button of dock.querySelectorAll<HTMLButtonElement>(
+      'button.create,button.history,button.comment,button.brush'
+    ))
       button.disabled = value;
     if (value) shapePopup.classList.remove('open');
     if (value === readonly) {
@@ -458,7 +506,7 @@ export function createProductSession(options: {
     readonly = value;
     toolbar.setReadonly(value);
     pins.setReadonly(value);
-    marks.setReadonly(value);
+    syncTool();
     layers.setReadonly(value);
     try {
       if (value) {
@@ -497,6 +545,29 @@ export function createProductSession(options: {
       blockInput(event);
     },
     true
+  );
+  const consumeShortcut = (event: KeyboardEvent) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
+      if ((event.target as Element | null)?.closest('input,textarea,[contenteditable="true"]'))
+        return;
+      const key = event.key.toLowerCase();
+      if (key === 'escape') {
+        if (pins.escape()) consumeShortcut(event);
+        return;
+      }
+      if (key === 'c') setTool('comment');
+      else if (key === 'b') setTool('brush');
+      else if (key === 'v' && pins.tool() !== 'select') setTool('select');
+      else return;
+      consumeShortcut(event);
+    },
+    { capture: true, signal: keys.signal }
   );
   document.addEventListener(
     'pointerdown',
@@ -597,7 +668,6 @@ export function createProductSession(options: {
         setStatusMessage(statusSource);
         toolbar.present(value);
         pins.present(value);
-        marks.present(value);
         layers.present(value.labels);
       },
       highlight(groups: DesignHighlight) {
@@ -613,8 +683,14 @@ export function createProductSession(options: {
       settleNotes(expected: number, sent: boolean) {
         return pins.settle(expected, sent);
       },
-      marks(expected: number) {
-        return marks.read(expected);
+      restoreNotes(notes: Parameters<typeof pins.restore>[0]) {
+        pins.restore(notes);
+      },
+      flushNotes() {
+        return pins.flushUnsent();
+      },
+      marked(expected: number) {
+        return pins.marked(expected);
       },
       state() {
         return {
@@ -698,7 +774,6 @@ export function createProductSession(options: {
       selection = elements;
       lastSelectionSummary = summary;
       toolbar.update(summary as DesignSelectionSummary, selectedIds, selectionEpoch);
-      marks.select(selectedIds, selectionEpoch);
       layers.update(selectedIds, selectionEpoch);
       emit('selection', { elements });
       reportSelection(summary);

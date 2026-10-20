@@ -48,18 +48,11 @@ export type IpcPushMap = {
       }
     | {
         hostId: string;
-        action: 'marks';
-        reference: DesignElementReference;
-        prompt: string;
-        send: boolean;
-        count: number;
-        image: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array };
-      }
-    | {
-        hostId: string;
         action: 'notes';
-        notes: { reference: DesignElementReference; prompt: string }[];
+        notes: { reference: DesignElementReference; prompt: string; region?: true }[];
         notesEpoch: number;
+        /** Marked copy of the one image that region notes mark, numbered to match them. */
+        image?: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array };
       };
   'design.selection': {
     hostId: string;

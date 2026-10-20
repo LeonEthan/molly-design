@@ -17,6 +17,212 @@ afterEach(() => {
   delete (window as unknown as { molly?: unknown }).molly;
 });
 
+it('toggles the comment tool from the dock and C, V and Escape, and never while readonly', async () => {
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  const ready = new Promise<void>((resolve) =>
+    window.addEventListener('molly:ready', () => resolve(), { once: true })
+  );
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({}),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => ({ ok: true }),
+    pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
+  });
+  await ready;
+  const api = (window as unknown as { molly: { setReadonly(value: boolean): void } }).molly;
+  const dock = document.querySelector('.molly-dock')!;
+  const comment = dock.querySelector<HTMLButtonElement>('[aria-label="Comment (C)"]')!;
+  const select = dock.querySelector<HTMLButtonElement>('[aria-label="Select"]')!;
+  const key = (name: string, init: KeyboardEventInit = {}) =>
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, ...init }));
+  const commenting = () => comment.classList.contains('on');
+
+  expect(comment.disabled).toBe(true);
+  key('c');
+  expect(commenting()).toBe(false);
+  expect(document.body.dataset.commenting).not.toBe('true');
+
+  api.setReadonly(false);
+  expect(comment.disabled).toBe(false);
+  key('c');
+  expect(commenting()).toBe(true);
+  expect(select.classList.contains('on')).toBe(false);
+  expect(comment.getAttribute('aria-pressed')).toBe('true');
+  expect(select.getAttribute('aria-pressed')).toBe('false');
+  expect(document.body.dataset.commenting).toBe('true');
+  key('v');
+  expect(commenting()).toBe(false);
+  expect(select.classList.contains('on')).toBe(true);
+
+  comment.click();
+  expect(commenting()).toBe(true);
+  key('Escape');
+  expect(commenting()).toBe(false);
+  comment.click();
+  comment.click();
+  expect(commenting()).toBe(false);
+  select.click();
+  expect(commenting()).toBe(false);
+
+  key('c');
+  const field = document.createElement('textarea');
+  document.body.append(field);
+  field.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
+  expect(commenting()).toBe(true);
+  field.remove();
+
+  api.setReadonly(true);
+  expect(commenting()).toBe(false);
+  expect(comment.disabled).toBe(true);
+  expect(document.body.dataset.commenting).toBe('false');
+  api.setReadonly(false);
+  window.dispatchEvent(new Event('pagehide'));
+});
+
+it('keeps Bento legacy comment mode off when C, repeated C, V or Escape reach the canvas', async () => {
+  let legacyOn = false;
+  const bentoCommentToggle = (event: KeyboardEvent) => {
+    if (!event.metaKey && !event.ctrlKey && event.key.toLowerCase() === 'c') legacyOn = !legacyOn;
+  };
+  document.addEventListener('keydown', bentoCommentToggle);
+  const press = (key: string) =>
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  press('c');
+  expect(legacyOn).toBe(true);
+  legacyOn = false;
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  const ready = new Promise<void>((resolve) =>
+    window.addEventListener('molly:ready', () => resolve(), { once: true })
+  );
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({}),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => ({ ok: true }),
+    pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
+  });
+  await ready;
+  const api = (window as unknown as { molly: { setReadonly(value: boolean): void } }).molly;
+  const comment = document.querySelector<HTMLButtonElement>('[aria-label="Comment (C)"]')!;
+  const commenting = () => comment.classList.contains('on');
+  api.setReadonly(false);
+
+  press('c');
+  expect(commenting()).toBe(true);
+  expect(legacyOn).toBe(false);
+  press('c');
+  press('c');
+  expect(commenting()).toBe(true);
+  expect(legacyOn).toBe(false);
+  press('v');
+  expect(commenting()).toBe(false);
+  press('c');
+  press('Escape');
+  expect(commenting()).toBe(false);
+  expect(legacyOn).toBe(false);
+
+  document.removeEventListener('keydown', bentoCommentToggle);
+  window.dispatchEvent(new Event('pagehide'));
+});
+
+it('toggles the brush from the dock and B, keeps Bento from seeing B, and never while readonly', async () => {
+  const seen: string[] = [];
+  const bentoLegacyKeys = (event: KeyboardEvent) => seen.push(event.key.toLowerCase());
+  document.addEventListener('keydown', bentoLegacyKeys);
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  const ready = new Promise<void>((resolve) =>
+    window.addEventListener('molly:ready', () => resolve(), { once: true })
+  );
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({}),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => ({ ok: true }),
+    pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
+  });
+  await ready;
+  const api = (window as unknown as { molly: { setReadonly(value: boolean): void } }).molly;
+  const dock = document.querySelector('.molly-dock')!;
+  const brush = dock.querySelector<HTMLButtonElement>('[aria-label="Brush (B)"]')!;
+  const comment = dock.querySelector<HTMLButtonElement>('[aria-label="Comment (C)"]')!;
+  const select = dock.querySelector<HTMLButtonElement>('[aria-label="Select"]')!;
+  const press = (key: string) =>
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  const brushing = () => brush.classList.contains('on');
+
+  expect(brush.disabled).toBe(true);
+  press('b');
+  expect(brushing()).toBe(false);
+  expect(document.body.dataset.brushing).not.toBe('true');
+
+  api.setReadonly(false);
+  expect(brush.disabled).toBe(false);
+  press('b');
+  expect(brushing()).toBe(true);
+  expect(brush.getAttribute('aria-pressed')).toBe('true');
+  expect(comment.classList.contains('on')).toBe(false);
+  expect(select.classList.contains('on')).toBe(false);
+  expect(document.body.dataset.brushing).toBe('true');
+  expect(document.body.dataset.commenting).toBe('false');
+  press('c');
+  expect(brushing()).toBe(false);
+  expect(comment.classList.contains('on')).toBe(true);
+  press('b');
+  expect(brushing()).toBe(true);
+  expect(comment.classList.contains('on')).toBe(false);
+  press('v');
+  expect(brushing()).toBe(false);
+  expect(select.classList.contains('on')).toBe(true);
+  press('b');
+  press('Escape');
+  expect(brushing()).toBe(false);
+  expect(select.classList.contains('on')).toBe(true);
+
+  brush.click();
+  expect(brushing()).toBe(true);
+  brush.click();
+  expect(brushing()).toBe(false);
+  expect(seen.filter((key) => key === 'b' || key === 'c')).toEqual([]);
+
+  press('b');
+  api.setReadonly(true);
+  expect(brushing()).toBe(false);
+  expect(brush.disabled).toBe(true);
+  expect(document.body.dataset.brushing).toBe('false');
+
+  api.setReadonly(false);
+  document.removeEventListener('keydown', bentoLegacyKeys);
+  window.dispatchEvent(new Event('pagehide'));
+});
+
 it('prevents double-click editing while readonly and restores it when unlocked', () => {
   Object.defineProperty(document, 'fonts', {
     configurable: true,

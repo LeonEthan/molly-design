@@ -48,6 +48,7 @@ import { SessionMentionDropLayer } from '@/components/sessions/session-mention-d
 import { useMachineOnlineStatus } from '@/hooks/use-machine-online-status';
 import { useStableCallback } from '@/hooks/use-stable-callback';
 import { useAtomValue, useSetAtom } from 'jotai';
+import { designElementFocusAtom } from '@/atoms/design-element-focus';
 import { selectAtom } from 'jotai/utils';
 import { isMacOSElectronRenderer, useElectronFullscreen } from '@/lib/electron';
 import { useWindowsCaptionPadClass } from '@/ui/window-drag-region';
@@ -572,6 +573,15 @@ const SessionDetail = ({
   const session = useAtomValue(sessionMetaAtom);
   const docMetaCacheReady = useAtomValue(docMetaCacheReadyAtom);
   const activeSession = session ?? null;
+  const designElementFocus = useAtomValue(designElementFocusAtom);
+  const seenDesignElementFocus = useRef(designElementFocus);
+  useEffect(() => {
+    if (!designElementFocus || designElementFocus === seenDesignElementFocus.current) return;
+    seenDesignElementFocus.current = designElementFocus;
+    if (!activeSession?.design) return;
+    revealRightSidebar();
+    activateSidebarTab('design');
+  }, [activateSidebarTab, activeSession?.design, designElementFocus, revealRightSidebar]);
   const activeSessionLiveStatus = useAtomValue(
     sessionLiveStatusAtomFamily((activeSession?.id ?? '__no_session__') as SessionId)
   );
@@ -3427,7 +3437,7 @@ const SessionDetail = ({
             onSendNotes={
               activeSession.isArchived
                 ? undefined
-                : async (notes) => {
+                : async (notes, attachment) => {
                     const chat = chatRefsMap.current.get(activeTabSessionId);
                     if (
                       activeTabSessionId !== activeSession.id ||
@@ -3444,7 +3454,8 @@ const SessionDetail = ({
                       notes.map((note, index) => ({
                         ...note,
                         label: t('design.notePin', 'Note {{count}}', { count: index + 1 }),
-                      }))
+                      })),
+                      attachment
                     );
                   }
             }

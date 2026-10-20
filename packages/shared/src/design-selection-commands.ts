@@ -8,6 +8,9 @@ import { z } from 'zod';
  */
 
 export const DESIGN_SELECTION_BODY_LIMIT = 8192;
+export const DESIGN_NOTES_SYNC_BODY_LIMIT = 256 * 1024;
+/** Chromium rejects keepalive request bodies above 64 KiB; only the pagehide flush sends keepalive. */
+export const DESIGN_NOTES_KEEPALIVE_BODY_LIMIT = 64 * 1024;
 export const DESIGN_SELECTION_SUMMARY_ELEMENTS_MAX = 8;
 
 export const DESIGN_ELEMENT_KINDS = [
@@ -170,8 +173,8 @@ export const DesignCanvasCommandResultSchema = z
 export type DesignCanvasCommandResult = z.infer<typeof DesignCanvasCommandResultSchema>;
 
 export const DESIGN_ASK_PROMPT_MAX = 4000;
+/** Pins and regions share one cap: each pending note is one numbered entry in the turn. */
 export const DESIGN_NOTES_MAX = 10;
-export const DESIGN_MARKS_MAX = 10;
 /** Marked copies stay within the composer's inline image budget. */
 export const DESIGN_MARKED_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const DESIGN_MARKED_IMAGE_MAX_EDGE = 2048;
@@ -198,11 +201,10 @@ export const DesignAskPresetSchema = z.enum(
   Object.keys(DESIGN_ASK_PRESETS) as [DesignAskPreset, ...DesignAskPreset[]]
 );
 
-/** The canvas's marked copy of one selected image, read by main after the reference capture. */
+/** The canvas's marked copy of the one image that region notes mark, read by main after the reference capture. */
 export const DesignMarkedImageSchema = z
   .object({
     elementId: z.string().min(1).max(200),
-    count: z.number().int().min(1).max(DESIGN_MARKS_MAX),
     mimeType: z.enum(['image/png', 'image/jpeg']),
     data: z
       .string()
@@ -212,19 +214,74 @@ export const DesignMarkedImageSchema = z
   })
   .strict();
 export type DesignMarkedImage = z.infer<typeof DesignMarkedImageSchema>;
+
+const unitInterval = z.number().finite().min(0).max(1);
+/**
+ * Points in notes are rounded to this many decimals on the canvas. At 1e-4 of a 4096 px edge
+ * the rounding error is 0.4 px, so the rounded point still lands on the same pixel.
+ */
+export const DESIGN_NOTE_COORDINATE_DECIMALS = 4;
+const NormalizedPointSchema = z.tuple([unitInterval, unitInterval]);
+
+/**
+ * A stroke keeps at most this many points. The canvas drops points closer than 0.4% of the
+ * image edge (about 6px on the 1600px marked copy, under the 8px stroke width) and then
+ * resamples evenly, so one stroke stays near 3 KB of JSON and ten notes stay near 30 KB.
+ */
+export const DESIGN_STROKE_POINTS_MAX = 200;
+
+const DesignNoteRegionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('box'), from: NormalizedPointSchema, to: NormalizedPointSchema }).strict(),
+  z
+    .object({
+      kind: z.literal('stroke'),
+      points: z.array(NormalizedPointSchema).min(2).max(DESIGN_STROKE_POINTS_MAX),
+    })
+    .strict(),
+]);
+
+/**
+ * One numbered canvas note. A pin sits at a point inside its anchor element's box;
+ * a region is a box or a freehand stroke on one image, in that image's content coordinates,
+ * drawn on the marked copy with the note's number. A note without either is anchored to its
+ * elements' default corner.
+ */
+export const DesignNoteSchema = z
+  .object({
+    elementIds: z.array(z.string().min(1).max(200)).min(1).max(1000),
+    prompt: z.string().trim().min(1).max(DESIGN_ASK_PROMPT_MAX),
+    pin: z
+      .object({ elementId: z.string().min(1).max(200), at: NormalizedPointSchema })
+      .strict()
+      .optional(),
+    region: DesignNoteRegionSchema.optional(),
+  })
+  .strict()
+  .superRefine((note, ctx) => {
+    if (note.region && (note.pin || note.elementIds.length !== 1))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A region marks exactly one image and carries no pin',
+      });
+  });
+export type DesignNote = z.infer<typeof DesignNoteSchema>;
 /** Numbered canvas notes read from the visible canonical canvas, in pin order. */
 export const DesignNotesSchema = z
-  .array(
-    z
-      .object({
-        elementIds: z.array(z.string().min(1).max(200)).min(1).max(1000),
-        prompt: z.string().trim().min(1).max(DESIGN_ASK_PROMPT_MAX),
-      })
-      .strict()
-  )
+  .array(DesignNoteSchema)
   .min(1)
-  .max(DESIGN_NOTES_MAX);
+  .max(DESIGN_NOTES_MAX)
+  .superRefine((notes, ctx) => {
+    const regionImages = new Set(
+      notes.flatMap((note) => (note.region ? [note.elementIds[0]] : []))
+    );
+    if (regionImages.size > 1)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Regions mark one image at a time',
+      });
+  });
 export type DesignNotes = z.infer<typeof DesignNotesSchema>;
+export const DesignNotesStateSchema = z.union([z.array(DesignNoteSchema).length(0), DesignNotesSchema]);
 /** Native toolbar requests carry a selection epoch, never an editable target. */
 export const DesignSelectionActionSchema = z.enum([
   'reference',
@@ -272,11 +329,8 @@ export const DesignToolbarRequestSchema = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({
-      type: z.literal('marks'),
-      selectionEpoch: z.number().int().nonnegative(),
-      marksEpoch: z.number().int().nonnegative(),
-      prompt: z.string().trim().min(1).max(DESIGN_ASK_PROMPT_MAX),
-      send: z.boolean(),
+      type: z.literal('notes-sync'),
+      notes: DesignNotesStateSchema,
     })
     .strict(),
 ]).superRefine((request, ctx) => {
@@ -320,7 +374,7 @@ export type DesignHighlight = z.infer<typeof DesignHighlightSchema>;
 export function decodeDesignMarkedImage(value: unknown, elementId: string) {
   const image = DesignMarkedImageSchema.parse(value);
   if (image.elementId !== elementId)
-    throw Error('Marks belong to another element; mark the selected image again');
+    throw Error('Regions belong to another image; draw them on the image again');
   const bytes = Uint8Array.from(atob(image.data), (char) => char.charCodeAt(0));
   const signature =
     image.mimeType === 'image/png'
@@ -331,7 +385,7 @@ export function decodeDesignMarkedImage(value: unknown, elementId: string) {
     signature.some((byte, index) => bytes[index] !== byte)
   )
     throw Error('Marked image is not a valid PNG or JPEG under 5 MB');
-  return { count: image.count, mimeType: image.mimeType, bytes };
+  return { mimeType: image.mimeType, bytes };
 }
 
 export type DesignElementChanges = { changed: string[]; removed: string[] };

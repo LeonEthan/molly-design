@@ -8,6 +8,8 @@ import {
 import {
   DESIGN_ASK_PRESETS,
   DESIGN_MARKED_IMAGE_MAX_EDGE,
+  DESIGN_NOTES_MAX,
+  DESIGN_NOTES_SYNC_BODY_LIMIT,
   DESIGN_SELECTION_BODY_LIMIT,
   decodeDesignMarkedImage,
   DesignCanvasCommandResultSchema,
@@ -21,6 +23,7 @@ import {
   type DesignElementChanges,
   type DesignElementKind,
   type DesignHighlight,
+  type DesignNotes,
   type DesignSelectionSummary
 } from '@molly/shared/design-selection-commands'
 import type { DesignExportScale } from '@molly/shared/electron-ipc'
@@ -51,6 +54,7 @@ import {
   type CanvasReadonlyReason
 } from './design-canvas-access'
 import { drainRelevantLoads } from './design-leave-drain-core'
+import { createRetainedNotes, flushBeforeTeardown } from './design-note-retention-core'
 import { waitForCanvasReady } from './design-canvas-ready-core'
 import { acquireDesignSession } from './design-session'
 import { translateUi } from '../ui-locale'
@@ -128,6 +132,8 @@ export async function captureDesignFrame(owner: BrowserWindow, artworkId: string
 // every path that recreates the document (attach/restore/reload/disconnect)
 // goes through record creation or destroyDesignInstance.
 const lastSelectionSummaries = new Map<string, DesignSelectionSummary>()
+const retainedUnsentNotes = createRetainedNotes<DesignNotes[number]>({ max: DESIGN_NOTES_MAX })
+const noteScope = (id: string, hostId: string) => JSON.stringify([id, hostId])
 const recordsFor = (id: string) => [...records.values()].filter((record) => record.artworkId === id)
 const loading = new Map<string, Promise<RecordEntry>>()
 const syncing = new Map<string, Promise<DesignElementChanges | null>>()
@@ -231,28 +237,45 @@ export async function surface(
         try {
           const text = await request.text()
           lease.assertActive()
-          if (text.length > DESIGN_SELECTION_BODY_LIMIT) throw Error('Toolbar request too large')
+          if (text.length > DESIGN_NOTES_SYNC_BODY_LIMIT) throw Error('Toolbar request too large')
           const input = DesignToolbarRequestSchema.parse(JSON.parse(text))
+          if (input.type !== 'notes-sync' && text.length > DESIGN_SELECTION_BODY_LIMIT)
+            throw Error('Toolbar request too large')
           const record = records.get(hostId)
-          const assertCurrent = () => {
+          const assertRetained = () => {
             lease.assertActive()
             if (
               !record ||
               records.get(hostId) !== record ||
-              record.view.webContents.session !== isolated ||
-              hosts.get(hostId) !== id
+              record.artworkId !== id ||
+              record.view.webContents.session !== isolated
             )
-              throw Error('Current artwork is not visible')
+              throw Error('Canvas instance was retired')
+          }
+          const assertCurrent = () => {
+            assertRetained()
+            if (hosts.get(hostId) !== id) throw Error('Current artwork is not visible')
+          }
+          if (input.type === 'notes-sync') {
+            assertRetained()
+            retainedUnsentNotes.publish(noteScope(id, hostId), input.notes)
+            return Response.json({ ok: true }, { headers })
           }
           assertCurrent()
           if (input.type === 'notes') {
             const notes = await getDesignNotes(id, hostId, input.notesEpoch, assertCurrent)
+            const region = notes.find((note) => note.region)
+            const image = region
+              ? await readDesignNoteImage(record!, input.notesEpoch, region.reference.elementIds[0])
+              : undefined
             assertCurrent()
+            retainedUnsentNotes.accept(noteScope(id, hostId), input.notesEpoch)
             record!.owner.webContents.send('design.selectionAction', {
               hostId,
               action: 'notes',
               notes,
-              notesEpoch: input.notesEpoch
+              notesEpoch: input.notesEpoch,
+              ...(image ? { image } : {})
             })
             return Response.json({ ok: true }, { headers })
           }
@@ -270,46 +293,16 @@ export async function surface(
           const reference = await getDesignSelection(
             id,
             hostId,
-            input.type === 'marks' ||
-              (input.type === 'action' &&
-                (input.action === 'edit' ||
-                  input.action === 'generate' ||
-                  input.action === 'edit-wording'))
+            input.type === 'action' &&
+              (input.action === 'edit' ||
+                input.action === 'generate' ||
+                input.action === 'edit-wording')
               ? 'image'
               : preset && DESIGN_ASK_PRESETS[preset].kind,
             { selectionEpoch: input.selectionEpoch, assertCurrent }
           )
-          if (
-            (input.type === 'marks' || (preset && DESIGN_ASK_PRESETS[preset].single)) &&
-            reference.elementIds.length !== 1
-          )
+          if (preset && DESIGN_ASK_PRESETS[preset].single && reference.elementIds.length !== 1)
             throw Error('Select a single element for this action')
-          if (input.type === 'marks') {
-            const image = decodeDesignMarkedImage(
-              await record!.view.webContents.executeJavaScript(
-                `window.molly.marks(${JSON.stringify(input.marksEpoch)})`
-              ),
-              reference.elementIds[0]
-            )
-            const size = nativeImage.createFromBuffer(Buffer.from(image.bytes)).getSize()
-            if (
-              !size.width ||
-              !size.height ||
-              Math.max(size.width, size.height) > DESIGN_MARKED_IMAGE_MAX_EDGE
-            )
-              throw Error('Marked image could not be read')
-            assertCurrent()
-            record!.owner.webContents.send('design.selectionAction', {
-              hostId,
-              action: 'marks',
-              reference,
-              prompt: input.prompt,
-              send: input.send,
-              count: image.count,
-              image: { mimeType: image.mimeType, bytes: image.bytes }
-            })
-            return Response.json({ ok: true }, { headers })
-          }
           assertCurrent()
           record!.owner.webContents.send(
             'design.selectionAction',
@@ -483,6 +476,7 @@ export async function attachDesign(
           view.webContents.on('will-prevent-unload', (event) => event.preventDefault())
           await view.webContents.loadURL(source.url)
           await waitForDesignCanvasReady(view.webContents)
+          await restoreRetainedNotes(view.webContents, id, hostId)
           await designCanvasAccess.register(access)
           if (!reconcile) await access.setReadonly(designCanvasAccess.isReadonly(id), 'locked')
           try {
@@ -555,8 +549,19 @@ function destroyDesignInstance(key: string) {
   if (!record.owner.isDestroyed()) record.owner.contentView.removeChildView(record.view)
   record.dispose()
 }
-export function destroyDesign(id: string) {
-  for (const [key, record] of records) if (record.artworkId === id) destroyDesignInstance(key)
+const DESIGN_NOTES_FLUSH_TIMEOUT_MS = 1500
+async function retireDesignInstance(key: string) {
+  const record = records.get(key)
+  if (record)
+    await flushBeforeTeardown(
+      () => record.view.webContents.executeJavaScript('window.molly?.flushNotes?.()'),
+      DESIGN_NOTES_FLUSH_TIMEOUT_MS
+    )
+  destroyDesignInstance(key)
+}
+export async function destroyDesign(id: string) {
+  const keys = [...records].filter(([, record]) => record.artworkId === id).map(([key]) => key)
+  await Promise.all(keys.map(retireDesignInstance))
 }
 /**
  * Selection summary a remounted shell can reseed its composer selection from. Returns null
@@ -690,16 +695,15 @@ export async function getDesignNotes(
   assertCurrent: () => void
 ) {
   const read = `window.molly.notes(${JSON.stringify(notesEpoch)})`
-  let prompts: string[] = []
+  let notes: DesignNotes = []
   const references = await captureDesignReferences(
     id,
     hostId,
     async (record) => {
       const value: unknown = await record.view.webContents.executeJavaScript(read)
-      const notes = DesignNotesSchema.parse(
+      notes = DesignNotesSchema.parse(
         typeof value === 'object' && value !== null && 'notes' in value ? value.notes : undefined
       )
-      prompts = notes.map((note) => note.prompt)
       return notes.map((note) => note.elementIds)
     },
     async (record) => {
@@ -707,7 +711,29 @@ export async function getDesignNotes(
     },
     { assertCurrent }
   )
-  return references.map((reference, index) => ({ reference, prompt: prompts[index] }))
+  return references.map((reference, index) => ({
+    reference,
+    prompt: notes[index].prompt,
+    ...(notes[index].region ? { region: true as const } : {})
+  }))
+}
+
+/** The marked copy of the one image region notes mark; bytes are validated before they leave main. */
+async function readDesignNoteImage(record: RecordEntry, notesEpoch: number, elementId: string) {
+  const image = decodeDesignMarkedImage(
+    await record.view.webContents.executeJavaScript(
+      `window.molly.marked(${JSON.stringify(notesEpoch)})`
+    ),
+    elementId
+  )
+  const size = nativeImage.createFromBuffer(Buffer.from(image.bytes)).getSize()
+  if (
+    !size.width ||
+    !size.height ||
+    Math.max(size.width, size.height) > DESIGN_MARKED_IMAGE_MAX_EDGE
+  )
+    throw Error('Marked image could not be read')
+  return { mimeType: image.mimeType, bytes: image.bytes }
 }
 
 async function captureDesignReferences(
@@ -792,13 +818,15 @@ export async function settleDesignNotes(
   notesEpoch: number,
   sent: boolean
 ) {
+  const rejected = retainedUnsentNotes.settle(noteScope(id, hostId), notesEpoch, sent)
   const record = records.get(hostId)
   if (!record || record.artworkId !== id || hosts.get(hostId) !== id) return false
-  return (
+  const settled =
     (await record.view.webContents.executeJavaScript(
       `window.molly.settleNotes ? window.molly.settleNotes(${JSON.stringify(notesEpoch)}, ${sent}) : false`
     )) === true
-  )
+  if (rejected.length) void restoreCanvasNotes(record.view.webContents, rejected).catch(() => {})
+  return settled
 }
 
 /**
@@ -908,12 +936,23 @@ async function reloadDesignCanvas(id: string, hostId?: string) {
   for (const [key, record] of entries) {
     const visible = hosts.has(key)
     const bounds = record.view.getBounds()
-    destroyDesignInstance(key)
+    await retireDesignInstance(key)
     if (visible) await attachDesign(record.owner, id, bounds, key, false)
   }
   return Array.isArray(before?.elements) ? (before as { elements: { id: string }[] }) : null
 }
 
+async function restoreRetainedNotes(webContents: Electron.WebContents, id: string, hostId: string) {
+  await retainedUnsentNotes.restoreInto(noteScope(id, hostId), (notes) =>
+    restoreCanvasNotes(webContents, notes)
+  )
+}
+function restoreCanvasNotes(
+  webContents: Electron.WebContents,
+  notes: readonly DesignNotes[number][]
+) {
+  return webContents.executeJavaScript('window.molly.restoreNotes(' + JSON.stringify(notes) + ')')
+}
 export async function leaveDesign(id: string, hostId?: string): Promise<boolean> {
   // An attach that is still loading already owns a record whose webContents
   // has no window.molly yet. Reading its state now misreports a clean loading
@@ -947,7 +986,7 @@ export async function leaveDesign(id: string, hostId?: string): Promise<boolean>
       })
       if (answer.response === 1) {
         if (!(await leaveDesign(id, key))) return false
-      } else if (answer.response === 2) destroyDesignInstance(key)
+      } else if (answer.response === 2) await retireDesignInstance(key)
       else {
         await unfreezeDesigns()
         return false
@@ -996,6 +1035,8 @@ function installCloseGuard(owner: BrowserWindow) {
     void (async () => {
       for (const [key, record] of records)
         if (record.owner === owner && !(await leaveDesign(record.artworkId, key))) return
+      const owned = [...records].filter(([, record]) => record.owner === owner)
+      await Promise.all(owned.map(([key]) => retireDesignInstance(key)))
       allowed = true
       owner.close()
     })()
@@ -1173,7 +1214,7 @@ export async function finishDesignCopy(sourceId: string, targetId: string, hostI
   const saved = await designRequest({ operation: 'read', sessionId: targetId })
   if (!isDeepStrictEqual(current.doc, saved.doc))
     throw Error('Drawing changed during copy; save the newer edits before leaving')
-  destroyDesignInstance(key)
+  await retireDesignInstance(key)
 }
 export async function renameDesign(id: string, name: string) {
   await saveDesign(id)

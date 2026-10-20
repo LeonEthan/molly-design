@@ -1,43 +1,110 @@
 import {
   DESIGN_ASK_PROMPT_MAX,
+  DESIGN_MARKED_IMAGE_MAX_BYTES,
+  DESIGN_NOTE_COORDINATE_DECIMALS,
   DESIGN_NOTES_MAX,
+  type DesignMarkedImage,
+  type DesignNote,
   type DesignToolbarPresentation,
   type DesignToolbarRequest,
 } from '@molly/shared/design-selection-commands';
 import { arrowUpIcon, renderUiIconSvg, xIcon } from '@molly/shared/ui-icons';
 import type { HighlightGroup } from './element-highlight';
+import {
+  appendStrokePoint,
+  drawNoteRegions,
+  imageGeometry,
+  paintRegion,
+  REGION_COLOR,
+  regionAnchor,
+  regionFromPoints,
+  strokeRegion,
+  svgOverlay,
+  toImage,
+  toScreen,
+  type ImageGeometry,
+  type NormalizedPoint,
+  type NoteRegion,
+} from './image-regions';
 
-type Pin = { elementIds: string[]; text: string };
+type Pin = {
+  elementIds: string[];
+  text: string;
+  pin?: { elementId: string; at: NormalizedPoint };
+  region?: NoteRegion;
+};
+/** Mutually exclusive dock tools: comment places pins and boxes, brush draws strokes. */
+type NoteTool = 'select' | 'comment' | 'brush';
+type Drag =
+  | {
+      kind: 'box';
+      elementId: string;
+      geo: ImageGeometry;
+      origin: { x: number; y: number };
+      start: NormalizedPoint;
+      current: NormalizedPoint;
+    }
+  | {
+      kind: 'stroke';
+      elementId: string;
+      geo: ImageGeometry;
+      origin: { x: number; y: number };
+      points: NormalizedPoint[];
+      travelled: boolean;
+    };
 
 const EDITOR_LINE_CAP = 4;
+const COPY_MAX_EDGE = 1600;
+const MOVE_SLOP = 3;
+export const NOTE_PUBLISH_DEBOUNCE_MS = 250;
+
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+const moved = (origin: { x: number; y: number }, event: { clientX: number; clientY: number }) =>
+  Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > MOVE_SLOP;
 
 /**
- * Numbered notes pinned to elements, sent to Molly together as one turn. Pins are
- * screen-only canvas state keyed by element id: they never touch the document, and
- * the request carries only the notes epoch so main reads and validates the targets.
+ * Numbered notes pinned to the canvas, sent to Molly together as one turn. A note is
+ * a pin (a point inside an element, or the element's default corner) or a region (a box
+ * drawn on one image, marked on a copy of that image). Notes are screen-only canvas state
+ * keyed by element id: they never touch the document, and the request carries only the
+ * notes epoch so main reads and validates the targets.
  */
 export function createNotePins(options: {
   request(input: DesignToolbarRequest): Promise<{ ok: boolean; error?: string }>;
+  publish?(notes: DesignNote[], keepalive: boolean): Promise<unknown>;
   selectedIds(): readonly string[];
-  elementIds(): readonly string[];
+  elements(): readonly { id: string; kind: string }[];
   highlight?: { show(groups: readonly HighlightGroup[]): void };
+  onTool?(tool: NoteTool): void;
+  clock?: { setTimeout(run: () => void, ms: number): unknown; clearTimeout(handle: unknown): void };
 }) {
   let pins: Pin[] = [];
   let epoch = 0;
   let readonly = true;
   let presentation: DesignToolbarPresentation | undefined;
   let busy = false;
+  let publishTimer: unknown;
+  let unpublished = false;
+  let inFlight: Promise<void> | undefined;
+  const clock = options.clock ?? {
+    setTimeout: (run: () => void, ms: number) => window.setTimeout(run, ms),
+    clearTimeout: (handle: unknown) => window.clearTimeout(handle as number),
+  };
   let message = '';
   let editing: { pin: Pin; node: HTMLElement } | undefined;
   let hovered = false;
+  let tool: NoteTool = 'select';
   let frame = 0;
   let press: { x: number; y: number } | undefined;
+  let drag: Drag | undefined;
   const controller = new AbortController();
   const signal = controller.signal;
   const label = (key: string, fallback: string, count?: number) =>
     (presentation?.labels[key] ?? fallback).replace('{{count}}', String(count ?? ''));
   const style = document.createElement('style');
   style.textContent = `
+body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!important}
+.molly-note-regions{position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483097;pointer-events:none;overflow:visible}
 .molly-note-pin{position:fixed;z-index:2147483099;display:flex;align-items:center;justify-content:center;width:28px;height:28px;min-width:0!important;padding:0!important;box-sizing:border-box;border-radius:50%!important;border:2px solid var(--surface);background:var(--accent)!important;color:var(--on-accent)!important;font:600 12px/1 Inter,system-ui,sans-serif!important;box-shadow:0 2px 8px rgb(0 0 0 / .22);cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
 .molly-note-pin[aria-expanded=true]{transform:scale(1.12);box-shadow:0 6px 16px rgb(0 0 0 / .3)}
 .molly-note-tray{position:fixed;left:50%;bottom:calc(var(--molly-dock-bottom,18px) + var(--molly-dock-height,52px) + 12px);transform:translateX(-50%);z-index:2147483099;display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;max-width:calc(100vw - 16px);border-radius:999px;background:var(--ink);color:var(--surface);border:1px solid var(--line);box-shadow:0 6px 20px rgb(0 0 0 / .22);font:12px Inter,system-ui,sans-serif;box-sizing:border-box}
@@ -59,6 +126,7 @@ export function createNotePins(options: {
   document.head.append(style);
   const layer = document.createElement('div');
   layer.className = 'molly-note-layer';
+  const overlay = svgOverlay();
   const tray = document.createElement('div');
   tray.className = 'molly-note-tray';
   tray.dataset.mollyToolbar = '';
@@ -68,28 +136,81 @@ export function createNotePins(options: {
   tooltip.className = 'molly-note-tooltip';
   tooltip.setAttribute('role', 'tooltip');
   tooltip.hidden = true;
-  document.body.append(layer, tray, tooltip);
+  document.body.append(overlay, layer, tray, tooltip);
   for (const node of [layer, tray])
     for (const type of ['pointerdown', 'mousedown', 'dblclick', 'keydown', 'keyup', 'wheel'])
       node.addEventListener(type, (event) => event.stopPropagation(), { signal });
 
   const nodeFor = (id: string) =>
     document.querySelector<HTMLElement>(`.ed-stage-scale [data-el-id="${CSS.escape(id)}"]`);
+  const kindOf = (id: string) => options.elements().find((element) => element.id === id)?.kind;
   const changed = () => {
     epoch++;
     message = '';
     render();
+    schedulePublish();
+  };
+  const schedulePublish = () => {
+    if (!options.publish) return;
+    unpublished = true;
+    clock.clearTimeout(publishTimer);
+    publishTimer = clock.setTimeout(() => void flush(false), NOTE_PUBLISH_DEBOUNCE_MS);
+  };
+  async function flush(force: boolean, keepalive = false) {
+    clock.clearTimeout(publishTimer);
+    publishTimer = undefined;
+    for (let pending = inFlight; pending; pending = inFlight) await pending;
+    const publish = options.publish;
+    if (!publish || !unpublished || (busy && !force)) return;
+    unpublished = false;
+    const notes = snapshot();
+    const sending = (async () => publish(notes, keepalive))().then(
+      () => undefined,
+      () => {
+        unpublished = true;
+      }
+    );
+    inFlight = sending;
+    await sending;
+    if (inFlight === sending) inFlight = undefined;
+  }
+  const snapshot = (): DesignNote[] => sentNotes().map(toNote);
+  const full = () => {
+    message = label('notesFull', 'Send or clear notes before adding more than {{count}}', DESIGN_NOTES_MAX);
+    render();
+  };
+  const setTool = (value: NoteTool) => {
+    tool = readonly ? 'select' : value;
+    drag = undefined;
+    document.body.dataset.commenting = String(tool === 'comment');
+    document.body.dataset.brushing = String(tool === 'brush');
+    paintRegions();
+    options.onTool?.(tool);
+  };
+  /** One Escape closes an open editor (a written note stays, an empty one goes) and returns to Select. */
+  const escape = () => {
+    if (!editing && tool === 'select') return false;
+    closeEditor(editing !== undefined);
+    setTool('select');
+    return true;
   };
   const prune = () => {
-    const present = new Set(options.elementIds());
-    if (pins.every((pin) => pin.elementIds.every((id) => present.has(id)))) return false;
-    for (const pin of pins) pin.elementIds = pin.elementIds.filter((id) => present.has(id));
+    const present = new Set(options.elements().map((element) => element.id));
+    const stale = (pin: Pin) =>
+      pin.elementIds.some((id) => !present.has(id)) ||
+      (!!pin.pin && !present.has(pin.pin.elementId));
+    if (!pins.some(stale)) return false;
+    for (const pin of pins) {
+      pin.elementIds = pin.elementIds.filter((id) => present.has(id));
+      if (pin.pin && !present.has(pin.pin.elementId)) delete pin.pin;
+    }
     if (editing && !editing.pin.elementIds.length) {
       editing.node.remove();
       editing = undefined;
     }
     pins = pins.filter((pin) => pin.elementIds.length);
     epoch++;
+    schedulePublish();
     return true;
   };
   const sameTargets = (a: Pin, b: Pin) =>
@@ -101,25 +222,61 @@ export function createNotePins(options: {
     tooltip.hidden = true;
     options.highlight?.show([{ tone: 'hover', elementIds: [] }]);
   };
+  const pinPoint = (pin: Pin): { x: number; y: number } | undefined => {
+    if (pin.region) {
+      const geo = imageGeometry(pin.elementIds[0]);
+      if (!geo) return undefined;
+      const [x, y] = toScreen(geo, regionAnchor(pin.region));
+      return { x, y };
+    }
+    const anchor = pin.pin && nodeFor(pin.pin.elementId);
+    if (!pin.pin || !anchor) return undefined;
+    const rect = anchor.getBoundingClientRect();
+    return {
+      x: rect.left + pin.pin.at[0] * rect.width,
+      y: rect.top + pin.pin.at[1] * rect.height,
+    };
+  };
+  function paintRegions() {
+    overlay.replaceChildren();
+    for (const pin of pins) {
+      if (!pin.region) continue;
+      const geo = imageGeometry(pin.elementIds[0]);
+      if (geo) paintRegion(overlay, geo, pin.region, REGION_COLOR);
+    }
+    if (drag) {
+      const region =
+        drag.kind === 'box'
+          ? regionFromPoints(drag.start, drag.current)
+          : { kind: 'stroke' as const, points: drag.points };
+      paintRegion(overlay, drag.geo, region, REGION_COLOR);
+    }
+  }
   function position() {
     frame = 0;
-    if (!pins.length) return;
+    if (!pins.length) return paintRegions();
     if (prune()) return render();
     const markers = [...layer.children] as HTMLElement[];
     pins.forEach((pin, index) => {
       const marker = markers[index];
+      const point = pinPoint(pin);
       const rects = pin.elementIds
         .map(nodeFor)
         .filter((node): node is HTMLElement => !!node)
         .map((node) => node.getBoundingClientRect());
       if (!marker) return;
-      marker.hidden = readonly || !rects.length;
+      marker.hidden = readonly || (!point && !rects.length);
       if (marker.hidden) return;
+      const place = (x: number, y: number) => {
+        marker.style.left = `${Math.max(4, Math.min(x, innerWidth - 32))}px`;
+        marker.style.top = `${Math.max(4, Math.min(y, innerHeight - 32))}px`;
+      };
+      if (point) return place(point.x - 14, point.y - 14);
       const right = Math.max(...rects.map((rect) => rect.right));
       const top = Math.min(...rects.map((rect) => rect.top));
-      marker.style.left = `${Math.max(4, Math.min(right - 8, innerWidth - 32))}px`;
-      marker.style.top = `${Math.max(4, Math.min(top - 14, innerHeight - 32))}px`;
+      place(right - 8, top - 14);
     });
+    paintRegions();
     if (editing) placeEditor();
     frame = requestAnimationFrame(position);
   }
@@ -223,6 +380,7 @@ export function createNotePins(options: {
     render();
     let failure = '';
     try {
+      await flush(true);
       const result = await options.request({ type: 'notes', notesEpoch: epoch });
       if (!result.ok) failure = result.error ?? 'Canvas request failed';
     } catch (cause) {
@@ -281,7 +439,10 @@ export function createNotePins(options: {
     field.addEventListener(
       'input',
       () => {
-        if (pin.text.trim() !== field.value.trim()) epoch++;
+        if (pin.text.trim() !== field.value.trim()) {
+          epoch++;
+          schedulePublish();
+        }
         pin.text = field.value;
         grow();
       },
@@ -290,9 +451,9 @@ export function createNotePins(options: {
     field.addEventListener(
       'keydown',
       (event) => {
-        if (event.key === 'Escape') {
+        if (event.key === 'Escape' && !event.isComposing && event.keyCode !== 229) {
           event.preventDefault();
-          closeEditor(true);
+          escape();
         } else if (
           event.key === 'Enter' &&
           !event.shiftKey &&
@@ -325,10 +486,14 @@ export function createNotePins(options: {
     grow();
     field.focus();
   }
-  function add(elementIds: readonly string[], text = '') {
+  function add(elementIds: readonly string[], text = '', point?: Pin['pin']) {
     if (readonly || busy || !elementIds.length) return;
-    const pin = { elementIds: [...new Set(elementIds)], text };
-    const existing = pins.find((item) => sameTargets(item, pin));
+    const pin: Pin = {
+      elementIds: [...new Set(elementIds)],
+      text,
+      ...(point ? { pin: point } : {}),
+    };
+    const existing = !point && pins.find((item) => !item.pin && !item.region && sameTargets(item, pin));
     if (existing) {
       if (text.trim())
         existing.text = existing.text.trim() ? `${existing.text.trim()}\n${text}` : text;
@@ -336,18 +501,49 @@ export function createNotePins(options: {
       if (!text.trim()) openEditor(existing);
       return;
     }
-    if (pins.length >= DESIGN_NOTES_MAX) {
-      message = label(
-        'notesFull',
-        'Send or clear notes before adding more than {{count}}',
-        DESIGN_NOTES_MAX
-      );
-      render();
-      return;
-    }
+    if (pins.length >= DESIGN_NOTES_MAX) return full();
     pins = [...pins, pin];
     changed();
     if (!text.trim()) openEditor(pin);
+  }
+  function addRegion(elementId: string, region: NoteRegion) {
+    if (readonly || busy) return;
+    if (pins.some((pin) => pin.region && pin.elementIds[0] !== elementId)) {
+      message = label('notesRegionOneImage', 'Mark regions on one image at a time');
+      render();
+      return;
+    }
+    if (pins.length >= DESIGN_NOTES_MAX) return full();
+    const pin: Pin = { elementIds: [elementId], text: '', region };
+    pins = [...pins, pin];
+    changed();
+    openEditor(pin);
+  }
+  function startRegion(event: PointerEvent) {
+    if (
+      tool === 'select' ||
+      busy ||
+      event.button !== 0 ||
+      event.altKey ||
+      event.shiftKey ||
+      event.metaKey ||
+      event.ctrlKey
+    )
+      return;
+    const target = event.target as Element | null;
+    if (!target?.closest || target.closest('[data-molly-toolbar]')) return;
+    const elementId = target.closest<HTMLElement>('.ed-stage-scale [data-el-id]')?.dataset.elId;
+    if (!elementId || kindOf(elementId) !== 'image') return;
+    const geo = imageGeometry(elementId);
+    const start = geo && toImage(geo, event.clientX, event.clientY);
+    if (!geo || !start) return;
+    event.stopPropagation();
+    event.preventDefault();
+    const origin = { x: event.clientX, y: event.clientY };
+    drag =
+      tool === 'brush'
+        ? { kind: 'stroke', elementId, geo, origin, points: [start], travelled: false }
+        : { kind: 'box', elementId, geo, origin, start, current: start };
   }
   document.addEventListener(
     'pointerdown',
@@ -355,19 +551,58 @@ export function createNotePins(options: {
       press = { x: event.clientX, y: event.clientY };
       if (editing && !(event.target as Element | null)?.closest?.('[data-molly-toolbar]'))
         closeEditor(false);
+      startRegion(event);
     },
     { capture: true, signal }
   );
   document.addEventListener(
+    'pointermove',
+    (event) => {
+      if (!drag) return;
+      if (drag.kind === 'stroke' && moved(drag.origin, event)) drag.travelled = true;
+      const point = toImage(drag.geo, event.clientX, event.clientY);
+      if (!point) return;
+      if (drag.kind === 'box') drag.current = point;
+      else appendStrokePoint(drag.points, point);
+      paintRegions();
+    },
+    { capture: true, signal }
+  );
+  const endRegion = (event: PointerEvent, commit: boolean) => {
+    if (!drag) return;
+    const finished = drag;
+    drag = undefined;
+    const end = toImage(finished.geo, event.clientX, event.clientY);
+    if (finished.kind === 'box') {
+      paintRegions();
+      if (commit && moved(finished.origin, event))
+        addRegion(finished.elementId, regionFromPoints(finished.start, end ?? finished.current));
+      return;
+    }
+    if (end) appendStrokePoint(finished.points, end);
+    paintRegions();
+    const stroke = strokeRegion(finished.points);
+    if (commit && stroke && (finished.travelled || moved(finished.origin, event)))
+      addRegion(finished.elementId, stroke);
+  };
+  document.addEventListener('pointerup', (event) => endRegion(event, true), {
+    capture: true,
+    signal,
+  });
+  document.addEventListener('pointercancel', (event) => endRegion(event, false), {
+    capture: true,
+    signal,
+  });
+  document.addEventListener(
     'click',
     (event) => {
-      const moved = press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 3;
+      const dragged = press && moved(press, event);
       press = undefined;
       if (
         readonly ||
-        moved ||
+        dragged ||
         event.button !== 0 ||
-        !(event.metaKey || event.ctrlKey) ||
+        !(tool === 'comment' || event.metaKey || event.ctrlKey) ||
         event.altKey ||
         event.shiftKey
       )
@@ -387,11 +622,36 @@ export function createNotePins(options: {
         const node = nodeFor(id);
         return !!node && (node.contains(target) || hit!.contains(node));
       });
-      add(inSelection ? selected : [hit.dataset.elId!]);
+      const rect = hit.getBoundingClientRect();
+      const point: Pin['pin'] | undefined =
+        rect.width && rect.height && hit.dataset.elId
+          ? {
+              elementId: hit.dataset.elId,
+              at: [
+                clamp01((event.clientX - rect.left) / rect.width),
+                clamp01((event.clientY - rect.top) / rect.height),
+              ],
+            }
+          : undefined;
+      add(inSelection ? selected : [hit.dataset.elId!], '', point);
     },
     { capture: true, signal }
   );
   window.addEventListener('resize', () => editing && placeEditor(), { signal });
+
+  const sentNotes = () => pins.filter((pin) => pin.text.trim());
+  const roundCoordinate = (value: number) => Number(value.toFixed(DESIGN_NOTE_COORDINATE_DECIMALS));
+  const roundPoint = ([x, y]: NormalizedPoint): NormalizedPoint => [roundCoordinate(x), roundCoordinate(y)];
+  const roundRegion = (region: NoteRegion): NoteRegion =>
+    region.kind === 'box'
+      ? { ...region, from: roundPoint(region.from), to: roundPoint(region.to) }
+      : { ...region, points: region.points.map(roundPoint) };
+  const toNote = (pin: Pin): DesignNote => ({
+    elementIds: [...pin.elementIds],
+    prompt: pin.text.trim(),
+    ...(pin.pin ? { pin: { elementId: pin.pin.elementId, at: roundPoint(pin.pin.at) } } : {}),
+    ...(pin.region ? { region: roundRegion(pin.region) } : {}),
+  });
 
   return {
     add,
@@ -399,17 +659,62 @@ export function createNotePins(options: {
       if (prune()) render();
       if (expected !== undefined && expected !== epoch)
         throw Error('Notes changed; send them again');
-      return {
-        epoch,
-        notes: pins
-          .filter((pin) => pin.text.trim())
-          .map((pin) => ({ elementIds: pin.elementIds, prompt: pin.text.trim() })),
-      };
+      return { epoch, notes: sentNotes().map(toNote) };
+    },
+    async marked(expected: number): Promise<DesignMarkedImage | null> {
+      if (expected !== epoch) throw Error('Notes changed; send them again');
+      const regions = sentNotes().flatMap((pin, index) =>
+        pin.region ? [{ badge: index + 1, region: pin.region, elementId: pin.elementIds[0] }] : []
+      );
+      if (!regions.length) return null;
+      const { elementId } = regions[0];
+      const geo = imageGeometry(elementId);
+      if (!geo) throw Error('The marked image is no longer visible');
+      const source = new Image();
+      source.src = geo.source;
+      await source.decode();
+      if (expected !== epoch) throw Error('Notes changed; send them again');
+      const scale = Math.min(1, COPY_MAX_EDGE / Math.max(source.naturalWidth, source.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(source.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(source.naturalHeight * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw Error('Marked image could not be drawn');
+      context.drawImage(source, 0, 0, canvas.width, canvas.height);
+      drawNoteRegions(context, regions, canvas.width, canvas.height);
+      let mimeType: DesignMarkedImage['mimeType'] = 'image/png';
+      let url = canvas.toDataURL(mimeType);
+      if (((url.length - url.indexOf(',') - 1) * 3) / 4 > DESIGN_MARKED_IMAGE_MAX_BYTES) {
+        context.globalCompositeOperation = 'destination-over';
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        mimeType = 'image/jpeg';
+        url = canvas.toDataURL(mimeType, 0.9);
+      }
+      return { elementId, mimeType, data: url.slice(url.indexOf(',') + 1) };
+    },
+    snapshot,
+    restore(notes: readonly DesignNote[]) {
+      const held = new Set(pins.map((pin) => JSON.stringify(toNote(pin))));
+      const incoming: Pin[] = notes.map((note) => ({
+        elementIds: [...new Set(note.elementIds)],
+        text: note.prompt,
+        ...(note.pin ? { pin: note.pin } : {}),
+        ...(note.region ? { region: note.region } : {}),
+      }));
+      const fresh = incoming
+        .filter((pin) => !held.has(JSON.stringify(toNote(pin))))
+        .slice(0, DESIGN_NOTES_MAX - pins.length);
+      if (!fresh.length) return;
+      pins = [...pins, ...fresh];
+      prune();
+      changed();
     },
     settle(expected: number, sent: boolean) {
       busy = false;
       if (!sent || expected !== epoch) {
         render();
+        schedulePublish();
         return false;
       }
       closeEditor(false);
@@ -421,21 +726,32 @@ export function createNotePins(options: {
       if (readonly && !value) busy = false;
       readonly = value;
       if (value) {
+        setTool('select');
         closeEditor(false);
         clearHover();
+        drag = undefined;
       }
       render();
     },
+    setTool,
+    escape,
+    tool: () => tool,
     present(value: DesignToolbarPresentation) {
       presentation = value;
       render();
     },
+    flushUnsent() {
+      return flush(false);
+    },
     dispose() {
+      void flush(false, true);
       controller.abort();
       cancelAnimationFrame(frame);
       clearHover();
+      setTool('select');
       editing?.node.remove();
       layer.remove();
+      overlay.remove();
       tray.remove();
       tooltip.remove();
       style.remove();

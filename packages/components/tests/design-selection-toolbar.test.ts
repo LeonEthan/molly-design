@@ -558,18 +558,3 @@ it('sends a quick edit without text, but asks for detail when the edit needs it'
   ]);
 });
 
-it('opens mark mode for exactly one selected image', () => {
-  toolbar.dispose();
-  const marked: [string, number][] = [];
-  toolbar = createSelectionToolbar({
-    request: async () => ({ ok: true }),
-    markImage: (id, epoch) => marked.push([id, epoch]),
-  });
-  toolbar.present({ dark: false, actionsEnabled: true, labels: {} });
-  toolbar.setReadonly(false);
-  select('text');
-  expect(queryByRole(document.body, 'button', { name: 'Mark areas to edit' })).toBeNull();
-  select('image', {}, 4);
-  click('Mark areas to edit');
-  expect(marked).toEqual([['one', 4]]);
-});

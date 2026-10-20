@@ -291,14 +291,14 @@ export async function verifyDesign(directory: string) {
   } finally {
     dialog.showMessageBox = showMessageBox
   }
-  destroyDesign(id)
+  await destroyDesign(id)
   secondOwner.destroy()
   thirdOwner.destroy()
   await designCanvasAccess.update([])
   await designRequest({ operation: 'acknowledge', sessionId: selectedCopy.association.sessionId })
   await designRequest({ operation: 'acknowledge', sessionId: id })
   await designRequest({ operation: 'acknowledge', sessionId: copy.association.sessionId })
-  destroyDesign(id)
+  await destroyDesign(id)
   await verifyDesignVersions(directory)
   await prepareDesignQuit()
   owner.destroy()

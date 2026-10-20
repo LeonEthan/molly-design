@@ -93,6 +93,57 @@ describe('application Pi profile packages', () => {
     expect(f.prompts[1]).toContain('CC Safety Net');
   });
 
+  it('blocks rsync --delete for an empty variable or an unscoped destination', async () => {
+    const f = await fixture({
+      responses: [
+        call('bash', { command: 'rsync -a --delete ./src/ "$DEST/"' }),
+        call('bash', { command: 'rsync -a --delete ./src/ /opt/outside' }),
+        fauxAssistantMessage('Stopped.'),
+      ],
+    });
+    await useProfile(f.agentDir);
+    await f.initialize();
+    const session = await f.agent.newSession({ cwd: f.cwd, mcpServers: [] });
+    await f.agent.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'Mirror' }],
+    });
+    const failures = f.updates.flatMap(({ update }) =>
+      update.sessionUpdate === 'tool_call_update' && update.status === 'failed'
+        ? [JSON.stringify(update)]
+        : []
+    );
+    expect(failures).toHaveLength(2);
+    expect(failures[0]).toContain('rsync.delete');
+    expect(failures[1]).toContain('rsync.delete');
+  });
+
+  it('allows a quoted LF heredoc and blocks the same body with CRLF endings', async () => {
+    const f = await fixture({
+      responses: [
+        call('bash', { command: "cat <<'EOF'\necho ok\nEOF\n" }),
+        call('bash', { command: "cat <<'EOF'\r\necho ok\r\nEOF\r\n" }),
+        fauxAssistantMessage('Stopped.'),
+      ],
+    });
+    await useProfile(f.agentDir);
+    await f.initialize();
+    const session = await f.agent.newSession({ cwd: f.cwd, mcpServers: [] });
+    await f.agent.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'Write' }],
+    });
+    const settled = f.updates.flatMap(({ update }) =>
+      update.sessionUpdate === 'tool_call_update' &&
+      (update.status === 'completed' || update.status === 'failed')
+        ? [update]
+        : []
+    );
+    expect(settled.map((update) => update.status)).toEqual(['completed', 'failed']);
+    expect(JSON.stringify(settled[0])).not.toContain('CC Safety Net');
+    expect(JSON.stringify(settled[1])).toContain('CC Safety Net');
+  });
+
   it('answers the published question tool through the GUI form dialog', async () => {
     const f = await fixture({
       request: (async (_method: string, params: unknown) => {

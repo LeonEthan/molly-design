@@ -35,7 +35,7 @@ export const Included: Story = {
         { name: '@juicesharp/rpiv-ask-user-question', version: '2.12.0', license: 'MIT' },
         { name: '@zigai/pi-mention-skill', version: '0.10.4', license: 'MIT' },
         { name: '@ff-labs/pi-fff', version: '0.11.0', license: 'MIT' },
-        { name: 'cc-safety-net', version: '2.6.12', license: 'MIT' },
+        { name: 'cc-safety-net', version: '2.6.16', license: 'MIT' },
       ],
     },
   },

@@ -179,12 +179,13 @@
   var hs = document.querySelector('.hs');
   if (!hs) return;
   var kettle = hs.querySelector('.hero-kettle'),
+    next = null,
     gb = hs.querySelector('.hs-gb'),
     sweep = hs.querySelector('.hs-clip'),
     pill = hs.querySelector('.hs-pill'),
     cur = hs.querySelector('.hs-cur'),
     size = hs.querySelector('.hs-size');
-  if (!kettle || !gb || !sweep || !pill || !cur || !size) return;
+  if (!kettle || !hs.dataset.kettleNext || !gb || !sweep || !pill || !cur || !size) return;
   var plate = hs.querySelector('.hero-plate'),
     motion = matchMedia('(prefers-reduced-motion: reduce)'),
     reduce = motion.matches,
@@ -228,11 +229,19 @@
       y = cy - bh / 2,
       pad = Math.max(6, W * 14 / 1536),
       box = { x: x - pad, y: y - pad, w: bw + pad * 2, h: bh + pad * 2 },
-      magic = fade(time, 4, 4.65, 5.6, 6.3);
-    kettle.style.transform = !reduce && (dx || dy || k !== 1)
-      ? 'translate(' + (dx * W).toFixed(2) + 'px,' + (dy * H).toFixed(2) + 'px) scale(' + k.toFixed(4) + ')'
-      : '';
-    kettle.style.opacity = magic > 0 ? (1 - 0.22 * Math.sin(Math.PI * magic)).toFixed(3) : '';
+      magic = fade(time, 4, 4.65, 5.6, 6.3),
+      shown = next && next.complete && next.naturalWidth && !reduce
+        ? ease(seg(time, 4.25, 5.8)) * (1 - ease(seg(time, 7.8, 9.25)))
+        : 0,
+      shift = !reduce && (dx || dy || k !== 1)
+        ? 'translate(' + (dx * W).toFixed(2) + 'px,' + (dy * H).toFixed(2) + 'px) scale(' + k.toFixed(4) + ')'
+        : '';
+    kettle.style.transform = shift;
+    kettle.style.opacity = shown > 0 ? (1 - shown).toFixed(3) : '';
+    if (next) {
+      next.style.transform = shift;
+      next.style.opacity = shown > 0 ? shown.toFixed(3) : '';
+    }
     alpha(gb, reduce ? 0 : fade(time, 0.96, 1.08, 7.1, 7.5));
     place(gb, box.x, box.y, box.w, box.h);
     alpha(sweep, reduce ? 0 : magic);
@@ -315,6 +324,38 @@
     }
     run();
   });
-  if (plate && plate.decode) plate.decode().then(arm, arm);
-  else arm();
+  function loadNext() {
+    var img = document.createElement('img');
+    img.className = 'hero-kettle-next';
+    img.alt = '';
+    img.width = 1014;
+    img.height = 782;
+    img.decoding = 'async';
+    img.setAttribute('aria-hidden', 'true');
+    img.sizes = '(max-width:700px) 40vw, 438px';
+    if (hs.dataset.kettleNextSrcset) img.srcset = hs.dataset.kettleNextSrcset;
+    img.src = hs.dataset.kettleNext;
+    kettle.insertAdjacentElement('afterend', img);
+    next = img;
+    var done = img.decode ? img.decode() : Promise.resolve();
+    done.then(function () {}, function () {});
+  }
+  function boot() {
+    arm();
+    if (reduce) return;
+    var started = false;
+    function later() {
+      if (started) return;
+      started = true;
+      loadNext();
+    }
+    try {
+      new PerformanceObserver(function (list) {
+        if (list.getEntries().length) later();
+      }).observe({ type: 'largest-contentful-paint', buffered: true });
+    } catch (e) {}
+    setTimeout(later, 1500);
+  }
+  if (plate && plate.decode) plate.decode().then(boot, boot);
+  else boot();
 })();

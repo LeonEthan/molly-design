@@ -47,12 +47,38 @@ describe('static model failure categories', () => {
     ['500 internal_server_error', 'transient'],
     ['429 too many requests', 'transient'],
     ['Connection error. ECONNRESET', 'unreachable'],
+    ['fetch failed', 'unreachable'],
+    ['TypeError: fetch failed', 'unreachable'],
+    ['Failed to fetch', 'unreachable'],
+    ['Connection error.', 'unreachable'],
+    ['Request timed out.', 'unreachable'],
+    ['ETIMEDOUT', 'unreachable'],
+    ['ENOTFOUND', 'unreachable'],
+    ['UND_ERR_CONNECT_TIMEOUT', 'unreachable'],
+    ['502 upstream network error', 'transient'],
+    ['504 upstream request timed out', 'transient'],
+    ['504 gateway timeout', 'transient'],
+    ['Provider returned error: 502 upstream connection error', 'transient'],
+    ['network topology unsupported', 'unknown'],
+    ['timeout configuration unsupported', 'transient'],
     ['opaque response failure', 'unknown'],
     ['529', 'unknown'],
     ['ECONNRESET', 'unreachable'],
   ])('classifies %s as %s', (errorMessage, category) => {
     const message = fauxAssistantMessage('', { stopReason: 'error', errorMessage });
     expect(classifyModelError(message, 200000)).toBe(category);
+  });
+
+  it('preserves the baseline authentication diagnostic without provider details', () => {
+    const message = fauxAssistantMessage('', {
+      stopReason: 'error',
+      errorMessage: '401 SYNTHETIC_SECRET',
+    });
+    expect(modelErrorDiagnostic(message)).toEqual({
+      category: 'auth',
+      details:
+        'The model service rejected the credentials. Your conversation and draft files are preserved.',
+    });
   });
 
   it('uses unknown when the assistant failure is missing', () => {

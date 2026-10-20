@@ -14,7 +14,7 @@ const MODEL_REQUEST_FAILURE_COPY = {
   },
   model_auth_rejected: {
     titleKey: 'sessions.systemNotices.chatFailed.modelAuthRejected',
-    title: 'The key was rejected. Check the key and try again.',
+    title: "The model connection's key was rejected",
     actionKey: 'sessions.systemNotices.chatFailed.modelAuthRejectedAction',
     action: 'Check the connection in Settings.',
   },

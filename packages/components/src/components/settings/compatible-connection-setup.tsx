@@ -2,7 +2,6 @@ import { useTranslation } from 'react-i18next';
 import {
   COMPATIBLE_CONNECTION_PRESETS,
   CompatibleConnectionApiSchema,
-  isCompatibleConnectionApiShipped,
   type CompatibleConnectionApi,
   type CompatibleConnectionPreset,
 } from '@molly/shared/embedded-harness';
@@ -33,10 +32,7 @@ export function CompatibleConnectionSetup({
   const { t } = useTranslation();
   const connectionTypeOptions = CompatibleConnectionApiSchema.options.map((api) => ({
     value: api,
-    label: isCompatibleConnectionApiShipped(api)
-      ? t(API_LABEL_KEYS[api])
-      : t('settings.models.compatibleApi.unavailable', { name: t(API_LABEL_KEYS[api]) }),
-    disabled: !isCompatibleConnectionApiShipped(api),
+    label: t(API_LABEL_KEYS[api]),
   }));
   return (
     <div className="space-y-4">
@@ -48,9 +44,7 @@ export function CompatibleConnectionSetup({
           value={compatibleApi}
           disabled={busy}
           options={connectionTypeOptions}
-          onChange={(value) => {
-            if (isCompatibleConnectionApiShipped(value)) onApiChange(value);
-          }}
+          onChange={onApiChange}
         />
         <p className="text-xs text-muted-foreground">{t('settings.models.compatibleApi.hint')}</p>
       </div>

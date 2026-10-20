@@ -65,6 +65,10 @@ for (const compatibleApi of ['openai-responses', 'google-generative-ai']) {
       google ? input.apiKey : `Bearer ${input.apiKey}`
     )
     assert.equal(request.redirect, 'error')
+    assert.equal(
+      google ? request.body.generationConfig.maxOutputTokens : request.body.max_output_tokens,
+      512
+    )
     if (!google) assert.equal(request.body.model, input.modelId)
     assert.deepEqual(
       await checkModelConnection({}, input, async () =>
@@ -79,7 +83,7 @@ for (const compatibleApi of ['openai-responses', 'google-generative-ai']) {
       { ok: false, reason: 'invalid_response' }
     )
   })
-  void test(`${compatibleApi} rejects thought-only and incomplete model replies`, async () => {
+  void test(`${compatibleApi} rejects thought-only, failed and unsettled model replies`, async () => {
     const rejected = google
       ? [
           {
@@ -91,12 +95,44 @@ for (const compatibleApi of ['openai-responses', 'google-generative-ai']) {
             ]
           },
           {
-            candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: 'Partial' }] } }]
+            candidates: [
+              {
+                finishReason: 'MAX_TOKENS',
+                content: { parts: [{ thought: true, text: 'Private thinking' }] }
+              }
+            ]
+          },
+          {
+            candidates: [{ finishReason: 'SAFETY', content: { parts: [{ text: 'Partial' }] } }]
           },
           { candidates: [{ content: { parts: [{ text: 'No settlement' }] } }] }
         ]
       : [
-          { ...reply, status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' } },
+          { ...reply, status: 'incomplete', incomplete_details: { reason: 'content_filter' } },
+          { ...reply, status: 'incomplete' },
+          {
+            status: 'incomplete',
+            incomplete_details: { reason: 'max_output_tokens' },
+            output: [
+              {
+                type: 'reasoning',
+                status: 'completed',
+                content: [{ type: 'output_text', text: 'Private thinking' }]
+              }
+            ]
+          },
+          {
+            ...reply,
+            status: 'incomplete',
+            incomplete_details: { reason: 'max_output_tokens' },
+            output: []
+          },
+          {
+            ...reply,
+            status: 'incomplete',
+            incomplete_details: { reason: 'max_output_tokens' },
+            error: { message: 'SYNTHETIC_SECRET' }
+          },
           { ...reply, status: 'in_progress' },
           { ...reply, status: 'failed', error: { message: 'SYNTHETIC_SECRET' } },
           {
@@ -141,6 +177,60 @@ for (const compatibleApi of ['openai-responses', 'google-generative-ai']) {
         ),
         { ok: true }
       )
+  })
+  void test(`${compatibleApi} accepts visible text when the probe exhausts its token budget`, async () => {
+    const limited = google
+      ? {
+          candidates: [
+            {
+              finishReason: 'MAX_TOKENS',
+              content: {
+                parts: [{ thought: true, text: 'Private thinking' }, { text: 'Visible answer' }]
+              }
+            }
+          ]
+        }
+      : {
+          status: 'incomplete',
+          incomplete_details: { reason: 'max_output_tokens' },
+          output: [
+            {
+              type: 'message',
+              status: 'incomplete',
+              content: [{ type: 'output_text', text: 'Visible answer' }]
+            }
+          ]
+        }
+    assert.deepEqual(await checkModelConnection({}, input, async () => Response.json(limited)), {
+      ok: true
+    })
+    if (!google) {
+      limited.output[0].status = 'completed'
+      assert.deepEqual(await checkModelConnection({}, input, async () => Response.json(limited)), {
+        ok: true
+      })
+      limited.output[0].status = 'in_progress'
+      assert.deepEqual(await checkModelConnection({}, input, async () => Response.json(limited)), {
+        ok: false,
+        reason: 'invalid_response'
+      })
+    }
+    const empty = google
+      ? { candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '  ' }] } }] }
+      : {
+          ...limited,
+          output: [
+            {
+              type: 'message',
+              status: 'incomplete',
+              content: [{ type: 'output_text', text: '  ' }]
+            }
+          ]
+        }
+    assert.deepEqual(await checkModelConnection({}, input, async () => Response.json(empty)), {
+      ok: false,
+      reason: 'invalid_response'
+    })
   })
   for (const [status, reason] of [
     [401, 'key_rejected'],

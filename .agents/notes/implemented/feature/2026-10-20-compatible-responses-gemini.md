@@ -29,9 +29,11 @@ Normalization happens before the host freezes the selected model's resolved base
 The existing exact model/endpoint and provider-configuration guards stay intact.
 Managed ACP admission tests complete actual runs for trailing-slash and repeated-path
 Responses/Gemini URLs; another host or another path is refused before inference.
-Response checks require visible text after settlement: a Gemini STOP candidate with
-non-thought text, or a completed Responses response/message containing output_text.
-Thought-only replies, incomplete/failed responses and unfinished messages do not pass.
+Response checks require visible text: a Gemini STOP or MAX_TOKENS candidate with
+non-thought text, or Responses output_text in a completed message. A Responses
+incomplete result passes only for incomplete_details.reason=max_output_tokens,
+with a completed or incomplete message containing visible output_text. Failed,
+reasoning-only, in-progress and otherwise incomplete replies do not pass.
 
 Shared base normalization removes trailing slashes, repeated adjacent API-version
 segments and pasted Responses/models resource suffixes before the existing consumers
@@ -48,8 +50,8 @@ callers remain compatible; the two new protocols require it at execution.
 
 ## Frontend
 
-The picker reads the shipped list, so all four types enable with their exact labels once
-shared ships them; the gated-entry mechanism stays for future protocols. The editor keeps
+The picker exposes all four shipped types with their exact labels. The obsolete
+unavailable-type branch and translation keys are removed. The editor keeps
 a typed key across type switches, while applying a preset still clears it — the preset
 changes the destination, and changed destinations require renewed credential consent.
 The two new protocols never auto-check on settle: the possibly billed model-response POST
@@ -111,7 +113,8 @@ protocol cases, 64 managed-host cases, 64 redirect cases and two managed native
 redirect cases. The selected shared suites passed 46 tests and Electron
 connection/discovery/vault services passed 94. Eight managed-host cases cover
 normalized-URL admission and alternate-endpoint refusal;
-response checks reject thought-only and incomplete replies. Shared, harness and
+response checks reject thought-only and unfinished replies (the output-token-limit
+visible-text exception was added in the engineering review correction below). Shared, harness and
 Electron main type checks, public-boundary checks and docs checks passed.
 Desktop/provider acceptance remains with integration; fixture coverage alone does
 not establish a live endpoint or visual acceptance.
@@ -174,7 +177,6 @@ smoke validates the packaged worker, not live Responses/Gemini endpoint acceptan
 mem0ai still resolves Google 1.52.0. The public-boundary check passed after the
 manifest/lock change.
 
-
 ## Final integration verification
 
 Integrated main `f2352db6` before final validation. Frozen install, root formatting,
@@ -183,3 +185,51 @@ Integrated main `f2352db6` before final validation. Frozen install, root formatt
 reviews reported no remaining P0/P1 findings. Image connection files, picker,
 settings drawer, updater, and website are outside the diff. The primary checkout
 remained clean. Live-provider and cloud Linux limits above still apply.
+
+## Engineering review corrections before rebase
+
+The user authorized the backend corrections from [PR #202 engineering review](https://github.com/LeonEthan/molly-design/pull/202#pullrequestreview-5583137605).
+The 512-token explicit check remains one unretried request. Normal visible output
+passes, and output-budget exhaustion also passes only with visible text:
+Responses incomplete/max_output_tokens or Gemini MAX_TOKENS. This is connection
+verification, not a change to chat completion receipts or memory extraction.
+
+Gemini discovery reuses the existing request builder and parser, adds pageSize=1000,
+and aggregates/deduplicates pages using the opaque nextPageToken only as an encoded
+query parameter on the original models endpoint. Google's [models.list contract](https://ai.google.dev/api/models#method:-models.list)
+defines pageSize/pageToken and caps a page at 1,000 models. Every page preserves the
+credential destination and redirect:error. One 15-second abort signal and 2 MiB
+response budget cover the entire action; the 2,000-model limit stays, while 100-page
+and 4,096-character token limits plus repeated-token rejection bound continuation.
+A later-page HTTP, transport or parse failure returns an error, without partial
+success or automatic retry. Other protocols retain one GET and their existing
+body-read error mapping; continuation metadata is ignored.
+
+Unreachable classification now requires transport-specific fetch/SDK/system error
+signals rather than bare network/timeout text. Upstream 502/504 failures retain
+Pi's existing transient classification. The harness authentication detail is
+restored exactly from origin/main, including the conversation/draft preservation
+sentence; no other product copy changes belong to this backend correction.
+
+Deterministic regressions first reproduced the visible-text false negatives,
+pagination gaps and diagnostic/copy defects. After the fixes, 107 Electron
+connection/discovery/vault tests and 213 focused harness tests passed, including
+the native protocol, redirect, managed extraction/compaction and host admission
+suites. Harness and Electron main typechecks passed. Live-provider and desktop
+acceptance limits remain as recorded above; these corrections make no new manual
+acceptance claim. No rebase, commit, push or GitHub comment was performed.
+
+The pagination scope follow-up passed 32 discovery tests, including six explicit
+regressions for unchanged one-GET behavior and body-read failure mapping in
+Anthropic Messages, Chat Completions and Responses. The owning README now states
+the Gemini pagination exception to one-GET discovery.
+
+The same review correction restores the global key hint and authentication title to
+main, removes the two incidental comments and build-script formatting changes, and
+shares first non-empty trimmed model selection between row and form checks. Focused
+frontend validation passed 79 tests, the component typecheck and i18n checks. No
+additional UI/copy change or rebase is included.
+
+Final engineering-revision validation: root `pnpm check` and `pnpm format` passed;
+requested main-style build-script formatting was preserved, and unrelated formatter
+changes were excluded. No rebase was performed.

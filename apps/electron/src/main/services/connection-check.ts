@@ -199,18 +199,31 @@ async function checkCompatibleModelResponse(
   try {
     if (text === null) return { ok: false, reason: 'invalid_response' }
     const data = JSON.parse(text)
-    if (!google && (data.status !== 'completed' || data.error || data.incomplete_details))
+    const outputLimited =
+      !google &&
+      data.status === 'incomplete' &&
+      data.incomplete_details?.reason === 'max_output_tokens'
+    if (
+      !google &&
+      (data.error ||
+        (data.status !== 'completed' && !outputLimited) ||
+        (data.status === 'completed' && data.incomplete_details))
+    )
       return { ok: false, reason: 'invalid_response' }
     const parts = google
       ? data.candidates
-          ?.filter((candidate: { finishReason?: unknown }) => candidate.finishReason === 'STOP')
+          ?.filter(
+            (candidate: { finishReason?: unknown }) =>
+              candidate.finishReason === 'STOP' || candidate.finishReason === 'MAX_TOKENS'
+          )
           .flatMap(
             (candidate: { content?: { parts?: unknown[] } }) => candidate.content?.parts ?? []
           )
       : data.output
           ?.filter(
             (item: { type?: unknown; status?: unknown }) =>
-              item.type === 'message' && item.status === 'completed'
+              item.type === 'message' &&
+              (item.status === 'completed' || (outputLimited && item.status === 'incomplete'))
           )
           .flatMap((item: { content?: unknown[] }) => item.content ?? [])
     const responded =

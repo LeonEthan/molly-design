@@ -7,7 +7,9 @@ import { build } from 'esbuild';
 
 const cliRoot = fileURLToPath(new URL('..', import.meta.url));
 const harnessRoot = path.resolve(cliRoot, '../../packages/harness-pi');
-const harnessManifest = JSON.parse(fs.readFileSync(path.join(harnessRoot, 'package.json'), 'utf8'));
+const harnessManifest = JSON.parse(
+  fs.readFileSync(path.join(harnessRoot, 'package.json'), 'utf8')
+);
 // The worker bundle inlines its own code and protocol libraries. Pi, its peers and every
 // unmodified Pi package stay ordinary staged packages, resolved through the lockfile.
 const bundled = ['@agentclientprotocol/sdk', '@molly/shared', 'acp-extension-core', 'zod'];
@@ -209,7 +211,10 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
     path.join(directory, 'runtime-manifest.json'),
     `${JSON.stringify(manifest, null, 2)}\n`
   );
-  fs.writeFileSync(path.join(output, 'molly-pi-agent.js'), "await import('./harness/entry.js');\n");
+  fs.writeFileSync(
+    path.join(output, 'molly-pi-agent.js'),
+    "await import('./harness/entry.js');\n"
+  );
   console.log(
     `Embedded Pi ${manifest.engineVersion}: ${packages.length} locked packages, ${files.length} resources (${outputName})`
   );

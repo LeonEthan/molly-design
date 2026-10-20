@@ -42,10 +42,7 @@ describe('getChatFailedDiagnosticCopy', () => {
     }
   });
 
-  it('uses the same 401/404/network copy as the connection check (#181)', () => {
-    expect(getChatFailedDiagnosticCopy('model_auth_rejected')?.title).toBe(
-      en['settings.check.modelFailures.key_rejected']
-    );
+  it('uses the same 404/network copy as the connection check (#181)', () => {
     expect(getChatFailedDiagnosticCopy('model_endpoint_not_found')?.title).toBe(
       en['settings.check.failures.not_found']
     );

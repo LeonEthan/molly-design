@@ -31,10 +31,10 @@ Preserve historical catalog fields when editing unrelated values.
   Clear covers all Molly website data. Keep takeover/MFA and native surface coverage.
 - Compatible models declare bounded row metadata; explain protocol, capabilities and missing
   tools. Saving probes nothing, selects no model, estimates no price. Native presets use SDK
-  catalogs. Discovery sends one `GET /models` to the typed/stored destination; filters non-chat
+  catalogs. Discovery uses `GET /models` at the typed/stored destination (Gemini paginates); filters non-chat
   rows, fills drafts from responses/packaged models.dev; saved declarations win. Reset discovery
   and discovered drafts on endpoint/key changes; reject late results. Manual rows cover unlistable
-  services. Responses/Gemini require keys; other types allow keyless use. Omission retains keys. Changed destinations
+  services. Only Responses/Gemini require keys. Omission retains keys. Changed destinations
   require explicit input.
 - Bundled capability inventory describes shipped resources and conditional activation,
   not live-session enablement. Failed reads stay unknown; no default plugin claim,
@@ -50,8 +50,8 @@ Preserve historical catalog fields when editing unrelated values.
   endpoints. On/Off saves immediately; credential forms keep Save. Confirm deletion.
   OpenAI sign-out retains a disabled reconnectable row; refresh snapshots, block checks/enabling,
   report unconfirmed revocation. Delete forgets its registration.
-- Responses/Gemini checks are explicit, possibly billed, and require visible model text.
-  Other checks settle automatically and validate keys/list models for free, without
+- Responses/Gemini checks are explicit, may cost, and require visible text.
+  Other checks auto-settle and validate keys/list models for free, without
   model or DashScope requests. Typed keys target the shown
   destination; saved keys target their saved provider/endpoint. Native connections offer
   All or a chosen `models` list under Advanced with the endpoint and name; listed

@@ -1792,6 +1792,23 @@ function compatibleConnection(
   };
 }
 
+const connectionModel = (
+  modelId: string
+): NonNullable<ModelConnection['customModels']>[number] => ({
+  modelId,
+  name: 'Synthetic',
+  input: ['text'],
+  contextWindow: 32768,
+  maxTokens: 4096,
+  thinking: ['off'],
+  toolCalls: true,
+  maxTokensField: 'max_tokens',
+});
+
+const CHECK_MODEL_ID = 'vendor/selected';
+const FORM_CHECK_MODELS = [connectionModel('   '), connectionModel(`  ${CHECK_MODEL_ID}  `)];
+const CHECK_MODELS = [connectionModel(`  ${CHECK_MODEL_ID}  `), connectionModel('vendor/other')];
+
 const typeRadio = (label: string) =>
   [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
     (node) => node.textContent === label
@@ -1927,7 +1944,7 @@ describe('compatible connection types (#181)', () => {
   it('shows the exact masked-key helper in both languages', async () => {
     await render(async () => undefined, compatibleConnection('openai-responses'));
     expect(host.querySelector('input[type=password]')).not.toBeNull();
-    expect(host.textContent).toContain('Your key is stored only on your computer.');
+    expect(host.textContent).toContain(en['settings.models.keyLocalHint']);
     await initI18n('zh_CN');
     await act(async () => root.unmount());
     host.remove();
@@ -1935,7 +1952,7 @@ describe('compatible connection types (#181)', () => {
     document.body.append(host);
     root = createRoot(host);
     await render(async () => undefined, compatibleConnection('google-generative-ai'));
-    expect(host.textContent).toContain('Key 只保存在你的电脑上。');
+    expect(host.textContent).toContain(zh['settings.models.keyLocalHint']);
     expect(host.textContent).not.toContain('Mac');
   });
 });
@@ -1966,7 +1983,6 @@ describe('saved connection type round trip (#190)', () => {
       expect(connectionIpc.save.mock.calls.length).toBe(savesBefore + 1);
       const saved = connectionIpc.save.mock.calls.at(-1)![0] as SaveModelConnection;
       expect(saved.compatibleApi).toBe(api);
-      // Relaunch: a fresh mount reads the saved snapshot and shows the same type.
       await act(async () => root.unmount());
       host.remove();
       host = document.createElement('div');
@@ -2111,8 +2127,40 @@ describe('model-response connection check (#181)', () => {
     ).toBe(false);
   });
 
-  it('checks a saved Gemini row with its first declared model and reports the response', async () => {
-    const connection = compatibleConnection('google-generative-ai');
+  it('selects the first non-empty trimmed model ID for the explicit form check', async () => {
+    const connection = compatibleConnection('openai-responses', {
+      customModels: FORM_CHECK_MODELS,
+    });
+    const requests: CheckModelConnection[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          stored: connection,
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onCheck: async (input) => {
+            requests.push(input);
+            return { ok: true };
+          },
+        })
+      )
+    );
+    await clickCheck();
+    expect(requests).toEqual([
+      {
+        providerPresetId: 'openai-compatible',
+        baseUrl: connection.baseUrl,
+        compatibleApi: 'openai-responses',
+        modelId: CHECK_MODEL_ID,
+        stored: { id: connection.id, revision: connection.revision },
+      },
+    ]);
+  });
+
+  it('selects the same first non-empty trimmed model ID for a saved row check', async () => {
+    const connection = compatibleConnection('google-generative-ai', {
+      customModels: CHECK_MODELS,
+    });
     connectionIpc.getSnapshot.mockResolvedValue({ connections: [connection] });
     connectionIpc.check.mockReset();
     connectionIpc.check.mockResolvedValueOnce({ ok: false, reason: 'unsupported', status: 404 });
@@ -2135,7 +2183,7 @@ describe('model-response connection check (#181)', () => {
       providerPresetId: 'openai-compatible',
       baseUrl: connection.baseUrl,
       compatibleApi: 'google-generative-ai',
-      modelId: 'vendor/custom',
+      modelId: CHECK_MODEL_ID,
       stored: { id: connection.id, revision: connection.revision },
     });
     expect(host.textContent).toContain(en['settings.check.badge.not_found']);

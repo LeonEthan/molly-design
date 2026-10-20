@@ -166,8 +166,13 @@ reported distinctly. Native usage is projected to Core usage notifications
 ([usage.ts](src/usage.ts)).
 
 For the compatible Responses/Gemini types, Settings checks the selected model with one
-unretried generation request; it may incur provider usage. Model discovery remains a
-separate GET request and does not establish that the selected model can respond.
+unretried generation request capped at 512 output tokens; it may incur provider usage.
+Visible text at normal completion or an output-token-limit stop proves a response;
+failed or reasoning-only replies do not. Model discovery remains separate and does
+not establish that the selected model can respond. Other protocols retain one GET.
+Gemini discovery requests pageSize=1000 and follows opaque
+page tokens on the same endpoint with redirects refused, one 15-second abort signal,
+a 2 MiB aggregate response budget, 2,000 models and at most 100 pages.
 
 Final managed model errors use the static ACP diagnostic `harness_model_request_failed`
 with a category: context overflow, authentication, quota, content policy, invalid request,

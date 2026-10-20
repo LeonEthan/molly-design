@@ -28,7 +28,7 @@ export function buildCompatibleListModelsRequest(
   const url = `${base}/models`
   if (api === 'google-generative-ai') {
     if (apiKey) headers['x-goog-api-key'] = apiKey
-    return { url, headers }
+    return { url: `${url}?pageSize=1000`, headers }
   }
   if (apiKey) headers.authorization = `Bearer ${apiKey}`
   return { url, headers }

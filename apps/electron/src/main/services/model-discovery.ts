@@ -11,6 +11,8 @@ import type { ModelConnectionStore } from './model-connection-store'
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 const MAX_DISCOVERED_MODELS = 2_000
+const MAX_DISCOVERY_PAGES = 100
+const MAX_PAGE_TOKEN_LENGTH = 4096
 const MAX_MODEL_ID = 200
 const MAX_MODEL_NAME = 300
 const MAX_TOKEN_LIMIT = 16_777_216
@@ -121,30 +123,27 @@ export function parseDiscoveredModels(
   return { models, filteredNonChat }
 }
 
-async function readBounded(response: Response): Promise<string | null> {
+async function readBounded(
+  response: Response,
+  maxBytes: number
+): Promise<{ text: string; bytes: number } | null> {
   const reader = response.body?.getReader()
-  if (!reader) return ''
+  if (!reader) return { text: '', bytes: 0 }
   const chunks: Uint8Array[] = []
   let size = 0
   for (;;) {
     const { value, done } = await reader.read()
     if (done) break
     size += value.byteLength
-    if (size > MAX_RESPONSE_BYTES) {
+    if (size > maxBytes) {
       await reader.cancel()
       return null
     }
     chunks.push(value)
   }
-  return Buffer.concat(chunks).toString('utf8')
+  return { text: Buffer.concat(chunks).toString('utf8'), bytes: size }
 }
 
-/**
- * Explicit settings action: one unretired `GET {base}/models` request against the typed
- * or stored destination. Unlike the free key check, discovery tolerates missing auth for
- * local servers (Ollama/LM Studio ignore the header) and returns typed metadata, not a
- * verdict on the key. Upstream bodies never leave main.
- */
 export async function discoverModelConnection(
   store: ModelConnectionStore,
   input: DiscoverModelConnection,
@@ -165,30 +164,53 @@ export async function discoverModelConnection(
   )
     return { ok: false, reason: 'needs_key' }
   const { url, headers } = buildCompatibleListModelsRequest(input.baseUrl, compatibleApi, apiKey)
-  let response: Response
-  try {
-    response = await transport(url, {
-      headers,
-      redirect: 'error',
-      signal: AbortSignal.timeout(15_000)
-    })
-  } catch {
-    return { ok: false, reason: 'unreachable' }
+  const paginated = compatibleApi === 'google-generative-ai'
+  const signal = AbortSignal.timeout(15_000)
+  const models = new Map<string, DiscoveredModel>()
+  const tokens = new Set<string>()
+  let filteredNonChat = 0
+  let remainingBytes = MAX_RESPONSE_BYTES
+  let nextUrl = url
+  for (let page = 0; page < MAX_DISCOVERY_PAGES; page += 1) {
+    let response: Response
+    try {
+      signal.throwIfAborted()
+      response = await transport(nextUrl, { headers, redirect: 'error', signal })
+    } catch {
+      return { ok: false, reason: 'unreachable' }
+    }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined)
+      const status = response.status
+      if (status === 404 || status === 405 || status === 501)
+        return { ok: false, reason: 'unsupported', status }
+      return { ok: false, reason: 'http_error', status }
+    }
+    try {
+      const body = await readBounded(response, remainingBytes)
+      if (paginated) signal.throwIfAborted()
+      if (body === null) return { ok: false, reason: 'invalid_response' }
+      remainingBytes -= body.bytes
+      const data = JSON.parse(body.text)
+      const parsed = parseDiscoveredModels(data, compatibleApi)
+      if (!parsed) return { ok: false, reason: 'invalid_response' }
+      filteredNonChat += parsed.filteredNonChat
+      for (const model of parsed.models) {
+        if (!models.has(model.modelId)) models.set(model.modelId, model)
+        if (models.size >= MAX_DISCOVERED_MODELS) break
+      }
+      const token = paginated ? data.nextPageToken : undefined
+      if (token === undefined || token === '' || models.size >= MAX_DISCOVERED_MODELS)
+        return { ok: true, models: [...models.values()], filteredNonChat }
+      if (typeof token !== 'string' || token.length > MAX_PAGE_TOKEN_LENGTH || tokens.has(token))
+        return { ok: false, reason: 'invalid_response' }
+      tokens.add(token)
+      const next = new URL(url)
+      next.searchParams.set('pageToken', token)
+      nextUrl = next.toString()
+    } catch {
+      return { ok: false, reason: paginated && signal.aborted ? 'unreachable' : 'invalid_response' }
+    }
   }
-  if (!response.ok) {
-    await response.body?.cancel().catch(() => undefined)
-    const status = response.status
-    if (status === 404 || status === 405 || status === 501)
-      return { ok: false, reason: 'unsupported', status }
-    return { ok: false, reason: 'http_error', status }
-  }
-  try {
-    const text = await readBounded(response)
-    if (text === null) return { ok: false, reason: 'invalid_response' }
-    const parsed = parseDiscoveredModels(JSON.parse(text), compatibleApi)
-    if (!parsed) return { ok: false, reason: 'invalid_response' }
-    return { ok: true, models: parsed.models, filteredNonChat: parsed.filteredNonChat }
-  } catch {
-    return { ok: false, reason: 'invalid_response' }
-  }
+  return { ok: false, reason: 'invalid_response' }
 }

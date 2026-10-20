@@ -138,6 +138,11 @@ const withoutTrailingSlash = (url: string) => url.trim().replace(/\/+$/, '');
 const isDefaultEndpoint = (endpoint: string, preset: ProviderPresetId | ''): boolean =>
   preset !== '' && isProviderPresetDefaultEndpoint(preset, endpoint);
 
+const firstCheckableModelId = (
+  models: readonly { modelId: string }[] | undefined
+): string | undefined =>
+  models?.find((model) => model.modelId.trim().length > 0)?.modelId.trim();
+
 export type ConnectionIdentityDraft = {
   provider: ProviderPresetId | '';
   name: string;
@@ -429,9 +434,7 @@ export function ModelConnectionForm({
   const keylessInput =
     provider === 'openai-compatible' && !protocolRequiresKey && (!stored || useNoKey);
   const missingRequiredKey = requiresKey && !typedKey && !keylessInput;
-  const checkModelId = modelResponseCheck
-    ? customModels.find((model) => model.modelId.trim().length > 0)?.modelId.trim()
-    : undefined;
+  const checkModelId = modelResponseCheck ? firstCheckableModelId(customModels) : undefined;
   const checkRequest = useMemo<CheckModelConnection | null>(() => {
     if (provider === '' || configurationIssue || !ModelEndpointSchema.safeParse(endpoint).success)
       return null;
@@ -1206,15 +1209,14 @@ export function ModelConnectionSetting({
     const modelResponse =
       connection.providerPresetId === 'openai-compatible' &&
       isModelResponseCheckApi(connection.compatibleApi);
+    const modelId = modelResponse ? firstCheckableModelId(connection.customModels) : undefined;
     void onCheck({
       providerPresetId: connection.providerPresetId,
       baseUrl: connection.baseUrl,
       ...(connection.providerPresetId === 'openai-compatible'
         ? { compatibleApi: connection.compatibleApi }
         : {}),
-      ...(modelResponse && connection.customModels?.[0]
-        ? { modelId: connection.customModels[0].modelId }
-        : {}),
+      ...(modelId ? { modelId } : {}),
       stored: { id: connection.id, revision: connection.revision },
     }).then(
       (result) => recordCheck(connection, { phase: 'done', result }),

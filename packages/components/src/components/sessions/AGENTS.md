@@ -78,12 +78,15 @@ Files: [README.md](README.md). Scopes:
 
 ## Run config
 
-- Every click shows Agent, Reasoning, and Model rows, even with one option
-  each. Provider scopes Model only for several connections, keyed by
-  connection id. Plan/Fast/interaction/extra selectors stay out. Fast is
-  retired from recents. Keep opaque model ids and model-specific reasoning.
-  Roles stay retired: no selection, creation, prompt prefix, or replay.
-  Rationale: [three-level picker](../../../../../.agents/notes/implemented/bug-fix/2026-10-19-model-picker-three-levels.md).
+- Every click shows Provider, Model, and Reasoning, even with one option
+  each. Model lists that provider's models; Reasoning lists that model's
+  levels. Default is the first provider's first model and `high`, else its
+  first non-off level. `off` opens Settings with no provider, and a model that
+  publishes only `off` shows Off.
+  No Agent chip. Plan/Fast selectors stay out. Fast is retired from recents.
+  Opaque model ids. Roles stay retired: no selection, creation, prompt
+  prefix, or replay.
+  Rationale: [provider hierarchy](../../../../../.agents/notes/implemented/bug-fix/2026-10-20-composer-provider-hierarchy.md).
 - New composer Turns freeze `agentRoleId: null`; historical Session provenance
   stays untouched. Child drafts inherit explicit run config, not Role identity.
 - Derive selection with `useAcpSessionConfigSelectionState`; never store or

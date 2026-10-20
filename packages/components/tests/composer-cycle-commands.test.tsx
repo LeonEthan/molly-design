@@ -3,7 +3,9 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { encodeMollyModelOption } from '@molly/shared/embedded-harness';
 import { useComposerCycleCommands } from '../src/hooks/use-composer-cycle-commands';
+import { useComposerProviderCycle } from '../src/hooks/use-composer-provider-cycle';
 import { commands } from '../src/lib/commands';
 
 vi.mock('react-i18next', () => ({
@@ -118,6 +120,56 @@ describe('composer cycle command ownership', () => {
     expect(first.mode).toHaveBeenCalledTimes(1);
     expect(first.model).toHaveBeenCalledTimes(1);
     expect(first.thinkEffort).toHaveBeenCalledTimes(1);
+  });
+
+  it('cycles the visible connection provider instead of an agent id', () => {
+    const studio = encodeMollyModelOption('studio', 'aurora/1');
+    const review = encodeMollyModelOption('review', 'nimbus/2');
+    const onModel = vi.fn();
+    const onConfig = vi.fn();
+    function Probe() {
+      const provider = useComposerProviderCycle({
+        modelOptions: [
+          { value: studio, label: 'Aurora', group: 'Studio' },
+          { value: review, label: 'Nimbus', group: 'Review' },
+        ],
+        selectedModelId: studio,
+        configOptionSelectors: [
+          {
+            configId: 'reasoning_effort',
+            label: 'Reasoning',
+            type: 'select',
+            category: 'thought_level',
+            currentValue: 'high',
+            options: [
+              { value: 'high', label: 'High' },
+              { value: 'max', label: 'Max' },
+            ],
+          },
+        ],
+        configOptionValues: { reasoning_effort: 'high' },
+        modelReasoningEfforts: {
+          [studio]: ['high'],
+          [review]: ['max'],
+        },
+        onModelChange: onModel,
+        onConfigOptionChange: (configId, value) => onConfig(configId, value),
+      });
+      useComposerCycleCommands({
+        enabled: true,
+        provider,
+        mode: null,
+        model: null,
+        thinkEffort: null,
+      });
+      return null;
+    }
+    act(() => {
+      root.render(<Probe />);
+    });
+    expect(commands.execute('session.cycleProvider')).toBe(true);
+    expect(onModel).toHaveBeenCalledWith(review);
+    expect(onConfig).toHaveBeenCalledWith('reasoning_effort', 'max');
   });
 
   it('lets a custom mode binding run outside the composer while keeping default Shift+Tab scoped', () => {

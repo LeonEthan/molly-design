@@ -46,6 +46,7 @@ import {
 } from '@/hooks/use-acp-session-config-selection';
 import { filterAcpSessionConfigOptionValues } from '@/lib/acp-session-config-selection';
 import { useComposerCycleCommands } from '@/hooks/use-composer-cycle-commands';
+import { useComposerProviderCycle } from '@/hooks/use-composer-provider-cycle';
 import { useSessionDoc } from '@/hooks/use-session-doc';
 import { useConversationTail, useConversationVersion } from '@/hooks/use-conversation-view';
 import { collectConversationConfigSources } from '@/lib/conversation-view';
@@ -256,15 +257,24 @@ export const DraftSessionChatInterface = memo(
       );
       const thinkEffortSelector = useMemo(
         () =>
-          configOptionSelectors.find(
+          resolvedConfigOptionSelectors.find(
             (selector): selector is AcpSelectConfigOptionSelector =>
               selector.type === 'select' && isThoughtLevelSelector(selector)
           ),
-        [configOptionSelectors]
+        [resolvedConfigOptionSelectors]
       );
       const thinkEffortCurrent = thinkEffortSelector
         ? configOptionValues[thinkEffortSelector.configId]
         : undefined;
+      const providerCycle = useComposerProviderCycle({
+        modelOptions,
+        selectedModelId,
+        configOptionSelectors: resolvedConfigOptionSelectors,
+        configOptionValues,
+        modelReasoningEfforts,
+        onModelChange: selectModel,
+        onConfigOptionChange: selectConfigOption,
+      });
       useComposerCycleCommands({
         enabled: commandsEnabled,
         mode: {
@@ -287,7 +297,7 @@ export const DraftSessionChatInterface = memo(
               onSelect: (value) => selectConfigOption(thinkEffortSelector.configId, value),
             }
           : null,
-        provider: null,
+        provider: providerCycle,
       });
 
       const transientSession = useMemo(
@@ -464,7 +474,8 @@ export const DraftSessionChatInterface = memo(
                 config: sessionAgentConfig,
               })
             }
-            configOptionSelectors={configOptionSelectors}
+            configOptionSelectors={resolvedConfigOptionSelectors}
+            modelReasoningEfforts={modelReasoningEfforts}
             configOptionValues={configOptionValues}
             availableCommands={availableCommands}
             onModeChange={selectMode}

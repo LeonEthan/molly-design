@@ -27,8 +27,7 @@ function canCycle(target: ComposerCycleTarget | null | undefined): boolean {
  * palette / dialogs / settings. Provider / model / think-effort cyclers ship without a default
  * binding and are rebindable from the keyboard settings page.
  *
- * Pass `null` for any target that isn't applicable in the current surface (e.g. the agent
- * provider can't change mid-conversation).
+ * Pass `null` for any target that isn't applicable in the current surface.
  */
 export function useComposerCycleCommands(params: {
   enabled?: boolean;

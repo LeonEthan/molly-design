@@ -1,4 +1,5 @@
 import type { AcpCapabilityAuthority, AcpConfigOptionValue } from '@molly/shared';
+import { MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
 import {
   isConfigOptionValueValid,
   isThoughtLevelSelector,
@@ -7,6 +8,10 @@ import {
   type AcpSelectorTarget,
 } from '@/components/shared/acp-selector-options';
 import type { AcpSessionSelectOption } from '@/components/shared/acp-session-select';
+import {
+  defaultComposerReasoning,
+  resolveComposerProviderHierarchy,
+} from '@/lib/composer-provider-hierarchy';
 
 /**
  * ACP run-config selection is a PURE DERIVATION, not reconciled state.
@@ -127,6 +132,52 @@ export type AcpSessionConfigSelectionInputs = {
   preferences: AcpSessionConfigPreferences;
   runtimePreferences?: AcpSessionConfigPreferences | null;
 };
+
+/**
+ * Unsent composer model/reasoning that still names the current turn.
+ * Applied onto the runtime baseline so a restart keeps the choice without an
+ * effect. A missing runtime config table stays missing: inventing one would
+ * make that table own every other option.
+ */
+export type ComposerProviderSelectionOverlay = {
+  modelId: string | null;
+  reasoningConfigId: string | null;
+  reasoning: string | null;
+};
+
+export function overlayComposerProviderSelection<T extends AcpSessionConfigPreferences>(
+  runtime: T | null | undefined,
+  stored: ComposerProviderSelectionOverlay | null
+): T | null {
+  if (!runtime || !stored) return runtime ?? null;
+  const modelId = stored.modelId ?? runtime.modelId;
+  const reasoningConfigId = stored.reasoningConfigId;
+  const reasoning = stored.reasoning;
+  const configOptionValues =
+    reasoningConfigId && reasoning !== null && runtime.configOptionValues
+      ? { ...runtime.configOptionValues, [reasoningConfigId]: reasoning }
+      : runtime.configOptionValues;
+  if (modelId === runtime.modelId && configOptionValues === runtime.configOptionValues) {
+    return runtime;
+  }
+  return { ...runtime, modelId, configOptionValues };
+}
+
+/** Model-category and thought-level selector edits that the canvas cache stores. */
+export function composerSelectionPatchForConfigOption(
+  selectors: readonly AcpConfigOptionSelector[],
+  configId: string,
+  value: AcpConfigOptionValue
+): { modelId?: string; reasoningConfigId?: string; reasoning?: string } | null {
+  if (typeof value !== 'string') return null;
+  const selector = selectors.find((entry) => entry.configId === configId);
+  if (!selector || selector.type !== 'select') return null;
+  if (selector.category === 'model') return { modelId: value };
+  if (isThoughtLevelSelector(selector)) {
+    return { reasoningConfigId: configId, reasoning: value };
+  }
+  return null;
+}
 
 export type AcpSessionConfigCandidates = {
   modeId: string | null;
@@ -251,7 +302,7 @@ export const resolveAcpSessionConfigSelection = (
     defaultModeId,
     capabilityAuthority
   );
-  const selectedModelId = resolveSelectField(
+  let selectedModelId = resolveSelectField(
     edits.model,
     runtimePreferences?.modelId,
     preferences.modelId,
@@ -309,6 +360,93 @@ export const resolveAcpSessionConfigSelection = (
       configOptionValues[configId] = isConfigOptionValueValid(selector, preferredValue)
         ? preferredValue
         : selector.currentValue;
+    }
+  }
+
+  const thoughtSelector = selectors.find(
+    (selector) => selector.type === 'select' && isThoughtLevelSelector(selector)
+  );
+  const thoughtConfigValue = thoughtSelector
+    ? configOptionValues[thoughtSelector.configId]
+    : undefined;
+  const modelConfigSelector = selectors.find(
+    (selector) => selector.type === 'select' && selector.category === 'model'
+  );
+  const rawModelConfigValue = modelConfigSelector
+    ? configOptionValues[modelConfigSelector.configId]
+    : undefined;
+  const hierarchy = resolveComposerProviderHierarchy({
+    modelOptions:
+      modelOptions.length > 0
+        ? modelOptions
+        : modelConfigSelector?.type === 'select'
+          ? modelConfigSelector.options
+          : [],
+    selectedModelId:
+      modelOptions.length > 0
+        ? selectedModelId
+        : typeof rawModelConfigValue === 'string'
+          ? rawModelConfigValue
+          : null,
+    reasoningValue: typeof thoughtConfigValue === 'string' ? thoughtConfigValue : null,
+    modelReasoningEfforts,
+    fallbackReasoningLevels:
+      thoughtSelector?.type === 'select' ? thoughtSelector.options.map((option) => option.value) : undefined,
+  });
+  if (hierarchy.mode === 'connections') {
+    if (hierarchy.modelId !== selectedModelId) {
+      selectedModelId = hierarchy.modelId;
+      if (target) {
+        selectors = normalizeReasoningEffortSelectors(selectors, {
+          cliType: target.cliType,
+          agentType: target.agentType,
+          modelReasoningEfforts,
+          selectedModelId,
+        });
+      }
+    }
+    const resolvedThought = selectors.find(
+      (selector) => selector.type === 'select' && isThoughtLevelSelector(selector)
+    );
+    if (resolvedThought?.type === 'select') {
+      const configId = resolvedThought.configId;
+      const runtimeOmittedKey =
+        runtimeTable != null &&
+        !(configId in runtimeTable) &&
+        !(configId in edits.configOptions);
+      if (!runtimeOmittedKey) {
+        const offered = resolvedThought.options.map((option) => option.value);
+        configOptionValues[configId] =
+          hierarchy.reasoning === 'off'
+            ? 'off'
+            : offered.includes(hierarchy.reasoning)
+              ? hierarchy.reasoning
+              : defaultComposerReasoning(offered, true);
+      }
+    }
+    const modelSelector = selectors.find(
+      (selector) => selector.type === 'select' && selector.category === 'model'
+    );
+    if (
+      modelOptions.length === 0 &&
+      modelSelector?.type === 'select' &&
+      hierarchy.modelId
+    ) {
+      const modelConfigId = modelSelector.configId;
+      const runtimeOmittedModelKey =
+        runtimeTable != null &&
+        !(modelConfigId in runtimeTable) &&
+        !(modelConfigId in edits.configOptions);
+      if (!runtimeOmittedModelKey) {
+        const storedModel = configOptionValues[modelConfigId];
+        const modelUnset =
+          storedModel === undefined ||
+          storedModel === MOLLY_UNSELECTED_MODEL ||
+          !modelSelector.options.some((option) => option.value === storedModel);
+        if (modelUnset) {
+          configOptionValues[modelConfigId] = hierarchy.modelId;
+        }
+      }
     }
   }
 

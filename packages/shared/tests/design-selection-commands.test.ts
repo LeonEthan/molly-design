@@ -12,6 +12,7 @@ import {
   DesignHighlightSchema,
   DesignNotesSchema,
   DESIGN_NOTES_MAX,
+  DESIGN_STROKE_POINTS_MAX,
   DESIGN_MARKED_IMAGE_MAX_BYTES,
   decodeDesignMarkedImage,
   diffDesignElements,
@@ -377,7 +378,7 @@ describe('element change feedback', () => {
     const region = {
       elementIds: ['photo'],
       prompt: 'Brighter',
-      region: { from: [0.1, 0.2], to: [0.6, 0.8] },
+      region: { kind: 'box', from: [0.1, 0.2], to: [0.6, 0.8] },
     };
     expect(DesignNotesSchema.parse([pin, region])).toEqual([pin, region]);
     for (const input of [
@@ -387,6 +388,36 @@ describe('element change feedback', () => {
       [{ ...region, elementIds: ['photo', 'headline'] }],
       [region, { ...region, elementIds: ['other'] }],
       [{ ...region, region: { from: [0.1, 0.2] } }],
+      [{ ...region, region: { kind: 'box', from: [0.1, 0.2] } }],
+    ])
+      expect(DesignNotesSchema.safeParse(input).success).toBe(false);
+  });
+  it('accepts a freehand stroke on one image and rejects out-of-range or oversized points', () => {
+    const stroke = {
+      elementIds: ['photo'],
+      prompt: 'Lighter here',
+      region: {
+        kind: 'stroke',
+        points: [
+          [0, 0],
+          [0.5, 0.25],
+          [1, 1],
+        ],
+      },
+    };
+    expect(DesignNotesSchema.parse([stroke])).toEqual([stroke]);
+    const oversized = Array.from({ length: DESIGN_STROKE_POINTS_MAX + 1 }, (_, index) => [
+      0,
+      index / DESIGN_STROKE_POINTS_MAX,
+    ]);
+    for (const input of [
+      [{ ...stroke, region: { kind: 'stroke', points: [[0, 0]] } }],
+      [{ ...stroke, region: { kind: 'stroke', points: [[0, 0], [1.01, 0.5]] } }],
+      [{ ...stroke, region: { kind: 'stroke', points: [[-0.1, 0], [0.5, 0.5]] } }],
+      [{ ...stroke, region: { kind: 'stroke', points: oversized } }],
+      [{ ...stroke, region: { kind: 'stroke', points: stroke.region.points, from: [0, 0] } }],
+      [{ ...stroke, elementIds: ['photo', 'headline'] }],
+      [stroke, { ...stroke, elementIds: ['other'] }],
     ])
       expect(DesignNotesSchema.safeParse(input).success).toBe(false);
   });

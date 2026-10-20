@@ -24,14 +24,17 @@ only `working` outlines carry over to new preview frames. A group may carry a
 notes-run badge number (`working` shows the number, `changed` a check); the pin
 hover preview uses an in-page-only `hover` tone that never crosses IPC. Note pins are
 screen-only state keyed by element id; requests carry only their epoch. The dock comment
-tool (`C`; `V` or Escape returns to select) turns plain clicks into pins and sets
-`body[data-commenting]`; it is never on while readonly. Unsent pins survive an in-session
+tool (`C`) turns plain clicks into pins and sets `body[data-commenting]`; the dock brush
+tool (`B`) sets `body[data-brushing]`. The two are mutually exclusive, `V` or Escape
+returns to select, and neither is on while readonly. Both keys are consumed in the
+capture phase so Bento's legacy `c` handler never sees them. Unsent pins survive an in-session
 frame reload: the shell snapshots them (`window.molly.notesSnapshot`) before the old frame is
 destroyed and restores them (`window.molly.restoreNotes`) into the next one. Restored pins
 are memory-only, prune missing targets, and are dropped on send, clear, or instance destruction.
-A drag on an image in commenting mode draws a box region in image-normalized coordinates
-(`image-regions.ts`) and sets the note's `region`; a click stores a `pin` at a point normalized to its
-element's box. Regions cover one image per read; `window.molly.marked(epoch)` returns the marked copy
+A drag on an image in comment mode draws a box region, and a drag on an image in brush mode
+draws a stroke region (ordered points thinned and resampled to `DESIGN_STROKE_POINTS_MAX`). Both use
+image-normalized coordinates (`image-regions.ts`) and set the note's `region`; a click stores a `pin`
+at a point normalized to its element's box. Regions cover one image per read; `window.molly.marked(epoch)` returns the marked copy
 of that image with the note numbers drawn on it. Requests carry only their epoch, and main reads the
 marked copy. Test visual changes with real
 Electron composite screenshots for each supported element kind in both themes.

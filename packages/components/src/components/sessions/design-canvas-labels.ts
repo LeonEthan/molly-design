@@ -76,6 +76,7 @@ export const DESIGN_CANVAS_LABEL_KEYS = [
   'canvasVersionConflict',
   'toolSelect',
   'toolComment',
+  'toolBrush',
   'toolUndo',
   'toolRedo',
   'toolText',

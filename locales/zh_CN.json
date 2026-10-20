@@ -2994,6 +2994,7 @@
   "design.canvasAgentBuilding": "Molly 正在构建 · 只读",
   "design.toolSelect": "选择",
   "design.toolComment": "批注 (C)",
+  "design.toolBrush": "画笔 (B)",
   "design.toolUndo": "撤销 (⌘Z)",
   "design.toolRedo": "重做 (⇧⌘Z)",
   "design.toolText": "文本 (T)",

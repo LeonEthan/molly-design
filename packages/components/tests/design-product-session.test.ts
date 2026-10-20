@@ -145,6 +145,85 @@ it('keeps Bento legacy comment mode off when C, repeated C, V or Escape reach th
   window.dispatchEvent(new Event('pagehide'));
 });
 
+it('toggles the brush from the dock and B, keeps Bento from seeing B, and never while readonly', async () => {
+  const seen: string[] = [];
+  const bento = (event: KeyboardEvent) => seen.push(event.key.toLowerCase());
+  document.addEventListener('keydown', bento);
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  const ready = new Promise<void>((resolve) =>
+    window.addEventListener('molly:ready', () => resolve(), { once: true })
+  );
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({}),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => ({ ok: true }),
+    pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
+  });
+  await ready;
+  const api = (window as unknown as { molly: { setReadonly(value: boolean): void } }).molly;
+  const dock = document.querySelector('.molly-dock')!;
+  const brush = dock.querySelector<HTMLButtonElement>('[aria-label="Brush (B)"]')!;
+  const comment = dock.querySelector<HTMLButtonElement>('[aria-label="Comment (C)"]')!;
+  const select = dock.querySelector<HTMLButtonElement>('[aria-label="Select"]')!;
+  const press = (key: string) =>
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  const brushing = () => brush.classList.contains('on');
+
+  expect(brush.disabled).toBe(true);
+  press('b');
+  expect(brushing()).toBe(false);
+  expect(document.body.dataset.brushing).not.toBe('true');
+
+  api.setReadonly(false);
+  expect(brush.disabled).toBe(false);
+  press('b');
+  expect(brushing()).toBe(true);
+  expect(brush.getAttribute('aria-pressed')).toBe('true');
+  expect(comment.classList.contains('on')).toBe(false);
+  expect(select.classList.contains('on')).toBe(false);
+  expect(document.body.dataset.brushing).toBe('true');
+  expect(document.body.dataset.commenting).toBe('false');
+  press('c');
+  expect(brushing()).toBe(false);
+  expect(comment.classList.contains('on')).toBe(true);
+  press('b');
+  expect(brushing()).toBe(true);
+  expect(comment.classList.contains('on')).toBe(false);
+  press('v');
+  expect(brushing()).toBe(false);
+  expect(select.classList.contains('on')).toBe(true);
+  press('b');
+  press('Escape');
+  expect(brushing()).toBe(false);
+  expect(select.classList.contains('on')).toBe(true);
+
+  brush.click();
+  expect(brushing()).toBe(true);
+  brush.click();
+  expect(brushing()).toBe(false);
+  expect(seen.filter((key) => key === 'b' || key === 'c')).toEqual([]);
+
+  press('b');
+  api.setReadonly(true);
+  expect(brushing()).toBe(false);
+  expect(brush.disabled).toBe(true);
+  expect(document.body.dataset.brushing).toBe('false');
+
+  api.setReadonly(false);
+  document.removeEventListener('keydown', bento);
+  window.dispatchEvent(new Event('pagehide'));
+});
+
 it('prevents double-click editing while readonly and restores it when unlocked', () => {
   Object.defineProperty(document, 'fonts', {
     configurable: true,

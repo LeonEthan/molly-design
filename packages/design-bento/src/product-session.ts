@@ -12,6 +12,7 @@ import {
   messageSquareIcon,
   minusIcon,
   mousePointer2Icon,
+  penLineIcon,
   plusIcon,
   rectangleIcon,
   redo2Icon,
@@ -46,6 +47,7 @@ const COPY = {
   versionConflict: ['canvasVersionConflict', 'This artwork changed elsewhere; your edits are kept'],
   select: ['toolSelect', 'Select'],
   comment: ['toolComment', 'Comment (C)'],
+  brush: ['toolBrush', 'Brush (B)'],
   undo: ['toolUndo', 'Undo (⌘Z)'],
   redo: ['toolRedo', 'Redo (⇧⌘Z)'],
   text: ['toolText', 'Text (T)'],
@@ -212,7 +214,7 @@ export function createProductSession(options: {
     button.setAttribute('aria-label', say(label));
     if (extraClass) button.className = extraClass;
     button.disabled =
-      readonly && ['create', 'history', 'comment'].includes(extraClass);
+      readonly && ['create', 'history', 'comment', 'brush'].includes(extraClass);
     button.onclick = onClick;
     dock.append(button);
     return button;
@@ -229,27 +231,37 @@ export function createProductSession(options: {
   const selectButton = dockButton(
     renderUiIconSvg(mousePointer2Icon),
     COPY.select,
-    () => setCommentTool(false),
+    () => setTool('select'),
     'on'
   );
   const commentButton = dockButton(
     renderUiIconSvg(messageSquareIcon),
     COPY.comment,
-    () => setCommentTool(!pins.commenting()),
+    () => setTool(pins.tool() === 'comment' ? 'select' : 'comment'),
     'comment'
   );
-  const syncCommentTool = () => {
-    const on = pins.commenting();
-    selectButton.classList.toggle('on', !on);
-    commentButton.classList.toggle('on', on);
-    selectButton.setAttribute('aria-pressed', String(!on));
-    commentButton.setAttribute('aria-pressed', String(on));
+  const brushButton = dockButton(
+    renderUiIconSvg(penLineIcon),
+    COPY.brush,
+    () => setTool(pins.tool() === 'brush' ? 'select' : 'brush'),
+    'brush'
+  );
+  const syncTool = () => {
+    const tool = pins.tool();
+    for (const [button, value] of [
+      [selectButton, 'select'],
+      [commentButton, 'comment'],
+      [brushButton, 'brush'],
+    ] as const) {
+      button.classList.toggle('on', tool === value);
+      button.setAttribute('aria-pressed', String(tool === value));
+    }
   };
-  const setCommentTool = (value: boolean) => {
-    pins.setCommenting(value);
-    syncCommentTool();
+  const setTool = (value: 'select' | 'comment' | 'brush') => {
+    pins.setTool(value);
+    syncTool();
   };
-  syncCommentTool();
+  syncTool();
   dockButton(
     renderUiIconSvg(undo2Icon),
     COPY.undo,
@@ -470,7 +482,7 @@ export function createProductSession(options: {
   const setReadonly = (value: boolean, message?: string) => {
     readonlyMessage = message ?? COPY.readonly;
     for (const button of dock.querySelectorAll<HTMLButtonElement>(
-      'button.create,button.history,button.comment'
+      'button.create,button.history,button.comment,button.brush'
     ))
       button.disabled = value;
     if (value) shapePopup.classList.remove('open');
@@ -482,7 +494,7 @@ export function createProductSession(options: {
     readonly = value;
     toolbar.setReadonly(value);
     pins.setReadonly(value);
-    syncCommentTool();
+    syncTool();
     layers.setReadonly(value);
     try {
       if (value) {
@@ -529,10 +541,11 @@ export function createProductSession(options: {
       if ((event.target as Element | null)?.closest('input,textarea,[contenteditable="true"]'))
         return;
       const key = event.key.toLowerCase();
-      if (key === 'c') setCommentTool(true);
-      else if ((key === 'v' || key === 'escape') && pins.commenting()) setCommentTool(false);
+      if (key === 'c') setTool('comment');
+      else if (key === 'b') setTool('brush');
+      else if ((key === 'v' || key === 'escape') && pins.tool() !== 'select') setTool('select');
       else return;
-      // Bento's own bubble-phase `c` binding would arm its legacy comment mode.
+      // Bento's own bubble-phase `c` binding would arm its legacy comment mode; `b` is consumed the same way.
       event.preventDefault();
       event.stopImmediatePropagation();
     },

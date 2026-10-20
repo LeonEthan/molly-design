@@ -2996,6 +2996,7 @@
   "design.canvasAgentBuilding": "Molly is building · Read-only",
   "design.toolSelect": "Select",
   "design.toolComment": "Comment (C)",
+  "design.toolBrush": "Brush (B)",
   "design.toolUndo": "Undo (⌘Z)",
   "design.toolRedo": "Redo (⇧⌘Z)",
   "design.toolText": "Text (T)",

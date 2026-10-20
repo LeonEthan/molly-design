@@ -216,9 +216,26 @@ const unitInterval = z.number().finite().min(0).max(1);
 const NormalizedPointSchema = z.tuple([unitInterval, unitInterval]);
 
 /**
+ * A stroke keeps at most this many points. The canvas drops points closer than 0.4% of the
+ * image edge (about 6px on the 1600px marked copy, under the 8px stroke width) and then
+ * resamples evenly, so one stroke stays near 3 KB of JSON and ten notes stay near 30 KB.
+ */
+export const DESIGN_STROKE_POINTS_MAX = 200;
+
+const DesignNoteRegionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('box'), from: NormalizedPointSchema, to: NormalizedPointSchema }).strict(),
+  z
+    .object({
+      kind: z.literal('stroke'),
+      points: z.array(NormalizedPointSchema).min(2).max(DESIGN_STROKE_POINTS_MAX),
+    })
+    .strict(),
+]);
+
+/**
  * One numbered canvas note. A pin sits at a point inside its anchor element's box;
- * a region is a box on one image, in that image's content coordinates, drawn on the
- * marked copy with the note's number. A note without either is anchored to its
+ * a region is a box or a freehand stroke on one image, in that image's content coordinates,
+ * drawn on the marked copy with the note's number. A note without either is anchored to its
  * elements' default corner.
  */
 export const DesignNoteSchema = z
@@ -229,10 +246,7 @@ export const DesignNoteSchema = z
       .object({ elementId: z.string().min(1).max(200), at: NormalizedPointSchema })
       .strict()
       .optional(),
-    region: z
-      .object({ from: NormalizedPointSchema, to: NormalizedPointSchema })
-      .strict()
-      .optional(),
+    region: DesignNoteRegionSchema.optional(),
   })
   .strict()
   .superRefine((note, ctx) => {

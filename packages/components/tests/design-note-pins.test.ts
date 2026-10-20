@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   DESIGN_NOTES_MAX,
+  DESIGN_STROKE_POINTS_MAX,
   type DesignToolbarRequest,
 } from '@molly/shared/design-selection-commands';
 import type { HighlightGroup } from '../../design-bento/src/element-highlight';
@@ -47,6 +48,14 @@ function drag(target: HTMLElement, [fromX, fromY]: number[], [toX, toY]: number[
   target.dispatchEvent(new MouseEvent('pointerdown', at(fromX, fromY)));
   target.dispatchEvent(new MouseEvent('pointermove', at(toX, toY)));
   target.dispatchEvent(new MouseEvent('pointerup', at(toX, toY)));
+}
+/** Presses at the first client point, moves through the rest and releases on the last one. */
+function stroke(target: HTMLElement, points: number[][]) {
+  const at = ([clientX, clientY]: number[]) => ({ bubbles: true, button: 0, clientX, clientY });
+  const [first, ...rest] = points;
+  target.dispatchEvent(new MouseEvent('pointerdown', at(first)));
+  for (const point of rest) target.dispatchEvent(new MouseEvent('pointermove', at(point)));
+  target.dispatchEvent(new MouseEvent('pointerup', at(points.at(-1)!)));
 }
 function button(name: string) {
   const node = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -154,7 +163,7 @@ it('ignores plain clicks, drags and read-only canvases', () => {
 it('turns plain clicks into pins only while the comment tool is on', () => {
   press(element('title'));
   expect(document.querySelector('.molly-note-editor')).toBeNull();
-  pins.setCommenting(true);
+  pins.setTool('comment');
   expect(document.body.dataset.commenting).toBe('true');
   press(element('photo'), { clientX: 300, clientY: 300 });
   type('Crop tighter');
@@ -162,19 +171,23 @@ it('turns plain clicks into pins only while the comment tool is on', () => {
   expect(pins.read().notes).toEqual([
     { elementIds: ['photo'], prompt: 'Crop tighter', pin: { elementId: 'photo', at: [0.5, 0.5] } },
   ]);
-  pins.setCommenting(false);
+  pins.setTool('select');
   expect(document.body.dataset.commenting).toBe('false');
   press(element('title'));
   expect(document.querySelector('.molly-note-editor')).toBeNull();
 });
 
 it('draws a region on an image in comment mode and reads it as that note', () => {
-  pins.setCommenting(true);
+  pins.setTool('comment');
   drag(element('photo'), [200, 250], [300, 350]);
   type('Brighter');
   button('Save note').click();
   expect(pins.read().notes).toEqual([
-    { elementIds: ['photo'], prompt: 'Brighter', region: { from: [0.25, 0.25], to: [0.5, 0.75] } },
+    {
+      elementIds: ['photo'],
+      prompt: 'Brighter',
+      region: { kind: 'box', from: [0.25, 0.25], to: [0.5, 0.75] },
+    },
   ]);
   expect(pins.snapshot()).toEqual(pins.read().notes);
 });
@@ -182,7 +195,7 @@ it('draws a region on an image in comment mode and reads it as that note', () =>
 it('ignores drags on text, tiny moves, and drags outside comment mode', () => {
   drag(element('photo'), [200, 250], [300, 350]);
   expect(document.querySelector('.molly-note-editor')).toBeNull();
-  pins.setCommenting(true);
+  pins.setTool('comment');
   drag(element('title'), [200, 250], [300, 350]);
   drag(element('photo'), [200, 250], [201, 251]);
   expect(document.querySelector('.molly-note-editor')).toBeNull();
@@ -190,7 +203,7 @@ it('ignores drags on text, tiny moves, and drags outside comment mode', () => {
 });
 
 it('keeps regions on one image and says so when a second image is marked', () => {
-  pins.setCommenting(true);
+  pins.setTool('comment');
   drag(element('photo'), [200, 250], [300, 350]);
   type('Brighter');
   button('Save note').click();
@@ -207,15 +220,90 @@ it('reads no marked copy without regions and rejects a stale one', async () => {
   await expect(pins.marked(pins.read().epoch - 1)).rejects.toThrow('Notes changed');
 });
 
-it('never enters the comment tool while read-only and drops it when the canvas locks', () => {
-  pins.setCommenting(true);
+it('never enters the comment or brush tool while read-only and drops it when the canvas locks', () => {
+  pins.setTool('comment');
   pins.setReadonly(true);
-  expect(pins.commenting()).toBe(false);
-  pins.setCommenting(true);
-  expect(pins.commenting()).toBe(false);
+  expect(pins.tool()).toBe('select');
+  pins.setTool('comment');
+  expect(pins.tool()).toBe('select');
+  pins.setTool('brush');
+  expect(pins.tool()).toBe('select');
+  expect(document.body.dataset.brushing).toBe('false');
   press(element('title'));
   expect(document.querySelector('.molly-note-editor')).toBeNull();
   expect(pins.read().notes).toEqual([]);
+});
+
+it('keeps the brush and comment tools mutually exclusive', () => {
+  pins.setTool('brush');
+  expect(pins.tool()).toBe('brush');
+  expect(document.body.dataset.brushing).toBe('true');
+  expect(document.body.dataset.commenting).toBe('false');
+  pins.setTool('comment');
+  expect(pins.tool()).toBe('comment');
+  expect(document.body.dataset.brushing).toBe('false');
+  expect(document.body.dataset.commenting).toBe('true');
+  pins.setTool('select');
+  expect(pins.tool()).toBe('select');
+  expect(document.body.dataset.brushing).toBe('false');
+  expect(document.body.dataset.commenting).toBe('false');
+});
+
+it('draws a freehand stroke on an image in brush mode and reads it as that note', () => {
+  pins.setTool('brush');
+  stroke(element('photo'), [
+    [200, 250],
+    [250, 300],
+    [300, 350],
+  ]);
+  type('Lighter here');
+  button('Save note').click();
+  expect(pins.read().notes).toEqual([
+    {
+      elementIds: ['photo'],
+      prompt: 'Lighter here',
+      region: {
+        kind: 'stroke',
+        points: [
+          [0.25, 0.25],
+          [0.375, 0.5],
+          [0.5, 0.75],
+        ],
+      },
+    },
+  ]);
+  expect(pins.snapshot()).toEqual(pins.read().notes);
+});
+
+it('caps a dense stroke to the schema point limit', () => {
+  pins.setTool('brush');
+  const dense = Array.from({ length: 1000 }, (_, index) => [100 + (400 * index) / 999, 300]);
+  stroke(element('photo'), dense);
+  type('Along the edge');
+  button('Save note').click();
+  const note = pins.read().notes[0];
+  expect(note?.region?.kind).toBe('stroke');
+  const points = note?.region?.kind === 'stroke' ? note.region.points : [];
+  expect(points).toHaveLength(DESIGN_STROKE_POINTS_MAX);
+  expect(points[0]).toEqual([0, 0.5]);
+  // The release point may fall within one 0.4% step of the last kept point, so the tail is allowed that much slack.
+  expect(points.at(-1)?.[0]).toBeCloseTo(1, 2);
+});
+
+it('ignores a brush press that never moves and strokes off any image', () => {
+  pins.setTool('brush');
+  stroke(element('photo'), [[200, 250]]);
+  stroke(element('title'), [
+    [200, 250],
+    [300, 350],
+  ]);
+  stroke(document.body, [
+    [200, 250],
+    [300, 350],
+  ]);
+  expect(document.querySelector('.molly-note-editor')).toBeNull();
+  expect(pins.read().notes).toEqual([]);
+  expect(regionShading()).toHaveLength(0);
 });
 
 it('drops a pin whose note is left empty', () => {
@@ -379,13 +467,24 @@ it('keeps notes out of a snapshot while they are being sent', () => {
 });
 
 function regionShading() {
-  return document.querySelectorAll('.molly-note-regions polygon');
+  return document.querySelectorAll('.molly-note-regions polygon, .molly-note-regions polyline');
 }
 
 function drawRegionNote() {
-  pins.setCommenting(true);
+  pins.setTool('comment');
   drag(element('photo'), [200, 250], [300, 350]);
   type('Brighter');
+  button('Save note').click();
+  expect(regionShading()).toHaveLength(1);
+}
+
+function drawStrokeNote() {
+  pins.setTool('brush');
+  stroke(element('photo'), [
+    [200, 250],
+    [300, 350],
+  ]);
+  type('Lighter');
   button('Save note').click();
   expect(regionShading()).toHaveLength(1);
 }
@@ -405,4 +504,51 @@ it('clears region shading once an accepted send settles', async () => {
   expect(pins.settle(epoch, true)).toBe(true);
   expect(pins.read().notes).toEqual([]);
   expect(regionShading()).toHaveLength(0);
+});
+
+it('clears stroke overlays when Clear removes every note', () => {
+  drawStrokeNote();
+  button('Clear all notes').click();
+  expect(pins.read().notes).toEqual([]);
+  expect(regionShading()).toHaveLength(0);
+});
+
+it('clears stroke overlays once an accepted send settles', async () => {
+  drawStrokeNote();
+  const { epoch } = pins.read();
+  button('Send').click();
+  await vi.waitFor(() => expect(requests).toEqual([{ type: 'notes', notesEpoch: epoch }]));
+  expect(pins.settle(epoch, true)).toBe(true);
+  expect(pins.read().notes).toEqual([]);
+  expect(regionShading()).toHaveLength(0);
+});
+
+it('restores a stroke note from its snapshot into a fresh canvas', () => {
+  drawStrokeNote();
+  const notes = pins.snapshot();
+  expect(notes).toEqual([
+    {
+      elementIds: ['photo'],
+      prompt: 'Lighter',
+      region: {
+        kind: 'stroke',
+        points: [
+          [0.25, 0.25],
+          [0.5, 0.75],
+        ],
+      },
+    },
+  ]);
+  pins.dispose();
+  const fresh = createNotePins({
+    request: async () => ({ ok: true }),
+    selectedIds: () => [],
+    elements: () => present.map((id) => ({ id, kind: id === 'title' ? 'text' : 'image' })),
+  });
+  fresh.present({ dark: false, actionsEnabled: true, labels: {} });
+  fresh.restore(notes);
+  fresh.setReadonly(false);
+  expect(fresh.read().notes).toEqual(notes);
+  expect(regionShading()).toHaveLength(1);
+  fresh.dispose();
 });

@@ -1,6 +1,11 @@
-import type { DesignNote } from '@molly/shared/design-selection-commands';
+import {
+  DESIGN_STROKE_POINTS_MAX,
+  type DesignNote,
+} from '@molly/shared/design-selection-commands';
 
 export type NoteRegion = NonNullable<DesignNote['region']>;
+export type BoxRegion = Extract<NoteRegion, { kind: 'box' }>;
+export type StrokeRegion = Extract<NoteRegion, { kind: 'stroke' }>;
 export type NormalizedPoint = [number, number];
 type Matrix = { a: number; b: number; c: number; d: number; e: number; f: number };
 export type ImageGeometry = { node: HTMLElement; source: string; matrix: Matrix };
@@ -44,15 +49,49 @@ function invert(matrix: Matrix): Matrix | undefined {
 }
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
-export function regionFromPoints(a: NormalizedPoint, b: NormalizedPoint): NoteRegion {
+export function regionFromPoints(a: NormalizedPoint, b: NormalizedPoint): BoxRegion {
   return {
+    kind: 'box',
     from: [Math.min(a[0], b[0]), Math.min(a[1], b[1])],
     to: [Math.max(a[0], b[0]), Math.max(a[1], b[1])],
   };
 }
 
-export function regionCorners({ from, to }: NoteRegion): NormalizedPoint[] {
+export function regionCorners({ from, to }: BoxRegion): NormalizedPoint[] {
   return [from, [to[0], from[1]], to, [from[0], to[1]]];
+}
+
+/** Points closer than this to the last kept point are dropped; it is 0.4% of the image edge. */
+const STROKE_STEP = 0.004;
+
+export function appendStrokePoint(points: NormalizedPoint[], point: NormalizedPoint) {
+  const last = points[points.length - 1];
+  if (!last || Math.hypot(point[0] - last[0], point[1] - last[1]) >= STROKE_STEP)
+    points.push(point);
+}
+
+/** Thins a drawn stroke and resamples it evenly to the schema cap; undefined for a dot. */
+export function strokeRegion(points: readonly NormalizedPoint[]): StrokeRegion | undefined {
+  if (points.length < 2) return undefined;
+  const last = points.length - 1;
+  const kept =
+    points.length <= DESIGN_STROKE_POINTS_MAX
+      ? points
+      : Array.from(
+          { length: DESIGN_STROKE_POINTS_MAX },
+          (_, index) => points[Math.round((index * last) / (DESIGN_STROKE_POINTS_MAX - 1))]
+        );
+  return { kind: 'stroke', points: kept.map(([u, v]): NormalizedPoint => [u, v]) };
+}
+
+/** A region's outline in image coordinates: a box's corners, or a stroke's own points. */
+export function regionOutline(region: NoteRegion): NormalizedPoint[] {
+  return region.kind === 'box' ? regionCorners(region) : region.points;
+}
+
+/** Where the region's number sits: the box corner, or the stroke's first point. */
+export function regionAnchor(region: NoteRegion): NormalizedPoint {
+  return regionOutline(region)[0];
 }
 
 export function drawNoteRegions(
@@ -65,14 +104,14 @@ export function drawNoteRegions(
   const line = Math.max(3, Math.round(edge * 0.005));
   const badge = Math.max(10, Math.round(edge * 0.018));
   regions.forEach(({ badge: number, region }) => {
-    const points = regionCorners(region).map(
+    const points = regionOutline(region).map(
       ([u, v]): NormalizedPoint => [u * width, v * height]
     );
     context.beginPath();
     points.forEach(([x, y], index) =>
       index ? context.lineTo(x, y) : context.moveTo(x, y)
     );
-    context.closePath();
+    if (region.kind === 'box') context.closePath();
     context.lineJoin = 'round';
     context.lineCap = 'round';
     context.strokeStyle = '#ffffff';
@@ -104,23 +143,26 @@ export function svgOverlay() {
   return overlay;
 }
 
-export function paintRegionPolygon(
+/** Boxes are shaded polygons; strokes are the plain line the brush drew. */
+export function paintRegion(
   overlay: SVGSVGElement,
   geo: ImageGeometry,
   region: NoteRegion,
   stroke: string
 ) {
-  const node = document.createElementNS(SVG_NS, 'polygon');
+  const box = region.kind === 'box';
+  const node = document.createElementNS(SVG_NS, box ? 'polygon' : 'polyline');
   node.setAttribute(
     'points',
-    regionCorners(region)
+    regionOutline(region)
       .map((point) => toScreen(geo, point).join(','))
       .join(' ')
   );
-  node.setAttribute('fill', 'rgb(255 45 85 / .12)');
+  node.setAttribute('fill', box ? 'rgb(255 45 85 / .12)' : 'none');
   node.setAttribute('stroke', stroke);
   node.setAttribute('stroke-width', '2.5');
   node.setAttribute('stroke-linejoin', 'round');
+  node.setAttribute('stroke-linecap', 'round');
   overlay.append(node);
 }
 

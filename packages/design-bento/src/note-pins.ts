@@ -10,11 +10,14 @@ import {
 import { arrowUpIcon, renderUiIconSvg, xIcon } from '@molly/shared/ui-icons';
 import type { HighlightGroup } from './element-highlight';
 import {
+  appendStrokePoint,
   drawNoteRegions,
   imageGeometry,
-  paintRegionPolygon,
+  paintRegion,
   REGION_COLOR,
+  regionAnchor,
   regionFromPoints,
+  strokeRegion,
   svgOverlay,
   toImage,
   toScreen,
@@ -29,6 +32,24 @@ type Pin = {
   pin?: { elementId: string; at: NormalizedPoint };
   region?: NoteRegion;
 };
+/** Mutually exclusive dock tools: comment places pins and boxes, brush draws strokes. */
+type NoteTool = 'select' | 'comment' | 'brush';
+type Drag =
+  | {
+      kind: 'box';
+      elementId: string;
+      geo: ImageGeometry;
+      origin: { x: number; y: number };
+      start: NormalizedPoint;
+      current: NormalizedPoint;
+    }
+  | {
+      kind: 'stroke';
+      elementId: string;
+      geo: ImageGeometry;
+      origin: { x: number; y: number };
+      points: NormalizedPoint[];
+    };
 
 const EDITOR_LINE_CAP = 4;
 const COPY_MAX_EDGE = 1600;
@@ -59,25 +80,17 @@ export function createNotePins(options: {
   let message = '';
   let editing: { pin: Pin; node: HTMLElement } | undefined;
   let hovered = false;
-  let commenting = false;
+  let tool: NoteTool = 'select';
   let frame = 0;
   let press: { x: number; y: number } | undefined;
-  let drag:
-    | {
-        elementId: string;
-        geo: ImageGeometry;
-        origin: { x: number; y: number };
-        start: NormalizedPoint;
-        current: NormalizedPoint;
-      }
-    | undefined;
+  let drag: Drag | undefined;
   const controller = new AbortController();
   const signal = controller.signal;
   const label = (key: string, fallback: string, count?: number) =>
     (presentation?.labels[key] ?? fallback).replace('{{count}}', String(count ?? ''));
   const style = document.createElement('style');
   style.textContent = `
-body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!important}
+body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!important}
 .molly-note-regions{position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483097;pointer-events:none;overflow:visible}
 .molly-note-pin{position:fixed;z-index:2147483099;display:flex;align-items:center;justify-content:center;width:28px;height:28px;min-width:0!important;padding:0!important;box-sizing:border-box;border-radius:50%!important;border:2px solid var(--surface);background:var(--accent)!important;color:var(--on-accent)!important;font:600 12px/1 Inter,system-ui,sans-serif!important;box-shadow:0 2px 8px rgb(0 0 0 / .22);cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
 .molly-note-pin[aria-expanded=true]{transform:scale(1.12);box-shadow:0 6px 16px rgb(0 0 0 / .3)}
@@ -127,9 +140,12 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
     message = label('notesFull', 'Send or clear notes before adding more than {{count}}', DESIGN_NOTES_MAX);
     render();
   };
-  const setCommentingState = (value: boolean) => {
-    commenting = value && !readonly;
-    document.body.dataset.commenting = String(commenting);
+  const setTool = (value: NoteTool) => {
+    tool = readonly ? 'select' : value;
+    drag = undefined;
+    document.body.dataset.commenting = String(tool === 'comment');
+    document.body.dataset.brushing = String(tool === 'brush');
+    paintRegions();
   };
   const prune = () => {
     const present = new Set(options.elements().map((element) => element.id));
@@ -162,7 +178,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
     if (pin.region) {
       const geo = imageGeometry(pin.elementIds[0]);
       if (!geo) return undefined;
-      const [x, y] = toScreen(geo, pin.region.from);
+      const [x, y] = toScreen(geo, regionAnchor(pin.region));
       return { x, y };
     }
     const anchor = pin.pin && nodeFor(pin.pin.elementId);
@@ -178,15 +194,14 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
     for (const pin of pins) {
       if (!pin.region) continue;
       const geo = imageGeometry(pin.elementIds[0]);
-      if (geo) paintRegionPolygon(overlay, geo, pin.region, REGION_COLOR);
+      if (geo) paintRegion(overlay, geo, pin.region, REGION_COLOR);
     }
     if (drag) {
-      paintRegionPolygon(
-        overlay,
-        drag.geo,
-        regionFromPoints(drag.start, drag.current),
-        REGION_COLOR
-      );
+      const region =
+        drag.kind === 'box'
+          ? regionFromPoints(drag.start, drag.current)
+          : { kind: 'stroke' as const, points: drag.points };
+      paintRegion(overlay, drag.geo, region, REGION_COLOR);
     }
   }
   function position() {
@@ -454,7 +469,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
   }
   function startRegion(event: PointerEvent) {
     if (
-      !commenting ||
+      tool === 'select' ||
       busy ||
       event.button !== 0 ||
       event.altKey ||
@@ -472,13 +487,11 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
     if (!geo || !start) return;
     event.stopPropagation();
     event.preventDefault();
-    drag = {
-      elementId,
-      geo,
-      origin: { x: event.clientX, y: event.clientY },
-      start,
-      current: start,
-    };
+    const origin = { x: event.clientX, y: event.clientY };
+    drag =
+      tool === 'brush'
+        ? { kind: 'stroke', elementId, geo, origin, points: [start] }
+        : { kind: 'box', elementId, geo, origin, start, current: start };
   }
   document.addEventListener(
     'pointerdown',
@@ -496,18 +509,27 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
       if (!drag) return;
       const point = toImage(drag.geo, event.clientX, event.clientY);
       if (!point) return;
-      drag.current = point;
+      if (drag.kind === 'box') drag.current = point;
+      else appendStrokePoint(drag.points, point);
       paintRegions();
     },
     { capture: true, signal }
   );
   const endRegion = (event: PointerEvent, commit: boolean) => {
     if (!drag) return;
-    const { elementId, geo, origin, start } = drag;
-    const end = toImage(geo, event.clientX, event.clientY) ?? drag.current;
+    const finished = drag;
     drag = undefined;
+    const end = toImage(finished.geo, event.clientX, event.clientY);
+    if (finished.kind === 'box') {
+      paintRegions();
+      if (commit && moved(finished.origin, event))
+        addRegion(finished.elementId, regionFromPoints(finished.start, end ?? finished.current));
+      return;
+    }
+    if (end) appendStrokePoint(finished.points, end);
     paintRegions();
-    if (commit && moved(origin, event)) addRegion(elementId, regionFromPoints(start, end));
+    const stroke = strokeRegion(finished.points);
+    if (commit && stroke && moved(finished.origin, event)) addRegion(finished.elementId, stroke);
   };
   document.addEventListener('pointerup', (event) => endRegion(event, true), {
     capture: true,
@@ -526,7 +548,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
         readonly ||
         dragged ||
         event.button !== 0 ||
-        !(commenting || event.metaKey || event.ctrlKey) ||
+        !(tool === 'comment' || event.metaKey || event.ctrlKey) ||
         event.altKey ||
         event.shiftKey
       )
@@ -641,15 +663,15 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
       if (readonly && !value) busy = false;
       readonly = value;
       if (value) {
-        setCommentingState(false);
+        setTool('select');
         closeEditor(false);
         clearHover();
         drag = undefined;
       }
       render();
     },
-    setCommenting: setCommentingState,
-    commenting: () => commenting,
+    setTool,
+    tool: () => tool,
     present(value: DesignToolbarPresentation) {
       presentation = value;
       render();
@@ -658,7 +680,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
       controller.abort();
       cancelAnimationFrame(frame);
       clearHover();
-      setCommentingState(false);
+      setTool('select');
       editing?.node.remove();
       layer.remove();
       overlay.remove();

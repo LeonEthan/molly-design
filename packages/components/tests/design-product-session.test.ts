@@ -17,6 +17,78 @@ afterEach(() => {
   delete (window as unknown as { molly?: unknown }).molly;
 });
 
+it('toggles the comment tool from the dock and C, V and Escape, and never while readonly', async () => {
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  const ready = new Promise<void>((resolve) =>
+    window.addEventListener('molly:ready', () => resolve(), { once: true })
+  );
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({}),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => ({ ok: true }),
+    pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
+  });
+  await ready;
+  const api = (window as unknown as { molly: { setReadonly(value: boolean): void } }).molly;
+  const dock = document.querySelector('.molly-dock')!;
+  const comment = dock.querySelector<HTMLButtonElement>('[aria-label="Comment (C)"]')!;
+  const select = dock.querySelector<HTMLButtonElement>('[aria-label="Select"]')!;
+  const key = (name: string, init: KeyboardEventInit = {}) =>
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, ...init }));
+  const commenting = () => comment.classList.contains('on');
+
+  expect(comment.disabled).toBe(true);
+  key('c');
+  expect(commenting()).toBe(false);
+  expect(document.body.dataset.commenting).not.toBe('true');
+
+  api.setReadonly(false);
+  expect(comment.disabled).toBe(false);
+  key('c');
+  expect(commenting()).toBe(true);
+  expect(select.classList.contains('on')).toBe(false);
+  expect(comment.getAttribute('aria-pressed')).toBe('true');
+  expect(select.getAttribute('aria-pressed')).toBe('false');
+  expect(document.body.dataset.commenting).toBe('true');
+  key('v');
+  expect(commenting()).toBe(false);
+  expect(select.classList.contains('on')).toBe(true);
+
+  comment.click();
+  expect(commenting()).toBe(true);
+  key('Escape');
+  expect(commenting()).toBe(false);
+  comment.click();
+  comment.click();
+  expect(commenting()).toBe(false);
+  select.click();
+  expect(commenting()).toBe(false);
+
+  key('c');
+  const field = document.createElement('textarea');
+  document.body.append(field);
+  field.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
+  expect(commenting()).toBe(true);
+  field.remove();
+
+  api.setReadonly(true);
+  expect(commenting()).toBe(false);
+  expect(comment.disabled).toBe(true);
+  expect(document.body.dataset.commenting).toBe('false');
+  api.setReadonly(false);
+  window.dispatchEvent(new Event('pagehide'));
+});
+
 it('prevents double-click editing while readonly and restores it when unlocked', () => {
   Object.defineProperty(document, 'fonts', {
     configurable: true,

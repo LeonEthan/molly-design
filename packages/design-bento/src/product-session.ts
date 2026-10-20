@@ -9,6 +9,7 @@ import {
   ellipseIcon,
   imageIcon,
   lineIcon,
+  messageSquareIcon,
   minusIcon,
   mousePointer2Icon,
   plusIcon,
@@ -45,6 +46,7 @@ const COPY = {
   finishComposing: ['canvasFinishComposing', 'Finish text input first'],
   versionConflict: ['canvasVersionConflict', 'This artwork changed elsewhere; your edits are kept'],
   select: ['toolSelect', 'Select'],
+  comment: ['toolComment', 'Comment (C)'],
   undo: ['toolUndo', 'Undo (⌘Z)'],
   redo: ['toolRedo', 'Redo (⇧⌘Z)'],
   text: ['toolText', 'Text (T)'],
@@ -213,7 +215,8 @@ export function createProductSession(options: {
     button.title = say(label);
     button.setAttribute('aria-label', say(label));
     if (extraClass) button.className = extraClass;
-    button.disabled = readonly && (extraClass === 'create' || extraClass === 'history');
+    button.disabled =
+      readonly && ['create', 'history', 'comment'].includes(extraClass);
     button.onclick = onClick;
     dock.append(button);
     return button;
@@ -227,7 +230,30 @@ export function createProductSession(options: {
     options.commitPending();
     options.applyCommands({ verb: 'add-element', ...payload });
   };
-  dockButton(renderUiIconSvg(mousePointer2Icon), COPY.select, () => {}, 'on');
+  const selectButton = dockButton(
+    renderUiIconSvg(mousePointer2Icon),
+    COPY.select,
+    () => setCommentTool(false),
+    'on'
+  );
+  const commentButton = dockButton(
+    renderUiIconSvg(messageSquareIcon),
+    COPY.comment,
+    () => setCommentTool(!pins.commenting()),
+    'comment'
+  );
+  const syncCommentTool = () => {
+    const on = pins.commenting();
+    selectButton.classList.toggle('on', !on);
+    commentButton.classList.toggle('on', on);
+    selectButton.setAttribute('aria-pressed', String(!on));
+    commentButton.setAttribute('aria-pressed', String(on));
+  };
+  const setCommentTool = (value: boolean) => {
+    pins.setCommenting(value);
+    syncCommentTool();
+  };
+  syncCommentTool();
   dockButton(
     renderUiIconSvg(undo2Icon),
     COPY.undo,
@@ -447,7 +473,9 @@ export function createProductSession(options: {
   };
   const setReadonly = (value: boolean, message?: string) => {
     readonlyMessage = message ?? COPY.readonly;
-    for (const button of dock.querySelectorAll<HTMLButtonElement>('button.create,button.history'))
+    for (const button of dock.querySelectorAll<HTMLButtonElement>(
+      'button.create,button.history,button.comment'
+    ))
       button.disabled = value;
     if (value) shapePopup.classList.remove('open');
     if (value === readonly) {
@@ -458,6 +486,7 @@ export function createProductSession(options: {
     readonly = value;
     toolbar.setReadonly(value);
     pins.setReadonly(value);
+    syncCommentTool();
     marks.setReadonly(value);
     layers.setReadonly(value);
     try {
@@ -495,6 +524,20 @@ export function createProductSession(options: {
       )
         return;
       blockInput(event);
+    },
+    true
+  );
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
+      if ((event.target as Element | null)?.closest('input,textarea,[contenteditable="true"]'))
+        return;
+      const key = event.key.toLowerCase();
+      if (key === 'c' && !pins.commenting()) setCommentTool(true);
+      else if ((key === 'v' || key === 'escape') && pins.commenting()) setCommentTool(false);
+      else return;
+      event.preventDefault();
     },
     true
   );

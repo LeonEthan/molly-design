@@ -3003,6 +3003,7 @@
   "design.canvasCheckingState": "Checking execution state · Read-only",
   "design.canvasAgentBuilding": "Molly is building · Read-only",
   "design.toolSelect": "Select",
+  "design.toolComment": "Comment (C)",
   "design.toolUndo": "Undo (⌘Z)",
   "design.toolRedo": "Redo (⇧⌘Z)",
   "design.toolText": "Text (T)",

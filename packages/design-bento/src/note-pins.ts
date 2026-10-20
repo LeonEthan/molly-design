@@ -30,6 +30,7 @@ export function createNotePins(options: {
   let message = '';
   let editing: { pin: Pin; node: HTMLElement } | undefined;
   let hovered = false;
+  let commenting = false;
   let frame = 0;
   let press: { x: number; y: number } | undefined;
   const controller = new AbortController();
@@ -38,6 +39,7 @@ export function createNotePins(options: {
     (presentation?.labels[key] ?? fallback).replace('{{count}}', String(count ?? ''));
   const style = document.createElement('style');
   style.textContent = `
+body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!important}
 .molly-note-pin{position:fixed;z-index:2147483099;display:flex;align-items:center;justify-content:center;width:28px;height:28px;min-width:0!important;padding:0!important;box-sizing:border-box;border-radius:50%!important;border:2px solid var(--surface);background:var(--accent)!important;color:var(--on-accent)!important;font:600 12px/1 Inter,system-ui,sans-serif!important;box-shadow:0 2px 8px rgb(0 0 0 / .22);cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
 .molly-note-pin[aria-expanded=true]{transform:scale(1.12);box-shadow:0 6px 16px rgb(0 0 0 / .3)}
 .molly-note-tray{position:fixed;left:50%;bottom:calc(var(--molly-dock-bottom,18px) + var(--molly-dock-height,52px) + 12px);transform:translateX(-50%);z-index:2147483099;display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;max-width:calc(100vw - 16px);border-radius:999px;background:var(--ink);color:var(--surface);border:1px solid var(--line);box-shadow:0 6px 20px rgb(0 0 0 / .22);font:12px Inter,system-ui,sans-serif;box-sizing:border-box}
@@ -79,6 +81,10 @@ export function createNotePins(options: {
     epoch++;
     message = '';
     render();
+  };
+  const setCommentingState = (value: boolean) => {
+    commenting = value && !readonly;
+    document.body.dataset.commenting = String(commenting);
   };
   const prune = () => {
     const present = new Set(options.elementIds());
@@ -367,7 +373,7 @@ export function createNotePins(options: {
         readonly ||
         moved ||
         event.button !== 0 ||
-        !(event.metaKey || event.ctrlKey) ||
+        !(commenting || event.metaKey || event.ctrlKey) ||
         event.altKey ||
         event.shiftKey
       )
@@ -421,11 +427,14 @@ export function createNotePins(options: {
       if (readonly && !value) busy = false;
       readonly = value;
       if (value) {
+        setCommentingState(false);
         closeEditor(false);
         clearHover();
       }
       render();
     },
+    setCommenting: setCommentingState,
+    commenting: () => commenting,
     present(value: DesignToolbarPresentation) {
       presentation = value;
       render();
@@ -434,6 +443,7 @@ export function createNotePins(options: {
       controller.abort();
       cancelAnimationFrame(frame);
       clearHover();
+      setCommentingState(false);
       editing?.node.remove();
       layer.remove();
       tray.remove();

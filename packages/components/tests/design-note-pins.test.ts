@@ -117,6 +117,32 @@ it('ignores plain clicks, drags and read-only canvases', () => {
   expect(pins.read().notes).toEqual([]);
 });
 
+it('turns plain clicks into pins only while the comment tool is on', () => {
+  press(element('title'));
+  expect(document.querySelector('.molly-note-editor')).toBeNull();
+  pins.setCommenting(true);
+  expect(document.body.dataset.commenting).toBe('true');
+  press(element('photo'));
+  type('Crop tighter');
+  button('Save note').click();
+  expect(pins.read().notes).toEqual([{ elementIds: ['photo'], prompt: 'Crop tighter' }]);
+  pins.setCommenting(false);
+  expect(document.body.dataset.commenting).toBe('false');
+  press(element('title'));
+  expect(document.querySelector('.molly-note-editor')).toBeNull();
+});
+
+it('never enters the comment tool while read-only and drops it when the canvas locks', () => {
+  pins.setCommenting(true);
+  pins.setReadonly(true);
+  expect(pins.commenting()).toBe(false);
+  pins.setCommenting(true);
+  expect(pins.commenting()).toBe(false);
+  press(element('title'));
+  expect(document.querySelector('.molly-note-editor')).toBeNull();
+  expect(pins.read().notes).toEqual([]);
+});
+
 it('drops a pin whose note is left empty', () => {
   press(element('title'), { metaKey: true });
   type('   ');

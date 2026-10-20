@@ -83,6 +83,7 @@ export const DESIGN_CANVAS_LABEL_KEYS = [
   'canvasFinishComposing',
   'canvasVersionConflict',
   'toolSelect',
+  'toolComment',
   'toolUndo',
   'toolRedo',
   'toolText',

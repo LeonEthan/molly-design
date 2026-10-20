@@ -2074,7 +2074,7 @@
   "settings.agent.provider.binaryVerifying": "校验中",
   "settings.agent.provider.refreshFailed": "刷新 {{agent}} 失败",
   "settings.agent.provider.refreshSuccess": "已刷新 {{name}}",
-  "settings.interfaceFontFamily.helper": "选择这台电脑已安装的字体，应用于界面和 session 对话内容。",
+  "settings.interfaceFontFamily.helper": "选择这台电脑已安装的字体，应用于界面和对话内容。",
   "settings.interfaceFontFamily.label": "界面字体",
   "settings.fontFamily.empty": "没有匹配的字体",
   "settings.fontFamily.loading": "正在加载系统字体...",

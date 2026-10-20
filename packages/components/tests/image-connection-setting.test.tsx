@@ -287,6 +287,7 @@ describe('ImageConnectionForm', () => {
       copy('settings.imageConnection.apiKeyPlaceholderStored')
     );
     expect(view.textContent).not.toContain(STORED_KEY);
+    expect(view.textContent).toContain(copy('settings.models.keyLocalHint'));
     expect(removeKeyButton(view)).not.toBeNull();
   });
 

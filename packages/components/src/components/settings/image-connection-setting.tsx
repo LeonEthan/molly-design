@@ -369,6 +369,7 @@ export function ImageConnectionForm({
                 </Button>
               ) : null}
             </div>
+            <p className="text-xs text-muted-foreground">{t('settings.models.keyLocalHint')}</p>
             <ConnectionCheckError state={check} baseUrl={baseUrl} />
           </div>
         </Field>

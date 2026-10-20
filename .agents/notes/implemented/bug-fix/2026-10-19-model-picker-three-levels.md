@@ -1,5 +1,10 @@
 # Model picker keeps three levels
 
+Superseded in part by [provider hierarchy](2026-10-20-composer-provider-hierarchy.md):
+the Agent row is now Provider, the row order is Provider, Model, Reasoning,
+and the Agent chip is removed. The requirement to keep all three rows
+visible on the first click still holds.
+
 Status: implemented
 Translation: pending
 PR: [#176](https://github.com/LeonEthan/molly-design/pull/176)

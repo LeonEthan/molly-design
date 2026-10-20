@@ -98,6 +98,42 @@ export const agentDefaultsCache = createLocalStorageCache<AgentSessionDefaults>(
   agentSessionDefaultsSchema
 );
 
+/**
+ * Unsent composer provider/model/reasoning choice, keyed by landing agent id
+ * or canvas session id. A record applies only while `revision` still names the
+ * preference generation it was written against, so a later accepted turn wins.
+ */
+const composerProviderSelectionSchema = z.object({
+  modelId: z.string().nullable(),
+  reasoningConfigId: z.string().nullable(),
+  reasoning: z.string().nullable(),
+  revision: z.string(),
+});
+
+export type ComposerProviderSelectionRecord = z.infer<typeof composerProviderSelectionSchema>;
+
+export const composerProviderSelectionCache =
+  createLocalStorageCache<ComposerProviderSelectionRecord>(
+    'molly:composerProviderSelection',
+    composerProviderSelectionSchema
+  );
+
+export function readComposerProviderSelection(
+  scopeId: string,
+  revision: string
+): ComposerProviderSelectionRecord | null {
+  const record = composerProviderSelectionCache.get(scopeId);
+  if (!record || record.revision !== revision) return null;
+  return record;
+}
+
+export function writeComposerProviderSelection(
+  scopeId: string,
+  record: ComposerProviderSelectionRecord
+): void {
+  composerProviderSelectionCache.set(scopeId, record);
+}
+
 // GitHub repos cache
 export const cachedGitHubRepoSchema = z.object({
   fullName: z.string(),

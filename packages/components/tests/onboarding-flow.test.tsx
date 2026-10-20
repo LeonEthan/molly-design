@@ -380,7 +380,7 @@ describe('desktop onboarding flow', () => {
     expect(agentDefaultsCache.get(molly.id)).toMatchObject({
       modeId: null,
       modelId: 'molly-model:00000000-0000-4000-8000-000000000001/deepseek-chat',
-      configOptionValues: { reasoning_effort: 'medium' },
+      configOptionValues: { reasoning_effort: 'high' },
     });
   });
 

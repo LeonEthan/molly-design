@@ -65,6 +65,7 @@ import {
   toggleVisualAnnotationReferenceItem,
 } from '@/components/chat/visual-annotation-reference-state';
 import { SESSION_IMAGE_MAX_COUNT } from '@molly/shared';
+import { useOpenSettings } from '@/hooks/use-open-settings';
 import { cn } from '@/lib/utils';
 import { ConversationColumn } from '@/components/shared/conversation-column';
 
@@ -334,6 +335,8 @@ export interface SessionChatInputAreaProps {
   isContextCompacting?: boolean;
   /** Dynamic config option selectors from the agent's configOptions. */
   configOptionSelectors?: AcpConfigOptionSelector[];
+  /** Per-model reasoning ladders for provider/model re-validation. */
+  modelReasoningEfforts?: Record<string, readonly string[] | undefined>;
   /** Current values for each configOption (configId → value). */
   configOptionValues?: Record<string, AcpConfigOptionValue>;
   /** Whether the session's repo is public (for #mention feature) */
@@ -434,6 +437,7 @@ export const SessionChatInputArea = memo(
       showCodexResetForecast = false,
       isContextCompacting = false,
       configOptionSelectors,
+      modelReasoningEfforts,
       configOptionValues,
       isRepoPublic,
       availableCommands,
@@ -459,6 +463,7 @@ export const SessionChatInputArea = memo(
     ref: React.ForwardedRef<SessionChatInputAreaHandle>
   ) {
     const { t, i18n } = useTranslation();
+    const { openSettings } = useOpenSettings();
     const intlLocale = useMemo(
       () => toIntlLocale(i18n.resolvedLanguage ?? i18n.language),
       [i18n.language, i18n.resolvedLanguage]
@@ -1893,6 +1898,8 @@ export const SessionChatInputArea = memo(
           configOptionSelectors={configOptionSelectors}
           configOptionValues={configOptionValues}
           onConfigOptionChange={onConfigOptionChange}
+          modelReasoningEfforts={modelReasoningEfforts}
+          onOpenConnections={() => openSettings('agents')}
         />
         <DesktopPermissionModeButton
           modeOptions={modeOptions}

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { encodeMollyModelOption, MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
 import {
   EMPTY_ACP_SESSION_USER_CONFIG_EDITS,
   areAcpSessionConfigPreferencesEqual,
@@ -491,5 +492,56 @@ describe('fenceAcpSessionUserEdits', () => {
         preferences: { modelId: 'gpt-5.5', configOptionValues: { reasoning_effort: 'high' } },
       })
     ).toBe(EMPTY_ACP_SESSION_USER_CONFIG_EDITS);
+  });
+
+  it('defaults a fresh Molly connection to the first provider model and high', () => {
+    const first = encodeMollyModelOption('deepseek', 'deepseek-v4-flash');
+    const second = encodeMollyModelOption('deepseek', 'deepseek-v4-pro');
+    const resolved = resolveAcpSessionConfigSelection(
+      {
+        edits: emptyEdits,
+        preferences: {
+          modelId: MOLLY_UNSELECTED_MODEL,
+          configOptionValues: { reasoning_effort: 'off' },
+        },
+      },
+      {
+        capabilityAuthority: 'authoritative',
+        modeOptions: [],
+        modelOptions: [
+          { value: MOLLY_UNSELECTED_MODEL, label: 'Select' },
+          { value: first, label: 'Flash', group: 'DeepSeek' },
+          { value: second, label: 'Pro', group: 'DeepSeek' },
+        ],
+        defaultModeId: null,
+        defaultModelId: MOLLY_UNSELECTED_MODEL,
+        modelReasoningEfforts: {
+          [first]: ['off', 'low', 'high'],
+          [second]: ['low'],
+        },
+        configOptionSelectors: [
+          {
+            configId: 'reasoning_effort',
+            label: 'Reasoning',
+            type: 'select',
+            category: 'thought_level',
+            currentValue: 'off',
+            options: [{ value: 'off', label: 'Off' }],
+          },
+        ],
+      },
+      { cliType: 'builtin', agentType: 'molly' }
+    );
+    expect(resolved.selectedModelId).toBe(first);
+    expect(resolved.configOptionValues.reasoning_effort).toBe('high');
+    expect(
+      resolved.configOptionSelectors.find((selector) => selector.configId === 'reasoning_effort')
+    ).toMatchObject({
+      options: [
+        { value: 'off', label: 'Off' },
+        { value: 'low', label: 'Low' },
+        { value: 'high', label: 'High' },
+      ],
+    });
   });
 });

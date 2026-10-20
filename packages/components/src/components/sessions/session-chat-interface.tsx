@@ -213,6 +213,12 @@ import {
   useAcpSessionConfigSelectionState,
   useResolvedAcpSessionConfigSelection,
 } from '@/hooks/use-acp-session-config-selection';
+import { resolveComposerProviderHierarchy } from '@/lib/composer-provider-hierarchy';
+import {
+  readComposerProviderSelection,
+  writeComposerProviderSelection,
+  type ComposerProviderSelectionRecord,
+} from '@/lib/local-storage-cache';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { MessageListErrorFallback } from './message-list-error-fallback';
 import { FamiconsCloudOfflineOutline } from '@/components/icons/famicons-cloud-offline-outline';
@@ -1550,16 +1556,31 @@ export const SessionChatInterface = memo(
     const sessionConversationConfigRevision = `${session.id}:${
       sessionConversationConfig.sourceConfigKey ?? ''
     }`;
+    const storedComposerSelection = readComposerProviderSelection(
+      session.id,
+      sessionConversationConfigRevision
+    );
     const sessionConfigPreferences = useMemo(
-      () => ({
-        modeId: sessionConversationConfig.modeId,
-        modelId: sessionConversationConfig.modelId,
-        configOptionValues: sessionConversationConfig.configOptionValues,
-      }),
+      () => {
+        const configOptionValues = { ...(sessionConversationConfig.configOptionValues ?? {}) };
+        if (
+          storedComposerSelection?.reasoningConfigId &&
+          storedComposerSelection.reasoning !== null
+        ) {
+          configOptionValues[storedComposerSelection.reasoningConfigId] =
+            storedComposerSelection.reasoning;
+        }
+        return {
+          modeId: sessionConversationConfig.modeId,
+          modelId: storedComposerSelection?.modelId ?? sessionConversationConfig.modelId,
+          configOptionValues,
+        };
+      },
       [
         sessionConversationConfig.configOptionValues,
         sessionConversationConfig.modeId,
         sessionConversationConfig.modelId,
+        storedComposerSelection,
       ]
     );
     /* No effects here: user edits are the only stored selection state and the
@@ -1621,11 +1642,55 @@ export const SessionChatInterface = memo(
         modelReasoningEfforts,
       ]
     );
-    const { selectedModeId, selectedModelId, configOptionValues } =
-      useResolvedAcpSessionConfigSelection(sessionConfigSelection, sessionSelectorOptions, {
-        cliType: session.cliType,
-        agentType: session.agentType,
-      });
+    const {
+      selectedModeId,
+      selectedModelId,
+      configOptionValues,
+      configOptionSelectors: resolvedConfigOptionSelectors,
+    } = useResolvedAcpSessionConfigSelection(sessionConfigSelection, sessionSelectorOptions, {
+      cliType: session.cliType,
+      agentType: session.agentType,
+    });
+    const persistCanvasSelection = useCallback(
+      (
+        patch: Partial<
+          Pick<ComposerProviderSelectionRecord, 'modelId' | 'reasoning' | 'reasoningConfigId'>
+        >
+      ) => {
+        const current = readComposerProviderSelection(session.id, sessionConversationConfigRevision);
+        writeComposerProviderSelection(session.id, {
+          modelId:
+            patch.modelId !== undefined ? patch.modelId : (current?.modelId ?? selectedModelId),
+          reasoningConfigId:
+            patch.reasoningConfigId !== undefined
+              ? patch.reasoningConfigId
+              : (current?.reasoningConfigId ?? null),
+          reasoning:
+            patch.reasoning !== undefined ? patch.reasoning : (current?.reasoning ?? null),
+          revision: sessionConversationConfigRevision,
+        });
+      },
+      [selectedModelId, session.id, sessionConversationConfigRevision]
+    );
+    const selectCanvasModel = useCallback(
+      (value: string) => {
+        handleModelChange(value);
+        persistCanvasSelection({ modelId: value });
+      },
+      [handleModelChange, persistCanvasSelection]
+    );
+    const selectCanvasConfigOption = useCallback(
+      (configId: string, value: AcpConfigOptionValue) => {
+        handleConfigOptionChange(configId, value);
+        const thought = resolvedConfigOptionSelectors.find(
+          (selector) => selector.type === 'select' && isThoughtLevelSelector(selector)
+        );
+        if (thought?.configId === configId && typeof value === 'string') {
+          persistCanvasSelection({ reasoningConfigId: configId, reasoning: value });
+        }
+      },
+      [handleConfigOptionChange, persistCanvasSelection, resolvedConfigOptionSelectors]
+    );
     useMachineFlockAgentConfigsForMachineIds([session.machineId]);
     const machineDotlodyPath = useMemo(
       () => resolveMachineDotlodyPath(machineFlockRows, isLocalSession ? localHomeDir : null),
@@ -1879,11 +1944,11 @@ export const SessionChatInterface = memo(
     // fixed once a session exists, so it isn't cyclable here (only on the chat landing).
     const thinkEffortSelector = useMemo(
       () =>
-        configOptionSelectors.find(
+        resolvedConfigOptionSelectors.find(
           (selector): selector is AcpSelectConfigOptionSelector =>
             selector.type === 'select' && isThoughtLevelSelector(selector)
         ),
-      [configOptionSelectors]
+      [resolvedConfigOptionSelectors]
     );
     const thinkEffortCurrent = thinkEffortSelector
       ? configOptionValues[thinkEffortSelector.configId]
@@ -1902,9 +1967,13 @@ export const SessionChatInterface = memo(
       model: hideMessageArea
         ? null
         : {
-            values: modelOptions.map((option) => option.value),
+            values: resolveComposerProviderHierarchy({
+              modelOptions,
+              selectedModelId,
+              modelReasoningEfforts,
+            }).models.map((option) => option.value),
             current: selectedModelId,
-            onSelect: handleModelChange,
+            onSelect: selectCanvasModel,
           },
       thinkEffort:
         !hideMessageArea && thinkEffortSelector
@@ -1914,7 +1983,7 @@ export const SessionChatInterface = memo(
                 typeof thinkEffortCurrent === 'string'
                   ? thinkEffortCurrent
                   : thinkEffortSelector.currentValue,
-              onSelect: (value) => handleConfigOptionChange(thinkEffortSelector.configId, value),
+              onSelect: (value) => selectCanvasConfigOption(thinkEffortSelector.configId, value),
             }
           : null,
       provider: null,
@@ -4083,7 +4152,8 @@ export const SessionChatInterface = memo(
                         rateLimits={sessionRateLimits}
                         showCodexResetForecast={showCodexResetForecast}
                         isContextCompacting={isContextCompacting}
-                        configOptionSelectors={configOptionSelectors}
+                        configOptionSelectors={resolvedConfigOptionSelectors}
+                        modelReasoningEfforts={modelReasoningEfforts}
                         configOptionValues={configOptionValues}
                         isRepoPublic={isRepoPublic}
                         availableCommands={availableCommands}
@@ -4111,8 +4181,8 @@ export const SessionChatInterface = memo(
                         mcp={mcpSelection.menu}
                         skipNextViewportResizeAutoScrollRef={skipNextViewportResizeAutoScrollRef}
                         onModeChange={handleModeChange}
-                        onModelChange={handleModelChange}
-                        onConfigOptionChange={handleConfigOptionChange}
+                        onModelChange={selectCanvasModel}
+                        onConfigOptionChange={selectCanvasConfigOption}
                         onSendMessage={handleSendMessage}
                         onStop={() => {
                           void handleStop();

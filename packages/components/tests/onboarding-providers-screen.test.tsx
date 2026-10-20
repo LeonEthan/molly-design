@@ -374,9 +374,10 @@ describe('getOnboardingDefaultModelId', () => {
 });
 
 describe('getOnboardingDefaultThinking', () => {
-  it('prefers medium and falls back to the model’s first level', () => {
-    expect(getOnboardingDefaultThinking(['off', 'medium', 'high'])).toBe('medium');
-    expect(getOnboardingDefaultThinking(['off', 'high'])).toBe('off');
-    expect(getOnboardingDefaultThinking(undefined)).toBe('medium');
+  it('prefers high and otherwise the first non-off level', () => {
+    expect(getOnboardingDefaultThinking(['off', 'medium', 'high'])).toBe('high');
+    expect(getOnboardingDefaultThinking(['off', 'high'])).toBe('high');
+    expect(getOnboardingDefaultThinking(['low', 'max'])).toBe('low');
+    expect(getOnboardingDefaultThinking(undefined)).toBe('high');
   });
 });

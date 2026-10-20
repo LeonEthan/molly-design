@@ -176,23 +176,27 @@ describe('composer model picker search', () => {
   ];
 
   it('scopes the Model row to the provider picked on the Provider row', async () => {
-    const onModelChange = vi.fn();
-    await openRunConfigMenu({
+    let selectedModelId = studio;
+    const onModelChange = vi.fn((value: string) => {
+      selectedModelId = value;
+    });
+    const props = {
       ...mollyProps,
       modelOptions: twoProviderModels,
-      selectedModelId: studio,
       onModelChange,
-    });
+    };
+    await openRunConfigMenu({ ...props, selectedModelId });
     /* The scope follows the selected model's provider. */
     const providerRows = radioRows(await openSubmenu('Provider'));
-    expect(providerRows.map((row) => row.textContent)).toEqual([
-      'All providers',
-      'Studio',
-      'Review',
-    ]);
-    expect(providerRows[1]?.getAttribute('aria-checked')).toBe('true');
+    expect(providerRows.map((row) => row.textContent)).toEqual(['Studio', 'Review']);
+    expect(providerRows[0]?.getAttribute('aria-checked')).toBe('true');
 
-    await clickRow(providerRows[2]);
+    await clickRow(providerRows[1]);
+    await act(async () => {
+      root?.render(
+        createElement(DesktopRunConfigMenu, { ...desktopProps, ...props, selectedModelId })
+      );
+    });
     const modelRows = radioRows(await openSubmenu('Model'));
     expect(modelRows.map((row) => row.textContent)).toEqual(['Aurora 1', 'Nimbus 2']);
     /* Same label as the Studio model, but the exact Review value is picked. */
@@ -201,26 +205,18 @@ describe('composer model picker search', () => {
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
   });
 
-  it('restores the full grouped catalog from All providers', async () => {
+  it('lists only the selected provider in the Model row', async () => {
     await openRunConfigMenu({
       ...mollyProps,
       modelOptions: twoProviderModels,
       selectedModelId: studio,
     });
-    const providerRows = radioRows(await openSubmenu('Provider'));
-    await clickRow(providerRows[0]);
     const submenu = await openSubmenu('Model');
     const rows = radioRows(submenu);
     const labelOf = (row: HTMLElement) =>
       row.querySelector('.truncate')?.textContent ?? row.textContent;
-    expect(rows.map(labelOf)).toEqual(['Aurora 1', 'Aurora 1', 'Nimbus 2']);
-    /* Both Aurora rows carry the same label, so each shows its raw provider
-       model id as the disambiguating description. */
-    expect(rows[0]?.textContent).toContain('aurora/1');
-    expect(rows[1]?.textContent).toContain('aurora/1');
-    expect(rows[2]?.textContent).not.toContain('nimbus/2');
-    expect(submenu?.textContent).toContain('Studio');
-    expect(submenu?.textContent).toContain('Review');
+    expect(rows.map(labelOf)).toEqual(['Aurora 1']);
+    expect(submenu?.textContent).not.toContain('Nimbus 2');
     expect(submenu?.querySelector('[role="menuitem"]')).toBeNull();
   });
 
@@ -242,15 +238,14 @@ describe('composer model picker search', () => {
     });
     const providerRows = radioRows(await openSubmenu('Provider'));
     expect(providerRows.map((row) => row.textContent)).toEqual([
-      'All providers',
       'Studioconn-a',
       'Studioconn-b',
       'Review',
     ]);
     /* The scope follows the selected model's CONNECTION, not its name. */
-    expect(providerRows[1]?.getAttribute('aria-checked')).toBe('true');
+    expect(providerRows[0]?.getAttribute('aria-checked')).toBe('true');
 
-    await clickRow(providerRows[2]);
+    await clickRow(providerRows[1]);
     const modelRows = radioRows(await openSubmenu('Model'));
     expect(modelRows).toHaveLength(1);
     await clickRow(modelRows[0]);
@@ -258,39 +253,18 @@ describe('composer model picker search', () => {
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
   });
 
-  it('drops a stored provider pick when the catalog loses that connection', async () => {
-    /* A catalog swap (machine/agent switch) must not leave the Model submenu
-       scoped to a connection that no longer exists — with one provider left
-       the Provider row hides and the stale scope would be unfixable. */
+  it('follows the selected model when the catalog loses another connection', async () => {
+    const studioNimbus = encodeMollyModelOption('studio', 'nimbus/2');
     await openRunConfigMenu({
       ...mollyProps,
-      modelOptions: twoProviderModels,
+      modelOptions: [
+        twoProviderModels[0]!,
+        { value: studioNimbus, label: 'Nimbus 2', description: 'nimbus/2', group: 'Studio' },
+      ],
       selectedModelId: studio,
     });
     const providerRows = radioRows(await openSubmenu('Provider'));
-    await clickRow(providerRows[2]); // Review
-    /* Swap the catalog: the Review connection is gone. */
-    const studioNimbus = encodeMollyModelOption('studio', 'nimbus/2');
-    await act(async () => {
-      root?.render(
-        createElement(DesktopRunConfigMenu, {
-          ...desktopProps,
-          ...mollyProps,
-          modelOptions: [
-            twoProviderModels[0]!,
-            { value: studioNimbus, label: 'Nimbus 2', description: 'nimbus/2', group: 'Studio' },
-          ],
-          selectedModelId: studio,
-        })
-      );
-    });
-    const rootMenu = menuContents()[0];
-    const providerRow = [...(rootMenu?.querySelectorAll('[role="menuitem"]') ?? [])].find((el) =>
-      el.textContent?.startsWith('Provider')
-    );
-    expect(providerRow).toBeUndefined();
-    /* The scope falls back to the selected model's provider, so the Model
-       submenu still lists its connection's models. */
+    expect(providerRows.map((row) => row.textContent)).toEqual(['Studio']);
     const modelRows = radioRows(await openSubmenu('Model'));
     expect(modelRows.map((row) => row.querySelector('.truncate')?.textContent)).toEqual([
       'Aurora 1',
@@ -303,12 +277,10 @@ describe('composer model picker search', () => {
       (el) => el.textContent ?? ''
     );
 
-  it('keeps Agent, Reasoning, and Model when each level has one option', async () => {
-    const onAgentChange = vi.fn();
+  it('shows Provider, Model, and Reasoning when each level has one option', async () => {
     const singleModel = encodeMollyModelOption('deepseek', 'deepseek-v4-pro');
-    const freshConnect = {
+    await openRunConfigMenu({
       ...mollyProps,
-      onAgentChange,
       modelOptions: [
         {
           value: singleModel,
@@ -318,6 +290,7 @@ describe('composer model picker search', () => {
         },
       ],
       selectedModelId: null,
+      modelReasoningEfforts: { [singleModel]: ['off'] },
       configOptionSelectors: [
         {
           type: 'select' as const,
@@ -329,56 +302,97 @@ describe('composer model picker search', () => {
         },
       ],
       configOptionValues: { reasoning_effort: 'off' },
-    };
-    await openRunConfigMenu(freshConnect);
+    });
     const labels = rootRowText();
     const indexOf = (prefix: string) => labels.findIndex((text) => text.startsWith(prefix));
-    expect(indexOf('Agent')).toBeGreaterThanOrEqual(0);
-    expect(indexOf('Reasoning')).toBeGreaterThan(indexOf('Agent'));
-    expect(indexOf('Model')).toBeGreaterThan(indexOf('Reasoning'));
-    expect(indexOf('Provider')).toBe(-1);
+    expect(indexOf('Provider')).toBeGreaterThanOrEqual(0);
+    expect(indexOf('Model')).toBeGreaterThan(indexOf('Provider'));
+    expect(indexOf('Reasoning')).toBeGreaterThan(indexOf('Model'));
+    expect(indexOf('Agent')).toBe(-1);
+    expect(radioRows(await openSubmenu('Provider')).map((row) => row.textContent)).toEqual([
+      'DeepSeek',
+    ]);
     expect(radioRows(await openSubmenu('Reasoning')).map((row) => row.textContent)).toEqual([
       'Off',
     ]);
     expect(radioRows(await openSubmenu('Model')).map((row) => row.textContent)).toEqual([
       'DeepSeek V4 Pro',
     ]);
-    const agentRows = radioRows(await openSubmenu('Agent'));
-    expect(agentRows.map((row) => row.textContent)).toEqual(['Molly']);
-    await clickRow(agentRows[0]);
-    expect(onAgentChange).not.toHaveBeenCalled();
   });
 
-  it('changes Agent only from a different row and keeps a repeated pick from clearing Provider', async () => {
-    const onAgentChange = vi.fn();
-    const other: AgentConfigMeta = {
-      ...mollyConfig,
-      id: 'config-other' as AgentConfigId,
-      name: 'Other',
-    };
+  it('re-validates model and reasoning when the provider changes and ignores a repeated pick', async () => {
+    const onModelChange = vi.fn();
+    const onConfigOptionChange = vi.fn();
+    const reviewOnly = encodeMollyModelOption('review', 'nimbus/2');
     await openRunConfigMenu({
       ...mollyProps,
-      availableAgentConfigs: [mollyConfig, other],
-      onAgentChange,
       modelOptions: twoProviderModels,
       selectedModelId: studio,
+      onModelChange,
+      onConfigOptionChange,
+      modelReasoningEfforts: {
+        [studio]: ['low', 'high'],
+        [review]: ['low', 'high'],
+        [reviewOnly]: ['low', 'max'],
+      },
+      configOptionSelectors: [
+        {
+          type: 'select' as const,
+          configId: 'reasoning_effort',
+          category: 'thought_level',
+          label: 'Thinking',
+          currentValue: 'low',
+          options: [
+            { value: 'low', label: 'Low' },
+            { value: 'high', label: 'High' },
+          ],
+        },
+      ],
+      configOptionValues: { reasoning_effort: 'low' },
     });
-    await clickRow(radioRows(await openSubmenu('Provider'))[2]);
-    const agentRows = radioRows(await openSubmenu('Agent'));
-    expect(agentRows.map((row) => row.querySelector('.truncate')?.textContent)).toEqual([
-      'Molly',
-      'Other',
-    ]);
-    await clickRow(agentRows[0]);
-    expect(onAgentChange).not.toHaveBeenCalled();
-    expect(
-      radioRows(await openSubmenu('Model')).map(
-        (row) => row.querySelector('.truncate')?.textContent
-      )
-    ).toEqual(['Aurora 1', 'Nimbus 2']);
-    await clickRow(radioRows(await openSubmenu('Agent'))[1]);
-    expect(onAgentChange).toHaveBeenCalledTimes(1);
-    expect(onAgentChange).toHaveBeenCalledWith({ agentId: other.id, machineId });
+    const providerRows = radioRows(await openSubmenu('Provider'));
+    await clickRow(providerRows[0]);
+    expect(onModelChange).not.toHaveBeenCalled();
+    expect(onConfigOptionChange).not.toHaveBeenCalled();
+    await clickRow(radioRows(await openSubmenu('Provider'))[1]);
+    expect(onModelChange).toHaveBeenCalledWith(review);
+    /* low is still valid on Review's first model, so reasoning stays. */
+    expect(onConfigOptionChange).not.toHaveBeenCalled();
+  });
+
+  it('picks the first reasoning level when the new provider has no high', async () => {
+    const onModelChange = vi.fn();
+    const onConfigOptionChange = vi.fn();
+    const limited = encodeMollyModelOption('review', 'aurora/1');
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: twoProviderModels,
+      selectedModelId: studio,
+      onModelChange,
+      onConfigOptionChange,
+      modelReasoningEfforts: {
+        [studio]: ['low', 'high'],
+        [limited]: ['low', 'max'],
+        [nimbus]: ['low', 'max'],
+      },
+      configOptionSelectors: [
+        {
+          type: 'select' as const,
+          configId: 'reasoning_effort',
+          category: 'thought_level',
+          label: 'Thinking',
+          currentValue: 'high',
+          options: [
+            { value: 'low', label: 'Low' },
+            { value: 'high', label: 'High' },
+          ],
+        },
+      ],
+      configOptionValues: { reasoning_effort: 'high' },
+    });
+    await clickRow(radioRows(await openSubmenu('Provider'))[1]);
+    expect(onModelChange).toHaveBeenCalledWith(limited);
+    expect(onConfigOptionChange).toHaveBeenCalledWith('reasoning_effort', 'low');
   });
 
   it('shows a disabled Reasoning placeholder when the model has no thought level', async () => {
@@ -398,45 +412,48 @@ describe('composer model picker search', () => {
     expect(onConfigOptionChange).not.toHaveBeenCalled();
   });
 
-  it('keeps Agent, Reasoning, and Model on the in-canvas path and lists only the session agent', async () => {
+  it('shows Provider, Model, and Reasoning on the in-canvas path without an Agent row', async () => {
     const other: AgentConfigMeta = {
       ...mollyConfig,
       id: 'config-other' as AgentConfigId,
       name: 'Other',
     };
+    const canvasModel = encodeMollyModelOption('deepseek', 'deepseek-v4-pro');
     await openRunConfigMenu({
       agentSelection: { agentId: mollyConfig.id, machineId },
       availableAgentConfigs: [mollyConfig, other],
-      modelOptions: [{ value: 'gpt-5.5', label: 'GPT-5.5' }],
-      selectedModelId: 'gpt-5.5',
+      modelOptions: [
+        { value: canvasModel, label: 'DeepSeek V4 Pro', group: 'DeepSeek' },
+      ],
+      selectedModelId: canvasModel,
+      modelReasoningEfforts: { [canvasModel]: ['high'] },
       configOptionSelectors: [
         {
           type: 'select' as const,
           configId: 'reasoning_effort',
           category: 'thought_level',
           label: 'Thinking',
-          currentValue: 'off',
-          options: [{ value: 'off', label: 'Off' }],
+          currentValue: 'high',
+          options: [{ value: 'high', label: 'High' }],
         },
       ],
-      configOptionValues: { reasoning_effort: 'off' },
+      configOptionValues: { reasoning_effort: 'high' },
     });
     const labels = rootRowText();
     const indexOf = (prefix: string) => labels.findIndex((text) => text.startsWith(prefix));
-    expect(indexOf('Agent')).toBeGreaterThanOrEqual(0);
-    expect(indexOf('Reasoning')).toBeGreaterThan(indexOf('Agent'));
-    expect(indexOf('Model')).toBeGreaterThan(indexOf('Reasoning'));
-    expect(
-      radioRows(await openSubmenu('Agent')).map(
-        (row) => row.querySelector('.truncate')?.textContent
-      )
-    ).toEqual(['Molly']);
+    expect(indexOf('Provider')).toBeGreaterThanOrEqual(0);
+    expect(indexOf('Model')).toBeGreaterThan(indexOf('Provider'));
+    expect(indexOf('Reasoning')).toBeGreaterThan(indexOf('Model'));
+    expect(indexOf('Agent')).toBe(-1);
+    expect(radioRows(await openSubmenu('Provider')).map((row) => row.textContent)).toEqual([
+      'DeepSeek',
+    ]);
     expect(radioRows(await openSubmenu('Reasoning')).map((row) => row.textContent)).toEqual([
-      'Off',
+      'High',
     ]);
   });
 
-  it('keeps a canvas Agent row on the session agent when that config is unresolved', async () => {
+  it('keeps Provider when the session agent config is unresolved', async () => {
     const other: AgentConfigMeta = {
       ...agentConfig,
       id: 'config-other' as AgentConfigId,
@@ -448,11 +465,11 @@ describe('composer model picker search', () => {
       modelOptions: fewModels,
       selectedModelId: fewModels[0]?.value ?? null,
     });
-    expect(rootRowText().some((text) => text.startsWith('Agent'))).toBe(true);
-    expect(radioRows(await openSubmenu('Agent'))).toEqual([]);
+    expect(rootRowText().some((text) => text.startsWith('Agent'))).toBe(false);
+    expect(rootRowText().some((text) => text.startsWith('Provider'))).toBe(true);
   });
 
-  it('still shows Agent and Reasoning beside a freshly connected model list', async () => {
+  it('defaults a fresh connection to its first model and does not offer Agent', async () => {
     const flash = encodeMollyModelOption('deepseek', 'deepseek-v4-flash');
     const pro = encodeMollyModelOption('deepseek', 'deepseek-v4-pro');
     await openRunConfigMenu({
@@ -477,10 +494,10 @@ describe('composer model picker search', () => {
       configOptionValues: { reasoning_effort: 'off' },
     });
     const labels = rootRowText();
-    expect(labels.some((text) => text.startsWith('Agent'))).toBe(true);
+    expect(labels.some((text) => text.startsWith('Agent'))).toBe(false);
+    expect(labels.some((text) => text.startsWith('Provider'))).toBe(true);
     expect(labels.some((text) => text.startsWith('Reasoning'))).toBe(true);
     expect(labels.some((text) => text.startsWith('Model'))).toBe(true);
-    expect(labels.some((text) => text.startsWith('Provider'))).toBe(false);
     const modelRows = radioRows(await openSubmenu('Model'));
     expect(modelRows.map((row) => row.textContent)).toEqual([
       'DeepSeek V4.1 Flash',
@@ -488,7 +505,7 @@ describe('composer model picker search', () => {
     ]);
   });
 
-  it('hides the Provider row when every model comes from one provider', async () => {
+  it('keeps a Provider row when every model comes from one provider', async () => {
     const studioNimbus = encodeMollyModelOption('studio', 'nimbus/2');
     await openRunConfigMenu({
       ...mollyProps,
@@ -498,11 +515,25 @@ describe('composer model picker search', () => {
       ],
       selectedModelId: studio,
     });
-    const rootMenu = menuContents()[0];
-    const providerRow = [...(rootMenu?.querySelectorAll('[role="menuitem"]') ?? [])].find((el) =>
-      el.textContent?.startsWith('Provider')
+    expect(radioRows(await openSubmenu('Provider')).map((row) => row.textContent)).toEqual([
+      'Studio',
+    ]);
+  });
+
+  it('points an empty Provider row at Settings connections', async () => {
+    const onOpenConnections = vi.fn();
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: [{ value: MOLLY_UNSELECTED_MODEL, label: 'Select a connection and model' }],
+      selectedModelId: MOLLY_UNSELECTED_MODEL,
+      onOpenConnections,
+    });
+    const providerRow = [...(menuContents()[0]?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].find(
+      (el) => el.textContent?.startsWith('Provider')
     );
-    expect(providerRow).toBeUndefined();
+    expect(providerRow?.textContent).toContain('Connections');
+    await clickRow(providerRow);
+    expect(onOpenConnections).toHaveBeenCalledTimes(1);
   });
 
   it('shows an actionable empty state instead of offering the unselected sentinel', async () => {
@@ -585,9 +616,9 @@ describe('composer model picker search', () => {
 
   it('groups connection models and finds them by raw id or connection', async () => {
     const connectionModels = ['Studio', 'Review', 'Archive'].flatMap((connection) =>
-      ['aurora/1', 'nimbus/2'].map((modelId) => ({
+      ['aurora/1', 'nimbus/2', 'cirrus/3', 'stratus/4', 'alto/5', 'cumulus/6'].map((modelId) => ({
         value: encodeMollyModelOption(connection.toLowerCase(), modelId),
-        label: modelId === 'aurora/1' ? 'Aurora 1' : 'Nimbus 2',
+        label: modelId,
         description: modelId,
         group: connection,
       }))
@@ -595,20 +626,28 @@ describe('composer model picker search', () => {
     const { search, rows } = await openModelMenu({
       availableAgentConfigs: [{ ...agentConfig, name: 'Molly', agentType: 'molly' }],
       modelOptions: connectionModels,
-      /* No selection yet: the Model row shows the whole catalog, grouped. */
+      /* No selection yet: the Model row defaults to the first provider. */
       selectedModelId: null,
     });
     const groupLabels = () =>
       [...(submenuContent()?.querySelectorAll('div') ?? [])]
         .map((node) => node.textContent?.trim())
         .filter((text) => text === 'Studio' || text === 'Review' || text === 'Archive');
-    expect(rows()).toEqual(connectionModels.map((option) => option.label));
-    expect(groupLabels()).toEqual(['Studio', 'Review', 'Archive']);
+    expect(rows()).toEqual([
+      'aurora/1',
+      'nimbus/2',
+      'cirrus/3',
+      'stratus/4',
+      'alto/5',
+      'cumulus/6',
+    ]);
+    /* One provider is one group, so the Model submenu does not repeat a heading. */
+    expect(groupLabels()).toEqual([]);
+    expect(search).not.toBeNull();
     await typeInto(search as HTMLInputElement, 'nimbus/2');
-    expect(rows()).toEqual(['Nimbus 2', 'Nimbus 2', 'Nimbus 2']);
+    expect(rows()).toEqual(['nimbus/2']);
     await typeInto(search as HTMLInputElement, 'archive');
-    expect(rows()).toEqual(['Aurora 1', 'Nimbus 2']);
-    expect(groupLabels()).toEqual(['Archive']);
+    expect(rows()).toEqual([]);
   });
 
   it('says so when nothing matches instead of showing an empty menu', async () => {

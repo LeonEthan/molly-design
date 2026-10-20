@@ -7,6 +7,10 @@ import {
   type AcpSelectorTarget,
 } from '@/components/shared/acp-selector-options';
 import type { AcpSessionSelectOption } from '@/components/shared/acp-session-select';
+import {
+  defaultComposerReasoning,
+  resolveComposerProviderHierarchy,
+} from '@/lib/composer-provider-hierarchy';
 
 /**
  * ACP run-config selection is a PURE DERIVATION, not reconciled state.
@@ -251,7 +255,7 @@ export const resolveAcpSessionConfigSelection = (
     defaultModeId,
     capabilityAuthority
   );
-  const selectedModelId = resolveSelectField(
+  let selectedModelId = resolveSelectField(
     edits.model,
     runtimePreferences?.modelId,
     preferences.modelId,
@@ -309,6 +313,43 @@ export const resolveAcpSessionConfigSelection = (
       configOptionValues[configId] = isConfigOptionValueValid(selector, preferredValue)
         ? preferredValue
         : selector.currentValue;
+    }
+  }
+
+  const thoughtSelector = selectors.find(
+    (selector) => selector.type === 'select' && isThoughtLevelSelector(selector)
+  );
+  const thoughtConfigValue = thoughtSelector
+    ? configOptionValues[thoughtSelector.configId]
+    : undefined;
+  const hierarchy = resolveComposerProviderHierarchy({
+    modelOptions,
+    selectedModelId,
+    reasoningValue: typeof thoughtConfigValue === 'string' ? thoughtConfigValue : null,
+    modelReasoningEfforts,
+    fallbackReasoningLevels:
+      thoughtSelector?.type === 'select' ? thoughtSelector.options.map((option) => option.value) : undefined,
+  });
+  if (hierarchy.mode === 'connections') {
+    if (hierarchy.modelId !== selectedModelId) {
+      selectedModelId = hierarchy.modelId;
+      if (target) {
+        selectors = normalizeReasoningEffortSelectors(selectors, {
+          cliType: target.cliType,
+          agentType: target.agentType,
+          modelReasoningEfforts,
+          selectedModelId,
+        });
+      }
+    }
+    const resolvedThought = selectors.find(
+      (selector) => selector.type === 'select' && isThoughtLevelSelector(selector)
+    );
+    if (resolvedThought?.type === 'select') {
+      const offered = resolvedThought.options.map((option) => option.value);
+      configOptionValues[resolvedThought.configId] = offered.includes(hierarchy.reasoning)
+        ? hierarchy.reasoning
+        : defaultComposerReasoning(offered, true);
     }
   }
 

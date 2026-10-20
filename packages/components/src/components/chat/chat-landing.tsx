@@ -23,6 +23,7 @@ import {
   extractPromptPreviewFromInputBlocks,
   getServerNow,
   normalizeSessionInputBlocks,
+  type AcpConfigOptionValue,
   type AgentConfigMeta,
   type LocalProjectId,
   type MachineId,
@@ -79,6 +80,7 @@ import {
   readChatLandingDefaults,
   resolvePreferredChatLandingAgentSelection,
 } from '@/lib/chat-landing-defaults';
+import { resolveComposerProviderHierarchy } from '@/lib/composer-provider-hierarchy';
 import { agentDefaultsCache, persistAgentSessionDefaults } from '@/lib/local-storage-cache';
 import { filterAcpSessionConfigOptionValues } from '@/lib/acp-session-config-selection';
 import {
@@ -740,7 +742,8 @@ function WorkspaceChatLanding({
     runtimeOverrides: selectedConfig?.runtimeOverrides,
     machine: selectedMachine,
   });
-  const { modeOptions, modelOptions, configOptionSelectors } = selectorOptions;
+  const { modeOptions, modelOptions, configOptionSelectors, modelReasoningEfforts } =
+    selectorOptions;
   const {
     selectedModeId,
     selectedModelId,
@@ -750,6 +753,41 @@ function WorkspaceChatLanding({
     cliType: selectedConfig?.cliType,
     agentType: selectedConfig?.agentType,
   });
+  const persistLandingSelection = useCallback(
+    (patch: {
+      modelId?: string | null;
+      configId?: string;
+      configValue?: AcpConfigOptionValue;
+    }) => {
+      if (!selectedAgent) return;
+      const current = agentDefaultsCache.get(selectedAgent.agentId);
+      const nextConfig = { ...(current?.configOptionValues ?? {}) };
+      if (patch.configId !== undefined && patch.configValue !== undefined) {
+        nextConfig[patch.configId] = patch.configValue;
+      }
+      persistAgentSessionDefaults(selectedAgent.agentId, {
+        modeId: current?.modeId ?? selectedModeId,
+        modelId:
+          patch.modelId !== undefined ? patch.modelId : (current?.modelId ?? selectedModelId),
+        configOptionValues: nextConfig,
+      });
+    },
+    [selectedAgent, selectedModeId, selectedModelId]
+  );
+  const selectLandingModel = useCallback(
+    (value: string) => {
+      setSelectedModelName(value);
+      persistLandingSelection({ modelId: value });
+    },
+    [persistLandingSelection, setSelectedModelName]
+  );
+  const selectLandingConfigOption = useCallback(
+    (configId: string, value: AcpConfigOptionValue) => {
+      handleConfigOptionChange(configId, value);
+      persistLandingSelection({ configId, configValue: value });
+    },
+    [handleConfigOptionChange, persistLandingSelection]
+  );
   const dispatchConfigOptionValues = useMemo(
     () => filterAcpSessionConfigOptionValues(configOptionValues, resolvedConfigOptionSelectors),
     [configOptionValues, resolvedConfigOptionSelectors]
@@ -842,6 +880,7 @@ function WorkspaceChatLanding({
     if (appliedModelId) {
       setSelectedModelName(appliedModelId);
     }
+    const persistedConfig: Record<string, AcpConfigOptionValue> = {};
     for (const { configId, value } of resolveApplicableConfigOptionValues(
       pendingRecentRunConfig,
       configOptionSelectors,
@@ -850,6 +889,15 @@ function WorkspaceChatLanding({
       { switchesModel: appliedModelId !== undefined && appliedModelId !== selectedModelId }
     )) {
       handleConfigOptionChange(configId, value);
+      persistedConfig[configId] = value;
+    }
+    if (selectedAgent && (appliedModelId || Object.keys(persistedConfig).length > 0)) {
+      const current = agentDefaultsCache.get(selectedAgent.agentId);
+      persistAgentSessionDefaults(selectedAgent.agentId, {
+        modeId: current?.modeId ?? null,
+        modelId: appliedModelId ?? current?.modelId ?? selectedModelId,
+        configOptionValues: { ...current?.configOptionValues, ...persistedConfig },
+      });
     }
   }, [
     appliedSessionConfigTargetKey,
@@ -909,9 +957,11 @@ function WorkspaceChatLanding({
       onSelect: (value) => setSelectedModeId(value),
     },
     model: {
-      values: modelOptions.map((option) => option.value),
+      values: resolveComposerProviderHierarchy({ modelOptions, selectedModelId }).models.map(
+        (option) => option.value
+      ),
       current: selectedModelId,
-      onSelect: (value) => setSelectedModelName(value),
+      onSelect: (value) => selectLandingModel(value),
     },
     thinkEffort: cycleThinkEffortSelector
       ? {
@@ -920,7 +970,7 @@ function WorkspaceChatLanding({
             typeof cycleThinkEffortCurrent === 'string'
               ? cycleThinkEffortCurrent
               : cycleThinkEffortSelector.currentValue,
-          onSelect: (value) => handleConfigOptionChange(cycleThinkEffortSelector.configId, value),
+          onSelect: (value) => selectLandingConfigOption(cycleThinkEffortSelector.configId, value),
         }
       : null,
     provider: selectedAgent
@@ -1711,11 +1761,7 @@ function WorkspaceChatLanding({
     >
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         {isElectron ? (
-          <LandingDesignConfigChips
-            agentLabel={selectedConfig?.name ?? null}
-            imageModelId={landingImageModelId}
-            disabled={submitting}
-          />
+          <LandingDesignConfigChips imageModelId={landingImageModelId} disabled={submitting} />
         ) : null}
         {isElectron ? (
           <CanvasSizeSelector
@@ -1738,11 +1784,13 @@ function WorkspaceChatLanding({
           }}
           modelOptions={modelOptions}
           selectedModelId={selectedModelId}
-          onModelChange={setSelectedModelName}
+          onModelChange={selectLandingModel}
           onAgentChange={setSelectedAgent}
-          configOptionSelectors={configOptionSelectors}
+          configOptionSelectors={resolvedConfigOptionSelectors}
           configOptionValues={configOptionValues}
-          onConfigOptionChange={handleConfigOptionChange}
+          onConfigOptionChange={selectLandingConfigOption}
+          modelReasoningEfforts={modelReasoningEfforts}
+          onOpenConnections={() => openSettings('agents')}
           recentRunConfigs={recentRunConfigItems}
           onRecentRunConfigSelect={handleRecentRunConfigSelect}
         />

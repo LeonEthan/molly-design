@@ -26,13 +26,14 @@ import { BrowserAccountImportPanel } from '@/components/settings/browser-account
 import { getIpcServices, getPublicBrowserBridge } from '@/lib/electron-ipc-client';
 import { agentDefaultsCache } from '@/lib/local-storage-cache';
 import { readChatLandingDefaults, writeChatLandingDefaults } from '@/lib/chat-landing-defaults';
+import { defaultComposerReasoning } from '@/lib/composer-provider-hierarchy';
 import { getReadyModelConnections, isImageConnectionReady } from '@/lib/design-model-readiness';
 import { OnboardingShell, OnboardingBackButton, OnboardingNextButton } from '../onboarding-shell';
 import { getOnboardingMollyConfigs } from '../onboarding-agent';
 
-/** Product default thinking for a first session: Medium whenever the model offers it. */
+/** First-session reasoning: `high` when the model offers it, otherwise its first non-off level. */
 export function getOnboardingDefaultThinking(efforts: readonly string[] | undefined): string {
-  return !efforts || efforts.includes('medium') ? 'medium' : (efforts[0] ?? 'medium');
+  return defaultComposerReasoning(efforts, true);
 }
 
 type CatalogModel = HarnessModelCatalog['models'][number];
@@ -423,8 +424,7 @@ export function ProvidersScreen(props: ProvidersScreenProps) {
   const handleNext = () => {
     if (!mollyConfig || !defaultModelId) return;
     // Bind the first session so the landing composer needs no second pick:
-    // Agent = auto-selected Molly, model = the connected LLM's first offered
-    // model, thinking = product default (Medium where the model offers it).
+    // the connected LLM's first offered model, reasoning = high when offered.
     const thinking = getOnboardingDefaultThinking(
       selectorOptions.modelReasoningEfforts?.[defaultModelId]
     );

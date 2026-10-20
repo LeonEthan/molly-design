@@ -9,6 +9,9 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (_key: string, fallback?: string) => fallback ?? _key }),
 }));
 
+import { getDefaultStore } from 'jotai';
+
+import { designElementFocusAtom } from '../src/atoms/design-element-focus';
 import { MessageTextWithChips } from '../src/components/mentions/message-text-chips';
 
 (
@@ -55,5 +58,38 @@ describe('MessageTextWithChips', () => {
     expect(container.querySelector('.whitespace-nowrap')?.textContent).toBe(
       '@👨‍👩‍👧‍👦-r'
     );
+  });
+
+  it('focuses the elements a design element chip cites on click or Enter, and ignores a stale one', () => {
+    const reference = {
+      artworkId: 'art-1',
+      baselineRevisionId: 'a'.repeat(64),
+      elementIds: ['title'],
+    };
+    const label = '@Selected elements (1)';
+    const text = `Fix ${label}`;
+    const span = (target: string) => ({
+      start: 4,
+      end: 4 + label.length,
+      kind: 'design_element' as const,
+      label,
+      target,
+    });
+    const store = getDefaultStore();
+
+    flushSync(() => root.render(<MessageTextWithChips text={text} spans={[span(JSON.stringify(reference))]} />));
+    container.querySelector<HTMLElement>('[role="button"]')!.click();
+    expect(store.get(designElementFocusAtom)).toEqual(reference);
+
+    store.set(designElementFocusAtom, null);
+    container
+      .querySelector<HTMLElement>('[role="button"]')!
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(store.get(designElementFocusAtom)).toEqual(reference);
+
+    flushSync(() => root.render(<MessageTextWithChips text={text} spans={[span('not json')]} />));
+    store.set(designElementFocusAtom, null);
+    container.querySelector<HTMLElement>('[role="button"]')!.click();
+    expect(store.get(designElementFocusAtom)).toBeNull();
   });
 });

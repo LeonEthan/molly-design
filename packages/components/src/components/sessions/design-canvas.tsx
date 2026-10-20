@@ -17,6 +17,7 @@ import { getSessionRoomId, type SessionId } from '@molly/shared';
 import { MOLLY_HARNESS_ID } from '@molly/shared/embedded-harness';
 import { activeWorkspaceRuntimeAtom } from '@/atoms/runtime';
 import { designCanvasFocusAtom } from '@/atoms/layout-state';
+import { designElementFocusAtom } from '@/atoms/design-element-focus';
 import { localProbeResultAtom } from '@/atoms/local-probe';
 import { userAtom, currentWorkspaceIdAtom, getAllAgentConfigAtom } from '@/atoms';
 import { getIpcServices, onIpcEvent, type IpcServices } from '@/lib/electron-ipc-client';
@@ -389,6 +390,13 @@ export function DesignCanvas({
     },
     [artworkId, hostId]
   );
+  const [designElementFocus, setDesignElementFocus] = useAtom(designElementFocusAtom);
+  useEffect(() => {
+    if (!designElementFocus) return;
+    setDesignElementFocus(null);
+    if (designElementFocus.artworkId !== artworkId || !designElementFocus.elementIds.length) return;
+    void settle([{ tone: 'changed', elementIds: [...designElementFocus.elementIds] }]);
+  }, [artworkId, designElementFocus, setDesignElementFocus, settle]);
   const runningTurnId = active ? canvasState?.turnId : undefined;
   const runningTurnIndexed =
     !!runningTurnId && designHistory.some((entry) => entry.id === runningTurnId);

@@ -1,7 +1,13 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSetAtom } from 'jotai';
 
 import { sanitizeMessageTextSpans, type MessageTextSpan } from '@molly/shared';
+import {
+  DesignElementReferenceSchema,
+  type DesignElementReference,
+} from '@molly/shared/design-element-reference';
+import { designElementFocusAtom } from '@/atoms/design-element-focus';
 import { cn } from '@/lib/utils';
 import {
   getMentionKindIcon,
@@ -102,23 +108,35 @@ const GRAPHEME_SEGMENTER = new Intl.Segmenter(undefined, { granularity: 'graphem
  */
 const CHIP_UNBREAKABLE_HEAD_CHARS = 4;
 
+function designElementReferenceOf(target: string | undefined): DesignElementReference | null {
+  try {
+    const parsed = DesignElementReferenceSchema.safeParse(JSON.parse(target ?? ''));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 function MessageTextChip({
   span,
   label,
   onToggle,
+  onActivate,
 }: {
   span: MessageTextSpan;
   /** Resolved by the parent so a chip costs no i18n subscription of its own. */
   label: string;
   /** Only pasted text has an action: it expands in place. */
   onToggle?: () => void;
+  /** A design element chip points at its canvas elements; a stale one does nothing. */
+  onActivate?: () => void;
 }) {
   const isBoxed = Boolean(onToggle);
   const className = cn(
     isBoxed ? CHIP_BUTTON_CLASS_NAME : CHIP_CLASS_NAME,
     span.kind === 'pasted_text' ? MENTION_NEUTRAL_CHIP_CLASS_NAME : MENTION_CHIP_CLASS_NAME,
     // With no fill to darken, the hover affordance has to be typographic.
-    onToggle && 'cursor-pointer hover:underline'
+    (onToggle || onActivate) && 'cursor-pointer hover:underline'
   );
   // A frozen mark (an Agent Role's emoji) stands in for the kind's icon, so the
   // bubble shows the same thing the composer did.
@@ -158,13 +176,29 @@ function MessageTextChip({
     </>
   );
 
-  return onToggle ? (
-    <button type="button" className={className} onClick={onToggle}>
-      {content}
-    </button>
-  ) : (
-    <span className={className}>{content}</span>
-  );
+  if (onToggle)
+    return (
+      <button type="button" className={className} onClick={onToggle}>
+        {content}
+      </button>
+    );
+  if (onActivate)
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        className={className}
+        onClick={onActivate}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          onActivate();
+        }}
+      >
+        {content}
+      </span>
+    );
+  return <span className={className}>{content}</span>;
 }
 
 /**
@@ -185,6 +219,7 @@ export function MessageTextWithChips({
   const { t } = useTranslation();
   const resolved = React.useMemo(() => sanitizeMessageTextSpans(text, spans), [spans, text]);
   const [expanded, setExpanded] = React.useState<ReadonlySet<number>>(() => new Set());
+  const focusDesignElements = useSetAtom(designElementFocusAtom);
 
   if (!resolved) return <>{text}</>;
 
@@ -218,6 +253,14 @@ export function MessageTextWithChips({
                     else next.add(start);
                     return next;
                   })
+              : undefined
+          }
+          onActivate={
+            span.kind === 'design_element'
+              ? () => {
+                  const reference = designElementReferenceOf(span.target);
+                  if (reference) focusDesignElements(reference);
+                }
               : undefined
           }
         />

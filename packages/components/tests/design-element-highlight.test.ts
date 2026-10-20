@@ -75,3 +75,44 @@ it('clears every tone for an empty list and removes its layer on dispose', () =>
   expect(document.querySelector('.molly-highlight-layer')).toBeNull();
   highlight = createElementHighlight();
 });
+
+it('draws a numbered badge at the group union and replaces it with the tone', () => {
+  highlight.show([
+    { tone: 'working', elementIds: ['title'], badge: 1 },
+    { tone: 'working', elementIds: ['leaf'], badge: 2 },
+  ]);
+  const badges = [...document.querySelectorAll<HTMLElement>('.molly-highlight-badge')];
+  expect(badges.map((node) => node.textContent)).toEqual(['1', '2']);
+  expect(badges[0].hidden).toBe(false);
+  expect([badges[0].style.left, badges[0].style.top]).toEqual(['292px', '190px']);
+  vi.advanceTimersByTime(HIGHLIGHT_HOLD_MS.changed! + 600);
+  expect(document.querySelectorAll('.molly-highlight-badge')).toHaveLength(2);
+  highlight.show([{ tone: 'working', elementIds: [] }]);
+  expect(document.querySelectorAll('.molly-highlight-badge')).toHaveLength(0);
+  highlight.show([{ tone: 'changed', elementIds: ['title'], badge: 1 }]);
+  const settled = [...document.querySelectorAll<HTMLElement>('.molly-highlight-badge')];
+  expect(settled.map((node) => node.textContent)).toEqual(['✓']);
+  vi.advanceTimersByTime(HIGHLIGHT_HOLD_MS.changed!);
+  expect(settled[0].dataset.fading).toBe('true');
+  vi.advanceTimersByTime(600);
+  expect(document.querySelectorAll('.molly-highlight-badge')).toHaveLength(0);
+});
+
+it('keeps hover outlines independent of the IPC tones', () => {
+  highlight.show([{ tone: 'hover', elementIds: ['title'] }]);
+  highlight.show([{ tone: 'working', elementIds: ['leaf'] }]);
+  expect(boxes('hover')).toHaveLength(1);
+  expect(boxes('working')).toHaveLength(1);
+  vi.advanceTimersByTime(HIGHLIGHT_HOLD_MS.outside! + 600);
+  expect(boxes('hover')).toHaveLength(1);
+  highlight.show([{ tone: 'hover', elementIds: [] }]);
+  expect(boxes('hover')).toHaveLength(0);
+  expect(boxes('working')).toHaveLength(1);
+});
+
+it('never paints a badge whose targets are gone', () => {
+  highlight.show([{ tone: 'working', elementIds: ['missing'], badge: 3 }]);
+  const badge = document.querySelector<HTMLElement>('.molly-highlight-badge')!;
+  expect(badge.hidden).toBe(true);
+  expect(getComputedStyle(badge).display).toBe('none');
+});

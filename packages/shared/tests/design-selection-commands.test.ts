@@ -323,9 +323,33 @@ describe('element change feedback', () => {
       [{ tone: 'flash', elementIds: ['a'] }],
       [{ tone: 'changed', elementIds: [''] }],
       [{ tone: 'changed', elementIds: ['a'], color: 'red' }],
-      Array.from({ length: 4 }, () => ({ tone: 'changed', elementIds: [] })),
+      Array.from({ length: DESIGN_NOTES_MAX + 4 }, () => ({ tone: 'changed', elementIds: [] })),
     ])
       expect(DesignHighlightSchema.safeParse(input).success).toBe(false);
+  });
+  it('carries an optional note badge number on a highlight group', () => {
+    expect(
+      DesignHighlightSchema.parse([
+        { tone: 'working', elementIds: ['a'], badge: 1 },
+        { tone: 'changed', elementIds: ['a'], badge: DESIGN_NOTES_MAX },
+      ])
+    ).toEqual([
+      { tone: 'working', elementIds: ['a'], badge: 1 },
+      { tone: 'changed', elementIds: ['a'], badge: DESIGN_NOTES_MAX },
+    ]);
+    expect(
+      DesignHighlightSchema.parse(
+        Array.from({ length: DESIGN_NOTES_MAX }, (_, index) => ({
+          tone: 'working',
+          elementIds: [`el-${index}`],
+          badge: index + 1,
+        }))
+      ).at(-1)?.badge
+    ).toBe(DESIGN_NOTES_MAX);
+    for (const badge of [0, DESIGN_NOTES_MAX + 1, 1.5, '1'])
+      expect(
+        DesignHighlightSchema.safeParse([{ tone: 'working', elementIds: ['a'], badge }]).success
+      ).toBe(false);
   });
   it('carries only the notes epoch in a toolbar request and bounds the read notes', () => {
     expect(DesignToolbarRequestSchema.parse({ type: 'notes', notesEpoch: 3 })).toEqual({

@@ -637,6 +637,16 @@ it('publishes the notes once edits settle, not on every change', () => {
   ]);
 });
 
+it('publishes text typed into a new pin without waiting for another change', async () => {
+  press(element('title').querySelector('span')!, { metaKey: true, clientX: 150, clientY: 300 });
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  await flushMicrotasks();
+  type('Warmer headline');
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  await flushMicrotasks();
+  expect(published.at(-1)?.[0]).toMatchObject({ elementIds: ['title'], prompt: 'Warmer headline' });
+});
+
 it('publishes an empty state when Clear removes every note', async () => {
   pins.add(['title'], 'Warmer');
   vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);

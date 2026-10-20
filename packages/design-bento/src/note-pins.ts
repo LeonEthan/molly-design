@@ -437,7 +437,10 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     field.addEventListener(
       'input',
       () => {
-        if (pin.text.trim() !== field.value.trim()) epoch++;
+        if (pin.text.trim() !== field.value.trim()) {
+          epoch++;
+          schedulePublish();
+        }
         pin.text = field.value;
         grow();
       },

@@ -63,9 +63,6 @@ Hand-finished
 
 For the slower moments.
 Object study · 2026
-
-100%
-Regenerate
 ```
 
 ### 中文
@@ -88,9 +85,6 @@ Stillwater Clay
 
 让日常慢下来。
 器物研究 · 2026
-
-100%
-重新生成
 ```
 
 ## div
@@ -620,7 +614,7 @@ GitHub
 | EN | 中文 |
 |---|---|
 | Molly Design | Molly Design |
-| Illustration: the kettle in a product photo is clicked to select, moved and resized, then regenerated into a sage-green mug. Background and text stay in place. The mug is image-generated; cutouts and the repaired background are crafted for this illustration. | 示意动画：产品照片中的茶壶被单击选中、移动和缩放，再重新生成一个鼠尾草绿马克杯。背景和文字保持原位。马克杯由图像生成，抠图与背景修补为示意制作。 |
+| Illustration: a landscape still filling the frame. Editable headline and material specs sit on the left. A separate stoneware kettle layer sits on the right. | 示意静帧：横版石材画面铺满画幅。左侧是可编辑的标题和材质说明，右侧是单独的粗陶茶壶图层。 |
 | The Pour-over headline text layer selected on a coffee guide. The canvas shows selection handles and a floating toolbar with font and size, while the Layers panel highlights the row with its position and size | 在手冲咖啡长图上选中 Pour-over 标题文字图层：画布上有选框，浮动工具栏显示字体和字号，右侧图层面板高亮这一层并显示位置和尺寸 |
 | A screen recording: on the Molly canvas, the headline of a café poster is selected and changed from “maple oat” to “honey oat” | 一段屏幕录制：在 Molly 画布上选中咖啡海报的标题，把 maple oat 改成 honey oat |
 | Molly’s list of public-domain reference images it checked on Wikimedia Commons, and what it took from each | Molly 列出它在维基共享资源上查过的公版参考图，以及每一张借鉴了什么 |

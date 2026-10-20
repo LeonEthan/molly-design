@@ -302,6 +302,26 @@
    },
    "src": "crafted-v7g/mug-shadow.png",
    "crop": null
+  },
+  "hero-plate": {
+   "w": 1536,
+   "h": 864,
+   "files": {
+    "768": "img/hero-plate-768.webp",
+    "1536": "img/hero-plate.webp"
+   },
+   "src": "generated-184/hero-plate.png",
+   "crop": null
+  },
+  "hero-kettle": {
+   "w": 964,
+   "h": 682,
+   "files": {
+    "480": "img/hero-kettle-480.webp",
+    "964": "img/hero-kettle.webp"
+   },
+   "src": "generated-184/hero-kettle.png",
+   "crop": null
   }
  },
  "video": {

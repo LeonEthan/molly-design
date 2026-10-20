@@ -57,14 +57,10 @@ Every shipped image and video was checked by eye. Raw masters (app captures and 
 
 ## Hero animation
 
-- One Stillwater Clay photographic scene with a fixed editorial headline, spec table and caption, drawn by a fixed-size canvas compositor. The editorial text and UI stay HTML.
-- The stage keeps the original 1000×560 landscape frame. It fills the hero content width and its height follows that ratio, scaled uniformly so the poster, pill and cursor stay in the same composition. Mobile uses the same frame. Animation content and timing are unchanged (#184).
+- The hero demo still is a 1536×864 landscape. A warm stone photograph fills the stage edge to edge. HTML text sits on the left: the headline and the Material, Finish and Made lines. The speckled kettle is a separate transparent layer on the right. Mobile scales that same frame (#184).
+- Selection, drag, scale and the Regenerate pill are not wired on this still.
 - The hero headline is one sentence per line in both languages. The second sentence keeps the highlight. The subheadline under it is gone (#184).
-- One 10 s loop: cursor click-to-select → move → scale → light sweep → subject swap (kettle ↔ sage-green mug) → gentle reset. Adjacent loops alternate subjects. The headline and text never change.
-- Desktop pointer parallax only. No decorative arcs, rings, stickers or blinking particles. No animation library or runtime dependency.
-- Reduced motion draws one still with the selected kettle, handles and the Regenerate pill. Off-screen and hidden-tab states cancel the frame callback.
-- The canvas is decorative inside a labelled image role, so the page's `h1` stays the LCP element.
-- Mobile (≤640 px) uses tighter headline and spec offsets so selection handles never touch the text.
+- The labelled image role wraps the still, so the page's `h1` stays the LCP element.
 
 ## Videos
 

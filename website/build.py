@@ -144,40 +144,15 @@ def trust_line():
     return '[[%s||%s]]' % (zh, en)
 
 
-def scene_asset(key):
-    m = MAN['img'][key]
-    ws = sorted(int(w) for w in m['files'])
-    srcset = ', '.join('@@A:%s@@ %dw' % (m['files'][str(w)], w) for w in ws)
-    return (
-        '<img data-scene="%s" src="@@A:%s@@" srcset="%s" sizes="(max-width:640px) 500px, 800px" width="%d" height="%d" alt="" aria-hidden="true" fetchpriority="low" decoding="async">'
-        % (key, m['files'][str(ws[0])], srcset, m['w'], m['h'])
-    )
-
-
 def hero_stage():
-    assets = ''.join(
-        scene_asset(k)
-        for k in ('scene-plate', 'scene-kettle', 'scene-kettle-shadow', 'scene-mug', 'scene-mug-shadow')
-    )
-    return f'''<div class="stage"><div class="stage-fit">
-    <div class="hs" role="img" aria-label="[[示意动画：产品照片中的茶壶被单击选中、移动和缩放，再重新生成一个鼠尾草绿马克杯。背景和文字保持原位。马克杯由图像生成，抠图与背景修补为示意制作。||Illustration: the kettle in a product photo is clicked to select, moved and resized, then regenerated into a sage-green mug. Background and text stay in place. The mug is image-generated; cutouts and the repaired background are crafted for this illustration.]]">
-      <div class="hs-fit"><div class="hs-scene">
-        <div class="hs-board">
-          <canvas class="hs-photo" width="1000" height="1080" aria-hidden="true"></canvas>
-          <div class="hs-assets" hidden>{assets}</div>
-          <div class="hs-tone"></div>
-          <p class="hs-mast"><span>Stillwater Clay</span><span>[[日常器物 / 01||Everyday objects / 01]]</span></p>
-          <p class="hs-head">[[留一点时间，慢慢来。||Time, well spent.]]</p>
-          <dl class="hs-spec"><div><dt>[[材质||Material]]</dt><dd>[[粗陶||Stoneware]]</dd></div><div><dt>[[表面||Finish]]</dt><dd>[[自然釉||Natural glaze]]</dd></div><div><dt>[[工艺||Made]]</dt><dd>[[手工修坯||Hand-finished]]</dd></div></dl>
-          <p class="hs-cap"><span>[[让日常慢下来。||For the slower moments.]]</span><small>[[器物研究 · 2026||Object study · 2026]]</small></p>
-        </div>
-        <div class="hs-ui" aria-hidden="true">
-          <span class="hs-gb"><i></i><i></i><i></i><i></i></span>
-          <span class="hs-size"></span>
-          <span class="hs-pill"><em class="a">[[重新生成||Regenerate]]</em><em class="b">[[生成中…||Regenerating…]]</em></span>
-          <span class="hs-cur"><svg class="ar" viewBox="0 0 24 24"><path d="M5 3l14 8.2-6.1 1.5 3.6 6.6-2.7 1.4-3.5-6.6L5 18.5z"/></svg><svg class="rs" viewBox="0 0 24 24"><path d="M5 5h6l-2.2 2.2 8.4 8.4L19.4 13.4V19h-5.6l2.2-2.2-8.4-8.4L5.4 10.6z"/></svg></span>
-        </div>
-      </div></div>
+    return f'''<div class="stage"><div class="stage-fit" role="img" aria-label="[[示意静帧：横版石材画面铺满画幅。左侧是可编辑的标题和材质说明，右侧是单独的粗陶茶壶图层。||Illustration: a landscape still filling the frame. Editable headline and material specs sit on the left. A separate stoneware kettle layer sits on the right.]]">
+    <img class="hero-plate" src="@@A:img/hero-plate.webp@@" srcset="@@A:img/hero-plate-768.webp@@ 768w, @@A:img/hero-plate.webp@@ 1536w" sizes="(max-width:700px) calc(100vw - 40px), (max-width:1224px) calc(100vw - 64px), 1096px" width="1536" height="864" alt="" aria-hidden="true" fetchpriority="high" decoding="sync">
+    <img class="hero-kettle" src="@@A:img/hero-kettle.webp@@" srcset="@@A:img/hero-kettle-480.webp@@ 480w, @@A:img/hero-kettle.webp@@ 964w" sizes="(max-width:700px) 56vw, 614px" width="964" height="682" alt="" aria-hidden="true">
+    <div class="hero-copy">
+      <p class="hs-mast"><span>Stillwater Clay</span><span>[[日常器物 / 01||Everyday objects / 01]]</span></p>
+      <p class="hs-head">[[留一点时间，慢慢来。||Time, well spent.]]</p>
+      <dl class="hs-spec"><div><dt>[[材质||Material]]</dt><dd>[[粗陶||Stoneware]]</dd></div><div><dt>[[表面||Finish]]</dt><dd>[[自然釉||Natural glaze]]</dd></div><div><dt>[[工艺||Made]]</dt><dd>[[手工修坯||Hand-finished]]</dd></div></dl>
+      <p class="hs-cap"><span>[[让日常慢下来。||For the slower moments.]]</span><small>[[器物研究 · 2026||Object study · 2026]]</small></p>
     </div>
   </div></div>'''
 
@@ -308,6 +283,7 @@ def head():
 <link rel="icon" href="@@R:favicon.svg@@" type="image/svg+xml">
 <link rel="apple-touch-icon" href="@@R:apple-touch-icon.png@@">
 <link rel="manifest" href="@@R:site.webmanifest@@">
+<link rel="preload" as="image" href="@@A:img/hero-plate-768.webp@@" imagesrcset="@@A:img/hero-plate-768.webp@@ 768w, @@A:img/hero-plate.webp@@ 1536w" imagesizes="(max-width:700px) calc(100vw - 40px), (max-width:1224px) calc(100vw - 64px), 1096px" fetchpriority="high">
 <link rel="preload" href="@@A:fonts/inter.woff2@@" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="@@A:fonts/instrument-serif.woff2@@" as="font" type="font/woff2" crossorigin>
 <meta property="og:type" content="website">

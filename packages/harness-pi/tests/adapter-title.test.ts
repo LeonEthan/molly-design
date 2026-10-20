@@ -98,7 +98,13 @@ describe('embedded first-turn title wiring', () => {
       },
     });
     const session = await f.open();
-    vi.spyOn(f.runtime(), 'completeSimple').mockImplementation(async () => new Promise(() => {}));
+    vi.spyOn(f.runtime(), 'completeSimple').mockImplementation((_model, _context, options) => {
+      return new Promise((_resolve, reject) => {
+        const abort = () => reject(new Error('aborted'));
+        if (options?.signal?.aborted) abort();
+        else options?.signal?.addEventListener('abort', abort, { once: true });
+      });
+    });
     vi.useFakeTimers();
     try {
       f.grant(session.snapshot);
@@ -109,6 +115,66 @@ describe('embedded first-turn title wiring', () => {
       expect(
         f.updates.filter(({ update }) => update.sessionUpdate === 'session_info_update')
       ).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('holds the run until a title call that ignores abort settles', async () => {
+    const mainOutput = deferred<void>();
+    const title = deferred<ReturnType<typeof fauxAssistantMessage>>();
+    const f = await managed({
+      peer: {
+        sessionUpdate: async ({ update }) => {
+          if (update.sessionUpdate === 'agent_message_chunk') mainOutput.resolve();
+        },
+      },
+    });
+    const session = await f.open();
+    vi.spyOn(f.runtime(), 'completeSimple').mockImplementation(async () => title.promise);
+    vi.useFakeTimers();
+    try {
+      f.grant(session.snapshot);
+      const pending = session.prompt(brief, session.snapshot, brief);
+      await mainOutput.promise;
+      await vi.advanceTimersByTimeAsync(TITLE_TIMEOUT_MS);
+      expect(f.host.busy).toBe(true);
+      title.resolve(fauxAssistantMessage('Late title'));
+      expect((await pending).stopReason).toBe('end_turn');
+      expect(f.host.busy).toBe(false);
+      expect(
+        f.updates.filter(({ update }) => update.sessionUpdate === 'session_info_update')
+      ).toEqual([]);
+      const history = await import('node:fs/promises').then(({ readFile }) =>
+        readFile(session.binding.nativeSessionFile, 'utf8')
+      );
+      expect(history).toContain('session_title');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('releases a title call that ignores abort when the worker is retired', async () => {
+    const mainOutput = deferred<void>();
+    const f = await managed({
+      peer: {
+        sessionUpdate: async ({ update }) => {
+          if (update.sessionUpdate === 'agent_message_chunk') mainOutput.resolve();
+        },
+      },
+    });
+    const session = await f.open();
+    vi.spyOn(f.runtime(), 'completeSimple').mockImplementation(async () => new Promise(() => {}));
+    vi.useFakeTimers();
+    try {
+      f.grant(session.snapshot);
+      const pending = session.prompt(brief, session.snapshot, brief);
+      await mainOutput.promise;
+      await vi.advanceTimersByTimeAsync(TITLE_TIMEOUT_MS);
+      expect(f.host.busy).toBe(true);
+      f.host.retire();
+      await expect(pending).resolves.toMatchObject({ stopReason: 'end_turn' });
+      expect(f.host.busy).toBe(false);
     } finally {
       vi.useRealTimers();
     }

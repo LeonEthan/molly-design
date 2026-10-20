@@ -476,6 +476,7 @@ export class PiAcpHost {
             model: wrapper.piSession.model,
             userText: titlePrompt.data,
             signal: titleSignal,
+            workerRetired: this.lifetime.signal,
           }).then((generated) => {
             if (generated.title && !titleSignal.aborted) {
               void this.peer

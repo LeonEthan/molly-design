@@ -44,8 +44,11 @@ manual rename is never overwritten. Custom-size and other internal scaffolding
 added to the durable first-turn text is excluded from the title-generation
 prompt. The brief is the composer text from before `$skill`, session, and
 element mentions expand into paths and tool instructions, with a large-paste
-placeholder restored to the pasted text. A committed artwork `title` renames
-draft or generated names exactly as before.
+placeholder restored to the pasted text. A title timeout or cancellation
+aborts that provider call, and the run stays held until the call settles or
+the worker is retired, so a late result cannot overlap the next turn or drop
+measured usage. A committed artwork `title` renames draft or generated names
+exactly as before.
 
 ## Verification
 

@@ -81,21 +81,54 @@ describe('selected model session titles', () => {
       });
     });
     await vi.advanceTimersByTimeAsync(TITLE_TIMEOUT_MS);
-    expect(await pending).toEqual({ title: null });
     expect(signal?.aborted).toBe(true);
-    finish?.(reply('Late title'));
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
     await Promise.resolve();
+    expect(settled).toBe(false);
+    const late = reply('Late title');
+    finish?.(late);
+    expect(await pending).toEqual({ title: null, result: late });
   });
 
-  it('cancels the title request without waiting for the provider', async () => {
+  it('drains a cancelled title call before returning', async () => {
     const controller = new AbortController();
+    let finish: ((result: ReturnType<typeof reply>) => void) | undefined;
     const pending = generateSessionTitle({
-      runtime: { completeSimple: async () => new Promise(() => {}) },
+      runtime: {
+        completeSimple: async () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      },
       model,
       userText,
       signal: controller.signal,
     });
     controller.abort();
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    const late = reply('Late title');
+    finish?.(late);
+    expect(await pending).toEqual({ title: null, result: late });
+  });
+
+  it('stops waiting for a provider that ignores abort when the worker is retired', async () => {
+    const retired = new AbortController();
+    const pending = generateSessionTitle({
+      runtime: { completeSimple: async () => new Promise(() => {}) },
+      model,
+      userText,
+      signal: new AbortController().signal,
+      workerRetired: retired.signal,
+    });
+    retired.abort();
     expect(await pending).toEqual({ title: null });
   });
 });

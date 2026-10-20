@@ -89,6 +89,62 @@ it('toggles the comment tool from the dock and C, V and Escape, and never while 
   window.dispatchEvent(new Event('pagehide'));
 });
 
+it('keeps Bento legacy comment mode off when C, repeated C, V or Escape reach the canvas', async () => {
+  let legacyOn = false;
+  // Stand-in for Bento's Editor.wireKeyboard: a bubble-phase document listener that toggles its legacy mode on C.
+  const bento = (event: KeyboardEvent) => {
+    if (!event.metaKey && !event.ctrlKey && event.key.toLowerCase() === 'c') legacyOn = !legacyOn;
+  };
+  document.addEventListener('keydown', bento);
+  const press = (key: string) =>
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  press('c');
+  expect(legacyOn).toBe(true);
+  legacyOn = false;
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  const ready = new Promise<void>((resolve) =>
+    window.addEventListener('molly:ready', () => resolve(), { once: true })
+  );
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({}),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => ({ ok: true }),
+    pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
+  });
+  await ready;
+  const api = (window as unknown as { molly: { setReadonly(value: boolean): void } }).molly;
+  const comment = document.querySelector<HTMLButtonElement>('[aria-label="Comment (C)"]')!;
+  const commenting = () => comment.classList.contains('on');
+  api.setReadonly(false);
+
+  press('c');
+  expect(commenting()).toBe(true);
+  expect(legacyOn).toBe(false);
+  press('c');
+  press('c');
+  expect(commenting()).toBe(true);
+  expect(legacyOn).toBe(false);
+  press('v');
+  expect(commenting()).toBe(false);
+  press('c');
+  press('Escape');
+  expect(commenting()).toBe(false);
+  expect(legacyOn).toBe(false);
+
+  document.removeEventListener('keydown', bento);
+  window.dispatchEvent(new Event('pagehide'));
+});
+
 it('prevents double-click editing while readonly and restores it when unlocked', () => {
   Object.defineProperty(document, 'fonts', {
     configurable: true,

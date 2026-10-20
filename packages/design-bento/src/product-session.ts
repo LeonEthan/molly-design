@@ -116,9 +116,11 @@ export function createProductSession(options: {
     select: options.select,
     onToggle: (open) => layersButton.classList.toggle('on', open),
   });
+  const keys = new AbortController();
   window.addEventListener(
     'pagehide',
     () => {
+      keys.abort();
       toolbar.dispose();
       pins.dispose();
       marks.dispose();
@@ -534,12 +536,14 @@ export function createProductSession(options: {
       if ((event.target as Element | null)?.closest('input,textarea,[contenteditable="true"]'))
         return;
       const key = event.key.toLowerCase();
-      if (key === 'c' && !pins.commenting()) setCommentTool(true);
+      if (key === 'c') setCommentTool(true);
       else if ((key === 'v' || key === 'escape') && pins.commenting()) setCommentTool(false);
       else return;
+      // Bento's own bubble-phase `c` binding would arm its legacy comment mode.
       event.preventDefault();
+      event.stopImmediatePropagation();
     },
-    true
+    { capture: true, signal: keys.signal }
   );
   document.addEventListener(
     'pointerdown',

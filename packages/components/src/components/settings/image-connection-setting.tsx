@@ -547,8 +547,10 @@ export function ImageConnectionSummary({
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-sm">
-            {t(PROTOCOL_COPY[protocol].label)} · <span className="font-mono">{stored.model}</span>
+          <p className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-sm">
+            <span className="shrink-0">{t(PROTOCOL_COPY[protocol].label)}</span>
+            <span aria-hidden>·</span>
+            <span className="min-w-0 font-mono break-all" title={stored.model}>{stored.model}</span>
           </p>
           <ConnectionCheckBadge state={check} />
         </div>

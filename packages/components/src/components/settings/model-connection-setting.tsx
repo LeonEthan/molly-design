@@ -19,6 +19,9 @@ import {
   type CheckModelConnection,
   type BeginOpenAiAuth,
   type ConnectionCheckResult,
+  normalizeCompatibleConnectionApi,
+  type CompatibleConnectionApi,
+  type CompatibleConnectionPreset,
   type DiscoverModelConnection,
   type DiscoverModelConnectionResult,
   type HarnessModelCatalog,
@@ -56,6 +59,10 @@ import {
   type ConnectionCheckState,
 } from './connection-check';
 import { ModelChecklist, type CatalogModel } from './model-checklist';
+import {
+  CompatibleConnectionSetup,
+  presetToCustomModels,
+} from './compatible-connection-setup';
 
 const providerLabelKeys: Record<ProviderPresetId, string> = {
   openai: 'settings.models.providers.openai',
@@ -304,6 +311,9 @@ export function ModelConnectionForm({
   const [chooseModels, setChooseModels] = useState(stored?.models !== undefined);
   const [selectedModels, setSelectedModels] = useState<string[]>(stored?.models ?? []);
   const enabled = stored?.enabled ?? true;
+  const [compatibleApi, setCompatibleApi] = useState<CompatibleConnectionApi>(() =>
+    normalizeCompatibleConnectionApi(stored?.compatibleApi)
+  );
   const [customModels, setCustomModels] = useState(
     () =>
       stored?.customModels?.map(compatibleModelDraft) ??
@@ -430,6 +440,7 @@ export function ModelConnectionForm({
     ModelEndpointSchema.safeParse(endpoint).success;
   const discoveryKey = JSON.stringify([
     provider,
+    compatibleApi,
     endpoint,
     typedKey,
     useNoKey,
@@ -447,14 +458,20 @@ export function ModelConnectionForm({
   const discover = useCallback(() => {
     if (!onDiscover || !discoverable) return;
     const input: DiscoverModelConnection = typedKey
-      ? { providerPresetId: 'openai-compatible', baseUrl: endpoint, apiKey: typedKey }
+      ? {
+          providerPresetId: 'openai-compatible',
+          baseUrl: endpoint,
+          compatibleApi,
+          apiKey: typedKey,
+        }
       : stored && !requiresKey && !useNoKey
         ? {
             providerPresetId: 'openai-compatible',
             baseUrl: endpoint,
+            compatibleApi,
             stored: { id: stored.id, revision: stored.revision },
           }
-        : { providerPresetId: 'openai-compatible', baseUrl: endpoint };
+        : { providerPresetId: 'openai-compatible', baseUrl: endpoint, compatibleApi };
     const attempt = ++discoveryAttemptRef.current;
     const current = () =>
       mountedRef.current &&
@@ -474,7 +491,17 @@ export function ModelConnectionForm({
         if (current()) setDiscovery({ phase: 'failed' });
       }
     );
-  }, [discoverable, discoveryKey, endpoint, onDiscover, requiresKey, stored, typedKey, useNoKey]);
+  }, [
+    compatibleApi,
+    discoverable,
+    discoveryKey,
+    endpoint,
+    onDiscover,
+    requiresKey,
+    stored,
+    typedKey,
+    useNoKey,
+  ]);
   const listed =
     check.phase === 'done' && check.result.ok && check.result.models
       ? new Set(check.result.models)
@@ -490,6 +517,15 @@ export function ModelConnectionForm({
     setChooseModels(false);
     setSelectedModels([]);
     setCustomModels([]);
+    setCompatibleApi('openai-completions');
+    setDiscovery({ phase: 'idle' });
+  };
+  const applyPreset = (preset: CompatibleConnectionPreset) => {
+    setCompatibleApi(preset.api);
+    setEndpoint(preset.baseUrl);
+    setApiKey('');
+    setUseNoKey(preset.id === 'ollama');
+    setCustomModels(presetToCustomModels(preset));
     setDiscovery({ phase: 'idle' });
   };
   const chooseProvider = (choice: ProviderChoice) =>
@@ -523,6 +559,9 @@ export function ModelConnectionForm({
     baseUrl: endpoint,
     enabled,
     apiKey: typedKey || (keylessInput ? '' : undefined),
+    ...(provider === 'openai-compatible'
+      ? { compatibleApi }
+      : {}),
     ...(provider === 'openai-compatible' && customModels.length > 0
       ? {
           customModels: customModels.map((model) => {
@@ -739,7 +778,20 @@ export function ModelConnectionForm({
               ) : null}
             </div>
           ) : null}
-          {provider === 'openai-compatible' ? endpointField : null}
+          {provider === 'openai-compatible' ? (
+            <>
+              <CompatibleConnectionSetup
+                compatibleApi={compatibleApi}
+                busy={busy}
+                onApiChange={(api) => {
+                  setCompatibleApi(api);
+                  setDiscovery({ phase: 'idle' });
+                }}
+                onApplyPreset={applyPreset}
+              />
+              {endpointField}
+            </>
+          ) : null}
           {!(oauthProvider && onOpenAiAuth && isOAuthConnection) && !signInOnly ? (
             <div className="space-y-2">
               <Label htmlFor={`${id}-key`}>

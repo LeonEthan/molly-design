@@ -39,6 +39,7 @@ import { cn } from '@/lib/utils';
 import { getIpcServices } from '@/lib/electron-ipc-client';
 import { readMissingDesignModelClasses } from '@/lib/design-model-readiness';
 import { DesignModelReadinessReminder } from '@/components/chat/design-model-reminder';
+import { LandingDesignConfigChips } from '@/components/chat/landing-design-config-chips';
 import { flushDesignCanvasBeforeSend } from '@/lib/design-canvas-save-gate';
 import {
   chatLandingSessionStateAtomFamily,
@@ -1724,7 +1725,32 @@ function WorkspaceChatLanding({
     </ErrorBoundary>
   );
 
-  const bottomBarNode = null;
+  const [landingImageModelId, setLandingImageModelId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isElectron) return undefined;
+    const ipc = getIpcServices();
+    if (!ipc) return undefined;
+    let live = true;
+    void ipc.modelConnections
+      .getImageSnapshot()
+      .then((snapshot) => {
+        if (!live) return;
+        const model = snapshot.connection?.enabled ? snapshot.connection.model.trim() : '';
+        setLandingImageModelId(model.length > 0 ? model : null);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [isElectron]);
+  const bottomBarNode =
+    isElectron && (selectedConfig?.name || landingImageModelId) ? (
+      <LandingDesignConfigChips
+        agentLabel={selectedConfig?.name ?? null}
+        imageModelId={landingImageModelId}
+        disabled={submitting}
+      />
+    ) : null;
 
   // ── Hints ──
   const hasNoAgentConfig = executorConfigs.length === 0;

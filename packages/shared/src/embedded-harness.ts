@@ -1,6 +1,17 @@
 import { z } from 'zod';
 import type { McpConnectionSpec } from './workspace-mcp';
 import { ImageConnectionEndpointSchema, ImageConnectionProtocolSchema } from '#image-connection';
+import { CompatibleConnectionApiSchema, normalizeCompatibleConnectionApi } from '#compatible-connection-api';
+export {
+  CompatibleConnectionApiSchema,
+  COMPATIBLE_CONNECTION_PRESETS,
+  SHIPPED_COMPATIBLE_CONNECTION_APIS,
+  isCompatibleConnectionApiShipped,
+  normalizeCompatibleConnectionApi,
+  type CompatibleConnectionApi,
+  type CompatibleConnectionPreset,
+  type ShippedCompatibleConnectionApi,
+} from '#compatible-connection-api';
 // The workspace-relative attachment root is a harness boundary contract too:
 // the daemon materializes resource_link files there and the adapter validates
 // containment against the same value (issue #49: a stale copy broke prompts).
@@ -589,6 +600,7 @@ export const DiscoverModelConnectionSchema = z
   .object({
     providerPresetId: ProviderPresetIdSchema,
     baseUrl: ModelEndpointSchema,
+    compatibleApi: CompatibleConnectionApiSchema.optional(),
     apiKey: z.string().trim().min(1).max(16_384).optional(),
     stored: z.object({ id: identifier, revision }).strict().optional(),
   })
@@ -718,6 +730,8 @@ const ModelConnectionFieldsSchema = z
     authType: ModelConnectionAuthTypeSchema.optional(),
     oauth: ModelConnectionOAuthSchema.optional(),
     customModels: CompatibleModelsSchema.optional(),
+    /** pi-ai wire protocol for `openai-compatible` connections; defaults to OpenAI Chat Completions. */
+    compatibleApi: CompatibleConnectionApiSchema.optional(),
     /** Native catalog models offered in the conversation picker; absent offers all of them. */
     models: z
       .array(z.string().trim().min(1).max(200))
@@ -745,12 +759,21 @@ export const ModelConnectionSchema = ModelConnectionFieldsSchema.refine(
     (value) => value.oauth === undefined || value.authType === 'openai_oauth',
     'OAuth account metadata requires an OAuth connection'
   )
-  .transform((connection) =>
-    connection.providerPresetId === 'kimi-coding' &&
-    ['https://api.kimi.com/coding', 'https://api.kimi.com/coding/'].includes(connection.baseUrl)
-      ? { ...connection, baseUrl: PROVIDER_PRESET_DEFAULT_BASE_URLS['kimi-coding'] }
-      : connection
-  );
+  .transform((connection) => {
+    const kimiNormalized =
+      connection.providerPresetId === 'kimi-coding' &&
+      ['https://api.kimi.com/coding', 'https://api.kimi.com/coding/'].includes(connection.baseUrl)
+        ? { ...connection, baseUrl: PROVIDER_PRESET_DEFAULT_BASE_URLS['kimi-coding'] }
+        : connection;
+    return kimiNormalized.providerPresetId === 'openai-compatible'
+      ? {
+          ...kimiNormalized,
+          compatibleApi: normalizeCompatibleConnectionApi(kimiNormalized.compatibleApi),
+        }
+      : kimiNormalized.compatibleApi === undefined
+        ? kimiNormalized
+        : { ...kimiNormalized, compatibleApi: undefined };
+  });
 export type ModelConnection = z.infer<typeof ModelConnectionSchema>;
 
 /** The renderer can replace a secret, but cannot select or read a credential reference.

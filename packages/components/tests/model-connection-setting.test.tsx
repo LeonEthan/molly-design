@@ -1255,6 +1255,7 @@ describe('connection management', () => {
         {
           providerPresetId: 'openai-compatible',
           baseUrl: 'https://first.invalid/v1',
+          compatibleApi: 'openai-completions',
           apiKey: 'SYNTHETIC_FIRST_KEY',
         },
       ]);

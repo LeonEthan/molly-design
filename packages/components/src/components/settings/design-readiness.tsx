@@ -112,9 +112,16 @@ export function DesignReadinessView({
                 {item.target === 'pinterest' ? ` (${t('settings.readiness.optional')})` : ''}
               </span>
               {item.value ? (
-                <span className="min-w-0 truncate text-muted-foreground">
-                  · {item.state === 'set' ? `${t('settings.readiness.configured')}: ` : ''}
-                  {item.value}
+                <span
+                  className="min-w-0 text-muted-foreground"
+                  title={item.target === 'image' ? item.value : undefined}
+                >
+                  <span className={item.target === 'image' ? 'inline-flex min-w-0 max-w-[14rem]' : 'truncate'}>
+                    · {item.state === 'set' ? `${t('settings.readiness.configured')}: ` : ''}
+                    <span className={item.target === 'image' ? 'font-mono break-all' : undefined}>
+                      {item.value}
+                    </span>
+                  </span>
                 </span>
               ) : null}
               <ChevronRight aria-hidden className="h-3 w-3 shrink-0 text-muted-foreground" />

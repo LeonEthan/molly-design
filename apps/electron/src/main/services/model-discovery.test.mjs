@@ -125,6 +125,27 @@ void test('discoverModelConnection: local servers without a key list models', as
   assert.equal(result.models[0].modelId, 'local-model')
 })
 
+void test('discoverModelConnection: anthropic messages uses /v1/models and x-api-key', async () => {
+  const seen = []
+  const store = { credentialForCheck: async () => null }
+  await discoverModelConnection(
+    store,
+    {
+      providerPresetId: 'openai-compatible',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      compatibleApi: 'anthropic-messages',
+      apiKey: 'sk-synthetic'
+    },
+    async (url, init) => {
+      seen.push({ url, headers: init.headers })
+      return new Response(JSON.stringify({ data: [{ id: 'deepseek-chat' }] }), { status: 200 })
+    }
+  )
+  assert.equal(seen[0].url, 'https://api.deepseek.com/anthropic/v1/models')
+  assert.equal(seen[0].headers['x-api-key'], 'sk-synthetic')
+  assert.equal(seen[0].headers.authorization, undefined)
+})
+
 void test('discoverModelConnection: typed key goes only to the typed destination', async () => {
   const seen = []
   const store = { credentialForCheck: async () => null }

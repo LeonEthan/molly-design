@@ -1,5 +1,6 @@
 import {
   DiscoveredModelSchema,
+  normalizeCompatibleConnectionApi,
   type DiscoveredModel,
   type DiscoverModelConnection,
   type DiscoverModelConnectionResult
@@ -134,13 +135,20 @@ export async function discoverModelConnection(
     apiKey = saved.apiKey
   }
   const base = input.baseUrl.trim().replace(/\/+$/, '')
+  const compatibleApi =
+    input.providerPresetId === 'openai-compatible'
+      ? normalizeCompatibleConnectionApi(input.compatibleApi)
+      : 'openai-completions'
+  const modelsPath = compatibleApi === 'anthropic-messages' ? `${base}/v1/models` : `${base}/models`
+  const headers: Record<string, string> = { accept: 'application/json' }
+  if (apiKey) {
+    if (compatibleApi === 'anthropic-messages') headers['x-api-key'] = apiKey
+    else headers.authorization = `Bearer ${apiKey}`
+  }
   let response: Response
   try {
-    response = await transport(`${base}/models`, {
-      headers: {
-        accept: 'application/json',
-        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
-      },
+    response = await transport(modelsPath, {
+      headers,
       redirect: 'error',
       signal: AbortSignal.timeout(15_000)
     })

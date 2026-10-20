@@ -6,6 +6,8 @@ import {
   ModelThinkingLevelSchema,
   getModelConnectionConfigurationIssue,
   isProviderPresetDefaultEndpoint,
+  normalizeCompatibleConnectionApi,
+  type CompatibleConnectionApi,
   type ModelConnection,
   type ModelSelection,
 } from '@molly/shared/embedded-harness';
@@ -30,10 +32,14 @@ export function configureModelConnection(
     throw new Error('harness_thinking_level_unsupported');
   let providerId = MOLLY_PROVIDER_IDS[connection.providerPresetId];
   if (compatible) {
+    const wireApi: CompatibleConnectionApi = normalizeCompatibleConnectionApi(
+      connection.compatibleApi
+    );
+    const thinkingFormat = wireApi === 'anthropic-messages' ? 'openrouter' : 'openai';
     runtime.registerProvider(providerId, {
       baseUrl: connection.baseUrl,
-      api: 'openai-completions',
-      authHeader: false,
+      api: wireApi,
+      authHeader: wireApi !== 'anthropic-messages',
       models: (connection.customModels ?? []).map((model) => ({
         id: model.modelId,
         name: model.name,
@@ -49,7 +55,7 @@ export function configureModelConnection(
         ),
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         compat: {
-          thinkingFormat: 'openai',
+          thinkingFormat,
           supportsReasoningEffort: model.thinking.some((level) => level !== 'off'),
           supportsStore: false,
           supportsDeveloperRole: false,

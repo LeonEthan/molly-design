@@ -6,6 +6,7 @@ export type SegmentedControlOption<TValue extends string> = {
   value: TValue;
   label: ReactNode;
   icon?: ReactNode;
+  disabled?: boolean;
 };
 
 export type SegmentedControlSize = 'md' | 'sm';
@@ -72,8 +73,11 @@ export function SegmentedControl<TValue extends string>({
             type="button"
             role="radio"
             aria-checked={selected}
-            disabled={disabled}
-            onClick={() => onChange(option.value)}
+            disabled={disabled || option.disabled}
+            onClick={() => {
+              if (disabled || option.disabled) return;
+              onChange(option.value);
+            }}
             className={cn(
               'relative z-[1] flex items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
               pill ? 'rounded-full' : 'rounded-[3px]',

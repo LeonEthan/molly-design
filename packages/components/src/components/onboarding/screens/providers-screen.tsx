@@ -97,7 +97,7 @@ export type ProvidersScreenViewProps = ProvidersScreenProps & {
   /** The packaged model catalog could not be read; Retry reads it again. */
   onCatalogRetry?: () => void;
   languageSummary?: string;
-  imageSummary?: string;
+  imageSummary?: ReactNode;
   /** Websites with saved sign-ins; browser sign-ins never gate Finish. */
   browserSummary?: string;
   /** Panels receive `close`; the language and image panels stay mounted while closed. */
@@ -121,7 +121,7 @@ function ConnectRow({
 }: {
   icon: ReactNode;
   title: string;
-  summary?: string;
+  summary?: ReactNode;
   hint: string;
   done: boolean;
   optional?: boolean;
@@ -160,8 +160,12 @@ function ConnectRow({
             </span>
           ) : null}
         </span>
-        <span className="block truncate text-xs text-[#6b6963]">
-          {done && summary ? summary : hint}
+        <span className="block min-w-0 text-xs text-[#6b6963]">
+          {done && summary ? (
+            <span className="flex min-w-0 flex-wrap items-baseline gap-x-1">{summary}</span>
+          ) : (
+            hint
+          )}
         </span>
       </span>
       <span className="shrink-0 text-xs font-medium text-[#141413]">{action}</span>
@@ -463,7 +467,15 @@ export function ProvidersScreen(props: ProvidersScreenProps) {
       languageSummary={languageSummary}
       imageSummary={
         imageConnection
-          ? `${t(imageProtocolLabelKey(imageConnection))} · ${imageConnection.model}`
+          ? (
+              <>
+                <span className="shrink-0">{t(imageProtocolLabelKey(imageConnection))}</span>
+                <span aria-hidden>·</span>
+                <span className="min-w-0 font-mono break-all" title={imageConnection.model}>
+                  {imageConnection.model}
+                </span>
+              </>
+            )
           : undefined
       }
       browserSummary={

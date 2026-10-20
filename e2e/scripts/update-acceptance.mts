@@ -300,7 +300,7 @@ async function openAbout(page: Page): Promise<void> {
   // is enough proof the About pane is open.
   await expect(
     settings
-      .getByRole('button', { name: /^(Check for Updates|检查更新|Update & Restart|更新并重启)$/u })
+      .getByRole('button', { name: /^(Check for Updates|检查更新|Checking…|正在检查…|You're up to date|已是最新版本|Downloading(?:…| \d+%)|正在下载(?:…| \d+%)|Ready — Install and Relaunch|准备就绪 — 安装并重新打开)$/u })
       .first()
       .or(settings.getByText(/^(Version|版本)/u).first())
   ).toBeVisible({ timeout: 30_000 });
@@ -309,8 +309,8 @@ async function openAbout(page: Page): Promise<void> {
 /** Click "Check for Updates" only when the phase still offers that button. */
 async function clickCheckForUpdates(page: Page): Promise<void> {
   const phase = (await updaterState(page)).phase;
-  if (phase === 'downloaded') return;
-  await page.getByRole('button', { name: /^(Check for Updates|检查更新)$/u }).click();
+  if (phase === 'downloaded' || phase === 'downloading' || phase === 'checking') return;
+  await page.getByRole('button', { name: /^(Check for Updates|检查更新|You're up to date|已是最新版本)$/u }).click();
 }
 
 async function closeSettings(page: Page): Promise<void> {
@@ -596,7 +596,7 @@ async function positiveLane(): Promise<void> {
     // generic label with the detail as its tooltip.
     const waiting = await holdInSession(page, fixture, `Hold execution during update [SCOUT:HOLD]`);
     await openAbout(page);
-    await page.getByRole('button', { name: /^(Update & Restart|更新并重启)$/u }).click();
+    await page.getByRole('button', { name: /^(Ready — Install and Relaunch|准备就绪 — 安装并重新打开)$/u }).click();
     await expect
       .poll(async () => (await updaterState(page)).error ?? '', { timeout: 30_000 })
       .toContain('Wait for Agent execution');
@@ -640,7 +640,7 @@ async function positiveLane(): Promise<void> {
       void (code ?? 0);
     });
     await openAbout(page);
-    await page.getByRole('button', { name: /^(Update & Restart|更新并重启)$/u }).click();
+    await page.getByRole('button', { name: /^(Ready — Install and Relaunch|准备就绪 — 安装并重新打开)$/u }).click();
     await expect
       .poll(async () => hasExited, { timeout: 60_000 })
       .toBe(true);
@@ -909,7 +909,7 @@ async function tamperedPlistLane(): Promise<void> {
     // the action button plus presence of a status description instead.
     await expect(
       settings
-        .getByRole('button', { name: /^(Check for Updates|检查更新|Update & Restart|更新并重启)$/u })
+        .getByRole('button', { name: /^(Check for Updates|检查更新|Checking…|正在检查…|You're up to date|已是最新版本|Downloading(?:…| \d+%)|正在下载(?:…| \d+%)|Ready — Install and Relaunch|准备就绪 — 安装并重新打开)$/u })
         .first()
     ).toBeHidden({ timeout: 5_000 });
     await expect(settings.locator('span.text-muted-foreground').first()).toBeVisible();

@@ -484,9 +484,16 @@ function ImportSession({
 
   if (variant === 'panel')
     return (
-      <div className="flex flex-col gap-5">
-        {fields}
-        <div className="flex justify-end gap-2">{actions}</div>
+      <div className="flex h-full min-h-0 flex-1 flex-col">
+        <div data-drawer-body="" className="min-h-0 flex-1 overflow-y-auto">
+          <div className="flex flex-col gap-5">{fields}</div>
+        </div>
+        <div
+          data-drawer-footer=""
+          className="mt-5 flex shrink-0 justify-end gap-2 border-t border-border/40 pt-4"
+        >
+          {actions}
+        </div>
       </div>
     );
 

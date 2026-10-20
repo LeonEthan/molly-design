@@ -76,6 +76,10 @@ Read [README](README.md) before changing session construction, packages or the b
   failed replies save nothing (`unchanged`). Only a rejected read or store write reports
   `recall_failed`/`capture_failed`. Every failure leaves a static code on stderr and in
   `_meta.mollyPersonalMemoryDiagnostic`, never model output.
+- First-turn naming reuses the selected runtime and current credential grant. Keep it
+  tool-free, concurrent with main inference, bounded and drained before run release.
+  Publish only model-generated short titles; failure/empty/timeout leaves the draft,
+  without paid retries or prompt fallback. See [CLI title ownership](../../apps/cli/src/agent/README.md#session-titles).
 - Tests use the real SDK with synthetic providers in owned temporary profiles. No paid
   inference, captured transcripts or machine-local records.
 

@@ -189,9 +189,9 @@ function PanelCard({
     <section
       hidden={hidden}
       aria-label={title}
-      className="rounded-2xl border border-[#141413]/10 bg-[#fbfaf7] p-6 shadow-[0_18px_48px_-28px_rgba(20,20,19,0.35)]"
+      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#141413]/10 bg-[#fbfaf7] p-6 shadow-[0_18px_48px_-28px_rgba(20,20,19,0.35)]"
     >
-      <div className="mb-5 flex items-center gap-2">
+      <div className="mb-5 flex shrink-0 items-center gap-2">
         <Button
           type="button"
           variant="ghost"
@@ -216,7 +216,7 @@ function PanelCard({
           <X aria-hidden className="h-4 w-4" />
         </Button>
       </div>
-      {children}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
     </section>
   );
 }
@@ -466,17 +466,15 @@ export function ProvidersScreen(props: ProvidersScreenProps) {
       }
       languageSummary={languageSummary}
       imageSummary={
-        imageConnection
-          ? (
-              <>
-                <span className="shrink-0">{t(imageProtocolLabelKey(imageConnection))}</span>
-                <span aria-hidden>·</span>
-                <span className="min-w-0 font-mono break-all" title={imageConnection.model}>
-                  {imageConnection.model}
-                </span>
-              </>
-            )
-          : undefined
+        imageConnection ? (
+          <>
+            <span className="shrink-0">{t(imageProtocolLabelKey(imageConnection))}</span>
+            <span aria-hidden>·</span>
+            <span className="min-w-0 font-mono break-all" title={imageConnection.model}>
+              {imageConnection.model}
+            </span>
+          </>
+        ) : undefined
       }
       browserSummary={
         savedSites ? t('onboarding.models.rows.browser.saved', { count: savedSites }) : undefined

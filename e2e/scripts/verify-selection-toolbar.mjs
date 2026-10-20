@@ -300,7 +300,7 @@ try {
     const windowId = runtime.windowSource.split(':')[1];
     execFileSync('/usr/sbin/screencapture', ['-x', '-o', '-l', windowId, file]);
     const detail = await editor(
-      `(() => { const bar = document.querySelector('.molly-selection-toolbar'); const r=bar.getBoundingClientRect(); return { selection:window.molly.selection(), hidden:bar.hidden, bar:{x:r.x,y:r.y,width:r.width,height:r.height}, viewport:{width:innerWidth,height:innerHeight}, dark:bar.dataset.dark }; })()`
+      `(() => { const bar = document.querySelector('.molly-selection-toolbar'); const r=bar.getBoundingClientRect(); return { selection:window.molly.selection(), hidden:bar.hidden, bar:{x:r.x,y:r.y,width:r.width,height:r.height}, viewport:{width:innerWidth,height:innerHeight}, theme:document.documentElement.dataset.theme }; })()`
     );
     const nativeBounds = await app.evaluate(({ webContents, BrowserWindow }, target) => {
       const owner = BrowserWindow.fromWebContents(webContents.fromId(target));
@@ -350,8 +350,8 @@ try {
       ),
     });
     await expect
-      .poll(() => editor('document.querySelector(".molly-selection-toolbar").dataset.dark'))
-      .toBe(String(dark));
+      .poll(() => editor('document.documentElement.dataset.theme'))
+      .toBe(dark ? 'dark' : 'light');
   };
   for (const dark of process.env.TOOLBAR_EXTENSIONS_ONLY ? [] : [false, true]) {
     await present(dark);

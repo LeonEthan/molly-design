@@ -1,0 +1,77 @@
+# Updater check, prompt, and relaunch (#187)
+
+Status: implemented
+Translation: pending
+
+## Abstract
+
+Settings > About could stay on a spinner after Check for Updates, and a finished
+download never offered Install and Relaunch. A late `getState` snapshot could
+overwrite a newer updater push, and a manual check then replaced `downloading`
+or `downloaded` with `checking` even when Sparkle ignored the new check. Quit
+also cancelled Sparkle's terminate, so the package installed on the eventual
+quit and the app did not reopen. The About button and the sidebar prompt now
+follow the check, up-to-date, download, and ready states; Install and Relaunch
+saves work and stops local services before the native quit; declining still
+installs on the next quit. A check that never leaves `checking` becomes a
+retryable error.
+
+## Evidence and limits
+
+The stuck spinner matches a renderer that applies an older `updater.getState`
+result after `updater.state` has already moved on, plus `checkForUpdates`
+forcing `checking` while a Sparkle session is still open. The missing relaunch
+matches `before-quit` calling `preventDefault` after Sparkle has already been
+told to install. Both are fixed in the desktop main and renderer code. This
+workspace cannot run a packaged Mac build, so Sparkle's real terminate-and-reopen
+path and a 0.1.2 feed download remain unverified here.
+
+## Decision
+
+Keep one updater snapshot. Ignore `getState` when a push arrived while it was
+in flight. Do not move `downloading` or `downloaded` back to `checking`; push
+the current snapshot again so a stale About panel recovers. After 30 seconds
+still in `checking`, publish `UPDATE_CHECK_UNANSWERED`, drop the
+electron-updater in-flight lock, and leave the button usable. The lock field
+is private on `AppUpdater`, so the release reads it as a structural property
+and clears it only when the value is a promise or empty. A Sparkle check that
+is still open is cancelled through the bridge's stored user-driver cancellation
+before the next check starts; events from that retired session are ignored
+until the next `checking` event. `electron-updater` installs on quit again
+(`autoInstallOnAppQuit`); the explicit button still uses relaunch. Install and
+Relaunch saves open designs and stops the local CLI, and does not close the
+design worker or browser views. If installation does not start, the CLI is
+started again.
+
+The sidebar Later action only hides the prompt. It does not answer Sparkle's
+install reply, so a declined update still applies on quit.
+
+## Correction: final must-fix round in PR #195
+
+The earlier cleanup and timeout claims above were incomplete. Setting both quit
+completion flags after only an editor flush and CLI stop skipped the existing
+design-worker drain and browser shutdown. Relaunch preparation now leaves those
+flags to `before-quit`, which awaits the worker and browser cleanup. CLI shutdown
+shares its in-flight and completed promise; an explicit restart after an aborted
+install resets it.
+
+Clearing electron-updater's private promise lock did not cancel its request.
+The replacement reuses the library's public platform updater classes and existing
+configuration, retires the timed-out instance, and gates all event listeners by
+instance identity. The existing check ticket also gates late promise rejection.
+Retirement disables automatic download and install-on-quit on the old instance.
+This avoids both stale UI events and stale backend metadata affecting the retry.
+Reusing the singleton with only a ticket or asynchronous-context event filter was
+rejected because electron-updater writes metadata before emitting events and can
+automatically download afterward. No custom update transport is introduced.
+
+Deterministic regressions reproduce concurrent CLI shutdown and stale events
+overwriting retry states before the fixes. They now cover shared pending/completed
+shutdown, restart, and stale events/rejection during checking, downloading, and
+error. The read-only Codex second opinion independently confirmed the singleton
+metadata hazard in electron-updater 6.7.3.
+
+The earlier Later/install-on-quit statement is not established for Sparkle:
+review thread 4322895351 identifies the missing `installUpdateOnQuit` call.
+That P1 is deferred pending packaged Mac verification, outside this round's
+authorized items 1–3. No Sparkle implementation or packaged update test is included.

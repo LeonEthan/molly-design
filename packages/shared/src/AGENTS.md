@@ -12,3 +12,10 @@ no body/validation-input logs. Empty model grants need compatible bindings; sign
 metadata is main-owned. References stay separate from selection: no empty-model fallback,
 snapshot secrets or dispatched-work replay. Native `models` only narrows the picker;
 dispatch, not schemas, owns availability.
+
+## Title input provenance
+
+The optional Turn `titlePrompt` is captured before internal prompt construction and
+canvas-size scaffolding. Preserve it through input normalization independently of the
+execution `prompt`; absence provides no safe naming input. Runtime title ownership:
+[CLI Agent rules](../../../apps/cli/src/agent/AGENTS.md#capabilities-and-titles).

@@ -25,6 +25,12 @@ const state = vi.hoisted(() => ({
   calls: [] as [string, string][],
   /** The session id handed to useSessionDoc (conversation ownership). */
   docSessionId: '' as string,
+  /** Captured IPC event listeners by channel, for firing canvas events in tests. */
+  ipcListeners: {} as Record<string, (event: never) => void>,
+  onSendNotes: undefined as
+    | undefined
+    | ((notes: readonly unknown[]) => Promise<boolean>),
+  notesSettled: [] as unknown[][],
 }));
 vi.mock('../src/atoms/runtime', () => ({ activeWorkspaceRuntimeAtom: 'runtime' }));
 vi.mock('../src/atoms/local-probe', () => ({ localProbeResultAtom: 'machine' }));
@@ -67,7 +73,10 @@ vi.mock('../src/hooks/use-session-doc', () => ({
   },
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({
-  onIpcEvent: () => () => {},
+  onIpcEvent: (channel: string, listener: (event: never) => void) => {
+    state.ipcListeners[channel] = listener;
+    return () => {};
+  },
   getIpcServices: () => ({
     design: {
       versions: async (id: string) => {
@@ -115,6 +124,10 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       },
       refreshPreview: async () => ({ status: 'ready', source: 'design.yaml' }),
       selectionSummary: async () => null,
+      settleNotes: async (...args: unknown[]) => {
+        state.notesSettled.push(args);
+        return true;
+      },
     },
   }),
 }));
@@ -150,6 +163,7 @@ const render = (props?: { sessionId?: string; artworkId?: string; active?: boole
         active={props?.active ?? true}
         workspaceSlug="local"
         name="Artwork"
+        onSendNotes={state.onSendNotes as never}
       />
     );
   });
@@ -193,6 +207,9 @@ beforeEach(() => {
   state.changed = true;
   state.calls = [];
   state.docSessionId = '';
+  state.ipcListeners = {};
+  state.onSendNotes = undefined;
+  state.notesSettled = [];
   state.sync.mockReset().mockResolvedValue(undefined);
   state.attach.mockReset().mockResolvedValue(undefined);
   state.saveVersion.mockReset();
@@ -614,5 +631,96 @@ it('outlines the running turn once its user turn reaches the conversation index'
   await render();
   await act(async () => {});
   expect(state.highlights).toContainEqual([{ tone: 'working', elementIds: ['title'] }]);
+  state.processing = false;
+});
+it('numbers the targets of a notes run while it runs and checks them on commit', async () => {
+  state.synced = true;
+  state.highlights = [];
+  state.onSendNotes = async () => true;
+  const reference = (elementIds: string[]) => ({
+    artworkId: 'artwork',
+    baselineRevisionId: 'b'.repeat(64),
+    elementIds,
+  });
+  await render();
+  await act(async () => {
+    state.ipcListeners['design.selectionAction']?.({
+      hostId: 'artwork',
+      action: 'notes',
+      notes: [
+        { reference: reference(['title']), prompt: 'Warmer headline' },
+        { reference: reference(['leaf']), prompt: 'Crop tighter' },
+      ],
+      notesEpoch: 3,
+    } as never);
+  });
+  await act(async () => {});
+  expect(state.notesSettled.at(-1)).toEqual(['artwork', 'artwork', 3, true]);
+  const turn = {
+    items: [
+      {
+        type: 'text',
+        text:
+          `1. Warmer headline ${formatDesignElementReference(reference(['title']))}\n` +
+          `2. Crop tighter ${formatDesignElementReference(reference(['leaf']))}`,
+      },
+    ],
+    id: 'active',
+  };
+  state.processing = true;
+  state.history = [turn as never];
+  await act(async () => {
+    state.ipcListeners['design.state']?.({ artworkId: 'artwork' } as never);
+  });
+  await act(async () => {});
+  expect(state.highlights).toContainEqual([
+    { tone: 'working', elementIds: ['title'], badge: 1 },
+    { tone: 'working', elementIds: ['leaf'], badge: 2 },
+  ]);
+  state.processing = false;
+  state.sync.mockResolvedValue({ changed: ['title'], removed: [] });
+  state.history = [{ ...turn, ...receipt('active') } as never];
+  await render();
+  await act(async () => {});
+  await act(async () => {});
+  expect(state.highlights).toContainEqual([
+    { tone: 'changed', elementIds: ['title'] },
+    { tone: 'outside', elementIds: [] },
+    { tone: 'changed', elementIds: ['title'], badge: 1 },
+    { tone: 'changed', elementIds: ['leaf'], badge: 2 },
+  ]);
+});
+it('keeps a plain working outline when the running turn did not come from notes', async () => {
+  state.synced = true;
+  state.highlights = [];
+  state.onSendNotes = async () => true;
+  await render();
+  await act(async () => {
+    state.ipcListeners['design.selectionAction']?.({
+      hostId: 'artwork',
+      action: 'notes',
+      notes: [
+        {
+          reference: {
+            artworkId: 'artwork',
+            baselineRevisionId: 'b'.repeat(64),
+            elementIds: ['title'],
+          },
+          prompt: 'Warmer headline',
+        },
+      ],
+      notesEpoch: 7,
+    } as never);
+  });
+  await act(async () => {});
+  state.processing = true;
+  state.history = [{ ...referencing(['leaf']), id: 'active' } as never];
+  await act(async () => {
+    state.ipcListeners['design.state']?.({ artworkId: 'artwork' } as never);
+  });
+  await act(async () => {});
+  expect(state.highlights).toContainEqual([{ tone: 'working', elementIds: ['leaf'] }]);
+  const groups = state.highlights.flatMap((entry) => (Array.isArray(entry) ? entry : []));
+  expect(groups.some((group) => 'badge' in (group as object))).toBe(false);
   state.processing = false;
 });

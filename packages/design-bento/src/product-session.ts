@@ -93,10 +93,12 @@ export function createProductSession(options: {
     });
     return response.json();
   };
+  const highlight = createElementHighlight();
   const pins = createNotePins({
     request,
     selectedIds: () => selectedIds,
     elementIds: () => options.elements().map((element) => element.id),
+    highlight,
   });
   const marks = createImageMarks({ request });
   const toolbar = createSelectionToolbar({
@@ -112,7 +114,6 @@ export function createProductSession(options: {
     select: options.select,
     onToggle: (open) => layersButton.classList.toggle('on', open),
   });
-  const highlight = createElementHighlight();
   window.addEventListener(
     'pagehide',
     () => {
@@ -148,8 +149,8 @@ export function createProductSession(options: {
 .ed-scroll{bottom:calc(var(--molly-dock-bottom) + var(--molly-dock-height))}
 /* Atelier palette (2026-10-04 redesign): the artwork rests on a quiet light
    table one step off the shell ground; chrome is warm ink with hairlines. */
-:root,:root[data-theme="light"]{--ink:#2b2c22;--ink-2:#4a4b40;--chrome:#ebe8e1;--chrome-2:#e2ded4;--line:#ddd6c7;--muted:#6f6b5b;--surface:#fbf8f0;--grid-dot:#d2ccc0;--accent:#c2dc72;--on-accent:#1a220a;--slide-shadow:0 1px 2px rgb(60 50 30 / .08),0 28px 60px -22px rgb(60 50 30 / .3)}
-:root[data-theme="dark"]{--ink:#ece7da;--ink-2:#b9b4a6;--chrome:#141511;--chrome-2:#2a2b24;--line:#34352d;--muted:#a29d8c;--surface:#22231d;--grid-dot:#26271f;--accent:#bdd97e;--on-accent:#1a220a;--slide-shadow:0 0 0 1px rgb(255 255 255 / .05),0 32px 80px -24px rgb(0 0 0 / .85)}
+:root,:root[data-theme="light"]{--ink:#2b2c22;--ink-2:#4a4b40;--chrome:#ebe8e1;--chrome-2:#e2ded4;--line:#ddd6c7;--muted:#6f6b5b;--surface:#fbf8f0;--grid-dot:#d2ccc0;--accent:#c2dc72;--on-accent:#1a220a;--signal:#b3cf60;--outside:#b7791f;--slide-shadow:0 1px 2px rgb(60 50 30 / .08),0 28px 60px -22px rgb(60 50 30 / .3)}
+:root[data-theme="dark"]{--ink:#ece7da;--ink-2:#b9b4a6;--chrome:#141511;--chrome-2:#2a2b24;--line:#34352d;--muted:#a29d8c;--surface:#22231d;--grid-dot:#26271f;--accent:#bdd97e;--on-accent:#1a220a;--signal:#bdd97e;--outside:#d9a441;--slide-shadow:0 0 0 1px rgb(255 255 255 / .05),0 32px 80px -24px rgb(0 0 0 / .85)}
 .ed-zoombar{box-shadow:none;border-color:var(--line)}
 .ed-panel-toggle,.ed-resizer,.ed-logo,.ed-title,.ed-insert,.ed-group-right,.ed-sidebar,.ed-present-pill,.ed-phone-only,.ed-props,.ed-topbar,.c2a-surface{display:none!important}
 .ed-corner-br{inset-inline-end:auto!important;left:14px!important}

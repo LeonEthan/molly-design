@@ -263,7 +263,7 @@ function TourWindow({
     () =>
       buildTourHistory(
         {
-          prompt: t('onboarding.firstTask.seedExplore'),
+          prompt: t('onboarding.tour.seedPrompt'),
           revealed: tracks.reveal,
           permissionAnswer,
           subagents: tracks.subagents >= 0.5,

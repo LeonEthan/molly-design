@@ -7,7 +7,8 @@
   "imports": {
     "#browser-url": "./src/browser-url.ts",
     "#image-connection": "./src/image-connection.ts",
-    "#session-paths": "./src/session-paths.ts"
+    "#session-paths": "./src/session-paths.ts",
+    "#compatible-connection-api": "./src/compatible-connection-api.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",

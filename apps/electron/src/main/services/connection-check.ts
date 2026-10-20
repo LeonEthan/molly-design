@@ -4,6 +4,10 @@ import {
   type CheckModelConnection,
   type ConnectionCheckResult
 } from '@molly/shared/embedded-harness'
+import {
+  buildCompatibleListModelsRequest,
+  compatibleListModelsParseStyle
+} from './compatible-list-models-request.ts'
 import type { ModelConnectionStore } from './model-connection-store'
 
 type CheckStyle = (typeof PROVIDER_PRESET_CHECKS)[keyof typeof PROVIDER_PRESET_CHECKS]
@@ -96,17 +100,16 @@ function listEntries(style: CheckStyle, data: unknown): unknown[] | null {
  * Settings-only and explicit: one free, unretried request with no redirects. Upstream
  * bodies and messages never leave main; failures carry a fixed reason and HTTP status.
  */
-export async function runConnectionCheck(
+export async function runModelListHttpCheck(
+  url: string,
+  headers: Record<string, string>,
   style: CheckStyle,
-  baseUrl: string,
-  apiKey: string,
   transport: typeof fetch = fetch
 ): Promise<ConnectionCheckResult> {
-  const { url, headers } = connectionCheckRequest(style, baseUrl, apiKey)
   let response: Response
   try {
     response = await transport(url, {
-      headers: { ...headers, accept: 'application/json' },
+      headers,
       redirect: 'error',
       signal: AbortSignal.timeout(15_000)
     })
@@ -133,6 +136,16 @@ export async function runConnectionCheck(
   }
 }
 
+export async function runConnectionCheck(
+  style: CheckStyle,
+  baseUrl: string,
+  apiKey: string,
+  transport: typeof fetch = fetch
+): Promise<ConnectionCheckResult> {
+  const { url, headers } = connectionCheckRequest(style, baseUrl, apiKey)
+  return runModelListHttpCheck(url, { ...headers, accept: 'application/json' }, style, transport)
+}
+
 export async function checkModelConnection(
   store: ModelConnectionStore,
   input: CheckModelConnection,
@@ -155,6 +168,20 @@ export async function checkModelConnection(
     )
       return { ok: false, reason: 'needs_key' }
     apiKey = saved.apiKey
+  }
+  if (input.providerPresetId === 'openai-compatible') {
+    const { url, headers } = buildCompatibleListModelsRequest(
+      input.baseUrl,
+      input.compatibleApi,
+      apiKey,
+      { listLimit: 1000 }
+    )
+    return runModelListHttpCheck(
+      url,
+      headers,
+      compatibleListModelsParseStyle(input.compatibleApi),
+      transport
+    )
   }
   return runConnectionCheck(
     PROVIDER_PRESET_CHECKS[input.providerPresetId],

@@ -242,6 +242,15 @@ const LOCAL_ARTWORK_STYLE = {
 
 const COMPACT_FORM =
   'max-[1080px]:left-[calc(50%_-_min(310px,43%))]! max-[1080px]:top-[9%]! max-[1080px]:bottom-[7%]! max-[1080px]:w-[min(620px,86%)]!';
+
+const LOCAL_ASIDE_STYLE = {
+  right: LOCAL_ARTWORK_STYLE.right,
+  top: LOCAL_FORM_POSE.top,
+  bottom: LOCAL_FORM_POSE.bottom,
+  width: 'min(40%, max(460px, 28vw))',
+} as const;
+
+const COMPACT_ASIDE = `${COMPACT_FORM} max-[1080px]:right-auto! max-[1080px]:z-30 max-[1080px]:bg-[#f4f1ea]`;
 // Below the two-column breakpoint the centred form overlaps the product and
 // the close-up frames an empty patch of the window, so the preview steps out
 // entirely. Opacity (not unmount) is what flips, keeping the camera mounted
@@ -358,6 +367,12 @@ export interface OnboardingShellProps {
   /** Development-only diagnostics for camera composition stories. */
   previewDebug?: TourStillDebugOptions;
   /**
+   * Local setup only: content that takes the artwork's place beside the form.
+   * It stays mounted while closed so its state survives being put away.
+   */
+  aside?: ReactNode;
+  asideOpen?: boolean;
+  /**
    * Retained for screens that still pass it. Stage composition is step-driven,
    * so there is no fixed narrow/wide card to switch between.
    */
@@ -398,6 +413,8 @@ export function OnboardingShell({
   previewTracks,
   previewState,
   previewDebug,
+  aside,
+  asideOpen,
 }: OnboardingShellProps) {
   const register = useContext(OnboardingShellHostContext);
   const props = useMemo<OnboardingShellProps>(
@@ -414,8 +431,12 @@ export function OnboardingShell({
       previewTracks,
       previewState,
       previewDebug,
+      aside,
+      asideOpen,
     }),
     [
+      aside,
+      asideOpen,
       children,
       description,
       eyebrow,
@@ -452,6 +473,8 @@ function OnboardingShellSurface({
   previewTracks,
   previewState,
   previewDebug,
+  aside,
+  asideOpen = false,
   previewEnabled = false,
 }: OnboardingShellProps & { previewEnabled?: boolean }) {
   const platform = useContext(PlatformContext);
@@ -499,13 +522,26 @@ function OnboardingShellSurface({
         }}
       />
 
-      {isLocal ? (
+      {isLocal && !(aside && asideOpen) ? (
         <div
           aria-hidden
           className="pointer-events-none absolute top-1/2 hidden -translate-y-1/2 opacity-95 min-[1080px]:block"
           style={LOCAL_ARTWORK_STYLE}
         >
           <MollySetupArtwork />
+        </div>
+      ) : null}
+
+      {isLocal && aside ? (
+        <div
+          hidden={!asideOpen}
+          className={`absolute z-20 ${COMPACT_ASIDE}`}
+          style={LOCAL_ASIDE_STYLE}
+          data-onboarding-aside={stepKey}
+        >
+          <div className="scrollbar-pro flex h-full flex-col overflow-y-auto">
+            <div className="my-auto py-2">{aside}</div>
+          </div>
         </div>
       ) : null}
 

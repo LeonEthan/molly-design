@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ConnectionCheckResult } from '@molly/shared/embedded-harness';
-import { Button } from '@/ui/button';
 import { CircleAlert, CircleCheck, CircleDashed, LoaderCircle } from '@/ui/icons';
 import { cn } from '@/lib/utils';
-import { InfoTip } from './info-tip';
 
 export type ConnectionCheckState =
   | { phase: 'idle' }
@@ -14,7 +12,7 @@ export type ConnectionCheckState =
 export const CONNECTION_CHECK_DELAY_MS = 700;
 
 /**
- * Checks a complete request once it has been stable for a moment, and again on demand.
+ * Checks a complete request once it has been stable for a moment.
  * A new or withdrawn request discards any answer still in flight, so the line never
  * describes a key or address the form no longer shows.
  */
@@ -50,7 +48,7 @@ export function useConnectionCheck<T>(
     const timer = setTimeout(start, delayMs);
     return () => clearTimeout(timer);
   }, [delayMs, key, run, start]);
-  return { state, recheck: run && request !== null ? start : undefined };
+  return state;
 }
 
 const hostOf = (url: string) => {
@@ -61,78 +59,30 @@ const hostOf = (url: string) => {
   }
 };
 
-function useCheckCopy() {
-  const { t } = useTranslation();
-  return (result: ConnectionCheckResult, baseUrl: string) => {
-    if (result.ok)
-      return result.models === undefined
-        ? t('settings.check.ok')
-        : t('settings.check.okListed', { count: result.models.length });
-    return t(`settings.check.failures.${result.reason}`, {
-      status: result.status ?? '',
-      host: hostOf(baseUrl),
-    });
-  };
-}
-
-/** One line under the key field: what the last check found, and a way to run it again. */
-export function ConnectionCheckLine({
+/**
+ * One line under the key field, shown only when the check found a real problem.
+ * A passing check, a check in progress and a service without a free check stay silent.
+ */
+export function ConnectionCheckError({
   state,
   baseUrl,
-  onRecheck,
   className,
 }: {
   state: ConnectionCheckState;
   baseUrl: string;
-  onRecheck?: () => void;
   className?: string;
 }) {
   const { t } = useTranslation();
-  const describe = useCheckCopy();
-  if (state.phase === 'idle' && !onRecheck) return null;
-  const ok = state.phase === 'done' && state.result.ok;
-  const failed = state.phase === 'done' && !state.result.ok;
-  const unsupported = failed && !state.result.ok && state.result.reason === 'unsupported';
+  if (state.phase !== 'done' || state.result.ok || state.result.reason === 'unsupported')
+    return null;
   return (
-    <div
-      role="status"
-      className={cn('flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1 text-xs', className)}
-    >
-      {state.phase === 'checking' ? (
-        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-          <LoaderCircle aria-hidden className="h-3.5 w-3.5 animate-spin" />
-          {t('settings.check.checking')}
-        </span>
-      ) : state.phase === 'done' ? (
-        <span
-          className={cn(
-            'inline-flex items-center gap-1.5',
-            ok ? 'text-foreground' : unsupported ? 'text-muted-foreground' : 'text-destructive'
-          )}
-        >
-          {ok ? (
-            <CircleCheck aria-hidden className="h-3.5 w-3.5 shrink-0" />
-          ) : unsupported ? (
-            <CircleDashed aria-hidden className="h-3.5 w-3.5 shrink-0" />
-          ) : (
-            <CircleAlert aria-hidden className="h-3.5 w-3.5 shrink-0" />
-          )}
-          {describe(state.result, baseUrl)}
-        </span>
-      ) : null}
-      {state.phase !== 'idle' ? <InfoTip>{t('settings.check.detail')}</InfoTip> : null}
-      {onRecheck && state.phase !== 'checking' ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-6 px-1.5 text-xs text-muted-foreground"
-          onClick={onRecheck}
-        >
-          {state.phase === 'idle' ? t('settings.check.run') : t('settings.check.again')}
-        </Button>
-      ) : null}
-    </div>
+    <p role="alert" className={cn('flex items-center gap-1.5 text-xs text-destructive', className)}>
+      <CircleAlert aria-hidden className="h-3.5 w-3.5 shrink-0" />
+      {t(`settings.check.failures.${state.result.reason}`, {
+        status: state.result.status ?? '',
+        host: hostOf(baseUrl),
+      })}
+    </p>
   );
 }
 

@@ -4,6 +4,7 @@ import {
   type DiscoverModelConnection,
   type DiscoverModelConnectionResult
 } from '@molly/shared/embedded-harness'
+import { buildCompatibleListModelsRequest } from './compatible-list-models-request.ts'
 import type { ModelConnectionStore } from './model-connection-store'
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -133,14 +134,13 @@ export async function discoverModelConnection(
     if (saved.connection.baseUrl !== input.baseUrl) return { ok: false, reason: 'needs_key' }
     apiKey = saved.apiKey
   }
-  const base = input.baseUrl.trim().replace(/\/+$/, '')
+  const compatibleApi =
+    input.providerPresetId === 'openai-compatible' ? input.compatibleApi : undefined
+  const { url, headers } = buildCompatibleListModelsRequest(input.baseUrl, compatibleApi, apiKey)
   let response: Response
   try {
-    response = await transport(`${base}/models`, {
-      headers: {
-        accept: 'application/json',
-        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
-      },
+    response = await transport(url, {
+      headers,
       redirect: 'error',
       signal: AbortSignal.timeout(15_000)
     })

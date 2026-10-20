@@ -1,44 +1,74 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from 'storybook/test';
-import { ProvidersScreenView, SummaryScreen } from '@/components/onboarding';
+import { createLocalPlatformProvider, createStaticStore } from '@molly/platform';
+import { PlatformContext } from '@molly/platform/react';
+import { ProvidersScreenView } from '@/components/onboarding';
+
+const localPlatform = createLocalPlatformProvider({
+  session: createStaticStore({
+    status: 'authenticated',
+    user: { id: 'user-storybook-onboarding', name: 'Storybook user' },
+  }),
+  workspaces: createStaticStore({
+    status: 'ready',
+    workspaces: [
+      { id: 'workspace-storybook', name: 'Storybook Workspace', slug: null, role: 'owner' },
+    ],
+    activeWorkspaceId: 'workspace-storybook',
+  }),
+});
 
 function ProviderSkipJourney() {
-  const [step, setStep] = useState<'providers' | 'summary' | 'complete'>('providers');
-  if (step === 'complete') return <div data-testid="onboarding-complete">Onboarding complete</div>;
-  if (step === 'summary')
-    return (
-      <SummaryScreen
-        agentState="missing"
-        onBack={() => setStep('providers')}
-        onComplete={() => setStep('complete')}
-      />
-    );
+  const [complete, setComplete] = useState(false);
+  if (complete) return <div data-testid="onboarding-complete">Onboarding complete</div>;
   return (
     <ProvidersScreenView
-      configs={[]}
-      localMachineId={null}
+      languageReady={false}
+      imageReady={false}
+      modelReady={false}
+      mollyAvailable={false}
       onBack={fn()}
-      onSkip={() => setStep('summary')}
+      onSkip={() => setComplete(true)}
       onNext={fn()}
     />
   );
 }
+
+function ProviderNextJourney() {
+  const [complete, setComplete] = useState(false);
+  if (complete) return <div data-testid="onboarding-complete">Onboarding complete</div>;
+  return (
+    <ProvidersScreenView
+      languageReady
+      imageReady
+      modelReady
+      mollyAvailable
+      onBack={fn()}
+      onSkip={fn()}
+      onNext={() => setComplete(true)}
+      browserPanel={(close) => (
+        <button type="button" onClick={close}>
+          Browser import
+        </button>
+      )}
+    />
+  );
+}
+
 const meta = {
   title: 'Onboarding/CompletionJourney',
   component: ProviderSkipJourney,
   parameters: { layout: 'fullscreen' },
+  decorators: [
+    (Story) => (
+      <PlatformContext.Provider value={localPlatform}>
+        <Story />
+      </PlatformContext.Provider>
+    ),
+  ],
 } satisfies Meta<typeof ProviderSkipJourney>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const ProviderSkip: Story = {};
-export const RetiredSetup: Story = {
-  render: () => (
-    <SummaryScreen
-      agentState="retired"
-      agentName="Previous Codex setup"
-      onBack={fn()}
-      onComplete={fn()}
-    />
-  ),
-};
+export const ProviderNext: Story = { render: () => <ProviderNextJourney /> };

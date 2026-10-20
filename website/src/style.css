@@ -173,6 +173,15 @@ html{overflow-x:clip}
 .rel-row .mono{color:var(--muted)}
 .rel-row b s{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--lime);margin-right:10px;vertical-align:1px;box-shadow:0 0 0 3px var(--tint);text-decoration:none}
 
+.card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:24px}
+.card p{margin:8px 0 0;color:var(--muted);font-size:15px}
+.num{font:12px var(--mono);color:var(--link);margin:0 0 10px;letter-spacing:.04em}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:8px}
+.code{font-family:var(--mono);font-size:.88em;color:var(--link)}
+.mods .num{font-size:13px}
+.mi{display:grid;grid-template-columns:1fr 1.4fr;gap:24px;margin-top:16px;align-items:start}
+.note{margin:20px 0 0;font-size:14px;color:var(--muted);border-left:2px solid var(--line);padding-left:14px}
+
 .faq-wrap{padding-bottom:112px}
 .faq-wrap h2{font-size:48px;margin:0 0 24px}
 .faq details{border-bottom:1px solid var(--line)}
@@ -248,7 +257,7 @@ html{overflow-x:clip}
   .steps{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:42%;overflow-x:auto;-webkit-overflow-scrolling:touch}
   .wf-panel.on{grid-template-columns:1fr;gap:16px}
   .wf-panel .wf-shot{grid-column:auto;grid-row:auto}
-  .local,.wall,.wall-sq{grid-template-columns:1fr}
+  .local,.wall,.wall-sq,.grid3,.mi{grid-template-columns:1fr}
   .rel-row{grid-template-columns:1fr;gap:4px}
   .close h2{font-size:38px}
   .ft{flex-wrap:wrap;gap:32px}

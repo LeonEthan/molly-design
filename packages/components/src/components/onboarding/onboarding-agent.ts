@@ -14,3 +14,16 @@ export function isOnboardingMollyConfig(
     config.runtimeOverrides == null
   );
 }
+
+/**
+ * Eligible built-in Molly configs on this machine, sorted deterministically
+ * (name, then id) so onboarding can auto-select `[0]` without a user pick.
+ */
+export function getOnboardingMollyConfigs(
+  configs: readonly AgentConfigMeta[],
+  machineId: MachineId | null
+): AgentConfigMeta[] {
+  return configs
+    .filter((candidate) => isOnboardingMollyConfig(candidate, machineId))
+    .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
+}

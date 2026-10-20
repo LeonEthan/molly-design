@@ -1,18 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import {
   ConnectionCheckBadge,
-  ConnectionCheckLine,
+  ConnectionCheckError,
   type ConnectionCheckState,
 } from '@/components/settings/connection-check';
 
 function Both({ state }: { state: ConnectionCheckState }) {
   return (
     <div className="flex w-[480px] flex-col gap-3">
-      <ConnectionCheckLine
-        state={state}
-        baseUrl="https://api.example.com/v1"
-        onRecheck={() => undefined}
-      />
+      <ConnectionCheckError state={state} baseUrl="https://api.example.com/v1" />
       <ConnectionCheckBadge state={state} />
     </div>
   );

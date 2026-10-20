@@ -430,6 +430,76 @@ v0.1.0
 2026-10-15
 ```
 
+## models
+
+### EN
+
+```text
+Bring your own models
+
+Add connections under Settings → AI models. For each session you pick the connection, the model and how hard it thinks.
+
+01
+
+OpenAI
+
+Sign in with ChatGPT or paste an API key.
+
+02
+
+Kimi Code
+
+Membership API key or device-code sign-in.
+
+03
+
+OpenAI-compatible
+
+Any custom endpoint, with model discovery. Local services such as Ollama and LM Studio work without a key.
+
+Image generation
+
+Image models are set up separately
+
+Under Image generation, add a compatible endpoint, key and model name. It’s set up separately from the chat model, and you need both before you can send a brief.
+
+Which models you can use depends on the provider and your key.
+```
+
+### 中文
+
+```text
+用你自己的模型
+
+在设置 → AI 模型里添加连接。每个会话可以单独选连接、模型和思考强度。
+
+01
+
+OpenAI
+
+用 ChatGPT 登录，或者粘贴 API key。
+
+02
+
+Kimi Code
+
+会员 API key，或设备码登录。
+
+03
+
+OpenAI 兼容接口
+
+自定义地址，可读取模型列表。Ollama、LM Studio 这类本地服务不填密钥也能用。
+
+图片生成
+
+图片模型单独设置
+
+在图片生成里填兼容的接口地址、密钥和模型名称。它和对话模型分开设置，两个都填好才能发送需求。
+
+能用哪些模型，取决于服务商和你的密钥。
+```
+
 ## faq
 
 ### EN

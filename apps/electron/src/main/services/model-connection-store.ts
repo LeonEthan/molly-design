@@ -574,7 +574,10 @@ export class ModelConnectionStore {
             ? { oauth: previous.connection.oauth }
             : {}),
           ...(data.customModels ? { customModels: data.customModels } : {}),
-          ...(data.models ? { models: data.models } : {})
+          ...(data.models ? { models: data.models } : {}),
+          ...(data.providerPresetId === 'openai-compatible'
+            ? { compatibleApi: data.compatibleApi }
+            : {})
         })
         const oauth = effectiveAuthType === 'openai_oauth' ? previous?.oauth : undefined
         const registration =

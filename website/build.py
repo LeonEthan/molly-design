@@ -516,6 +516,19 @@ def body(releases):
   </div>
 </section>
 
+<section class="feat" id="models" aria-labelledby="m-h">
+  <div class="wrap">
+    <div class="fh"><div><h2 class="serif" id="m-h">[[用你自己的模型||Bring your own models]]</h2></div><p>{S('m_lead')}</p></div>
+    <div class="grid3 mods">
+      <div class="card"><p class="num">01</p><h3 class="h4">OpenAI</h3><p>[[用 ChatGPT 登录，或者粘贴 API key。||Sign in with ChatGPT or paste an API key.]]</p></div>
+      <div class="card"><p class="num">02</p><h3 class="h4">Kimi Code</h3><p>[[会员 API key，或设备码登录。||Membership API key or device-code sign-in.]]</p></div>
+      <div class="card"><p class="num">03</p><h3 class="h4">[[OpenAI 兼容接口||OpenAI-compatible]]</h3><p>[[自定义地址，可读取模型列表。Ollama、LM Studio 这类本地服务不填密钥也能用。||Any custom endpoint, with model discovery. Local services such as Ollama and LM Studio work without a key.]]</p></div>
+    </div>
+    <div class="mi card"><div><p class="num">[[图片生成||Image generation]]</p><h3 class="h4">[[图片模型单独设置||Image models are set up separately]]</h3></div><p>{S('m_img')}</p></div>
+    <p class="note">[[能用哪些模型，取决于服务商和你的密钥。||Which models you can use depends on the provider and your key.]]</p>
+  </div>
+</section>
+
 <section class="feat" id="faq" aria-labelledby="faq-h">
   <div class="wrap faq-wrap">
     <h2 class="serif" id="faq-h">[[常见问题||FAQ]]</h2>

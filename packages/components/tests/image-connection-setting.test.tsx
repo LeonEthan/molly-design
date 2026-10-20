@@ -75,7 +75,7 @@ describe('image connection form values', () => {
     expect(createImageConnectionFormDraft(undefined)).toEqual({
       enabled: true,
       protocol: 'openai-images',
-      baseUrl: '',
+      baseUrl: 'https://api.openai.com/v1',
       apiKey: '',
       clearApiKey: false,
       model: '',
@@ -235,6 +235,14 @@ describe('ImageConnectionForm', () => {
     });
   };
 
+  /** The address lives under Advanced while it is the protocol's default. */
+  const baseUrlInput = async (view: HTMLElement): Promise<HTMLInputElement> => {
+    const existing = view.querySelector<HTMLInputElement>('input[id$="-base-url"]');
+    if (existing) return existing;
+    await click(button(view, copy('settings.models.moreOptions')));
+    return await baseUrlInput(view);
+  };
+
   it('keeps an unsaved draft on rerender and saves only a public CAS update', async () => {
     imageIpc.getImageSnapshot.mockImplementation(async () => ({
       connection: storedConnection({ legacyHistoryMayContainKey: true }),
@@ -333,7 +341,7 @@ describe('ImageConnectionForm', () => {
     });
     expect(button(view, copy('common.save')).disabled).toBe(true);
 
-    const urlInput = view.querySelector<HTMLInputElement>('input[id$="-base-url"]') as HTMLElement;
+    const urlInput = await baseUrlInput(view);
     await typeInto(urlInput as HTMLInputElement, 'not a url');
     expect(button(view, copy('common.save')).disabled).toBe(true);
     expect(view.textContent).toContain(copy('settings.imageConnection.invalidBaseUrl'));
@@ -360,7 +368,7 @@ describe('ImageConnectionForm', () => {
       stored: storedConnection(),
       onSave: (draft) => void saves.push(draft),
     });
-    await typeInto(view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!, baseUrl);
+    await typeInto(await baseUrlInput(view), baseUrl);
     await typeInto(apiKeyInput(view), 'synthetic-renewed-key');
     expect(view.textContent).toContain(copy('settings.imageConnection.invalidBaseUrl'));
     expect(copy('settings.imageConnection.invalidBaseUrl')).toContain('HTTPS');
@@ -378,7 +386,7 @@ describe('ImageConnectionForm', () => {
         stored: storedConnection(),
         onSave: (draft) => void saves.push(draft),
       });
-      await typeInto(view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!, baseUrl);
+      await typeInto(await baseUrlInput(view), baseUrl);
       expect(view.textContent).not.toContain(copy('settings.imageConnection.invalidBaseUrl'));
       expect(button(view, copy('common.save')).disabled).toBe(true);
       expect(view.textContent).toContain(copy('settings.models.keyRequired'));
@@ -411,10 +419,7 @@ describe('ImageConnectionForm', () => {
           return { ok: true, models: ['gpt-image-2', 'dall-e-3', 'gpt-4.1'] };
         },
       });
-      await typeInto(
-        view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!,
-        'https://images.example.com/v1'
-      );
+      await typeInto(await baseUrlInput(view), 'https://images.example.com/v1');
       await typeInto(apiKeyInput(view), 'synthetic-typed-key');
       expect(requests).toEqual([]);
       await settle();
@@ -425,7 +430,7 @@ describe('ImageConnectionForm', () => {
           apiKey: 'synthetic-typed-key',
         },
       ]);
-      expect(view.textContent).toContain('Key check passed · 3 models listed');
+      expect(view.querySelector('[role="alert"]')).toBeNull();
       expect(view.querySelector<HTMLInputElement>('input[id$="-model"]')!.value).toBe('');
       expect(view.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
       await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'image');
@@ -452,10 +457,7 @@ describe('ImageConnectionForm', () => {
         { protocol: 'openai-images', baseUrl: 'https://api.openai.com/v1', expectedRevision: 3 },
       ]);
       expect(view.textContent).toContain('The provider rejected this key (401).');
-      await typeInto(
-        view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!,
-        'https://elsewhere.example.com/v1'
-      );
+      await typeInto(await baseUrlInput(view), 'https://elsewhere.example.com/v1');
       await settle();
       expect(requests).toHaveLength(1);
       expect(view.textContent).not.toContain('rejected');
@@ -472,7 +474,7 @@ describe('ImageConnectionForm', () => {
             return { ok: true, models: ['synthetic-image-model'] };
           },
         });
-        await typeInto(view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!, baseUrl);
+        await typeInto(await baseUrlInput(view), baseUrl);
         await settle();
         expect(requests).toEqual([]);
         await typeInto(apiKeyInput(view), 'synthetic-renewed-key');
@@ -480,7 +482,9 @@ describe('ImageConnectionForm', () => {
         expect(requests).toEqual([
           { protocol: 'openai-images', baseUrl, apiKey: 'synthetic-renewed-key' },
         ]);
-        expect(view.textContent).toContain('Key check passed · 1 model listed');
+        expect(view.textContent).toContain(
+          copy('settings.imageConnection.modelNotListed').replace('{{count}}', '1')
+        );
       }
     );
 
@@ -492,10 +496,7 @@ describe('ImageConnectionForm', () => {
           return { ok: true };
         },
       });
-      await typeInto(
-        view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!,
-        'http://images.example.invalid/v1'
-      );
+      await typeInto(await baseUrlInput(view), 'http://images.example.invalid/v1');
       await typeInto(apiKeyInput(view), 'synthetic-renewed-key');
       await settle();
       expect(requests).toEqual([]);
@@ -515,7 +516,7 @@ describe('ImageConnectionForm', () => {
       });
       await settle();
       expect(requests).toEqual([]);
-      expect(view.textContent).toContain(copy('settings.check.badge.unsupported'));
+      expect(view.querySelector('[role="alert"]')).toBeNull();
     });
   });
 
@@ -584,6 +585,33 @@ describe('ImageConnectionForm', () => {
     const view = container as HTMLElement;
     expect(view.querySelector<HTMLButtonElement>('button[role="switch"]')!.disabled).toBe(true);
     expect(view.textContent).toContain(copy('settings.readiness.keyMissing'));
+  });
+
+  it('logs a failed first read and reports the connection after an explicit retry', async () => {
+    const failure = new Error('keychain locked');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    imageIpc.getImageSnapshot.mockImplementationOnce(async () => {
+      throw failure;
+    });
+    imageIpc.getImageSnapshot.mockImplementation(async () => ({ connection: storedConnection() }));
+    const reported: (ProtectedImageConnection | null)[] = [];
+    await act(async () => {
+      root?.render(
+        createElement(ImageConnectionSetting, {
+          onConnectionChange: (connection) => reported.push(connection),
+        })
+      );
+    });
+    const view = container as HTMLElement;
+    expect(view.textContent).toContain(copy('settings.models.error'));
+    expect(consoleError).toHaveBeenCalledWith('Failed to read the image connection', failure);
+    expect(reported).toEqual([]);
+
+    await click(button(view, copy('common.retry')));
+
+    expect(reported).toEqual([storedConnection()]);
+    expect(view.textContent).not.toContain(copy('settings.models.error'));
+    consoleError.mockRestore();
   });
 
   it('keeps the row actions reachable when the stored key is missing', async () => {

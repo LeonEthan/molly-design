@@ -1,16 +1,27 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ModelConnectionSchema,
   ModelEndpointSchema,
   PROVIDER_PRESET_DEFAULT_BASE_URLS,
-  ProviderPresetIdSchema,
   SaveModelConnectionSchema,
   getModelConnectionConfigurationIssue,
   isProviderPresetDefaultEndpoint,
   type CheckModelConnection,
   type BeginOpenAiAuth,
   type ConnectionCheckResult,
+  normalizeCompatibleConnectionApi,
+  type CompatibleConnectionApi,
+  type CompatibleConnectionPreset,
   type DiscoverModelConnection,
   type DiscoverModelConnectionResult,
   type HarnessModelCatalog,
@@ -32,7 +43,6 @@ import {
 } from '@/ui/dropdown-menu';
 import { ChevronDown, Ellipsis, Plus } from '@/ui/icons';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
-import { InfoTip } from './info-tip';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Switch } from '@/ui/switch';
@@ -44,11 +54,12 @@ import {
 } from './compatible-model-fields';
 import {
   ConnectionCheckBadge,
-  ConnectionCheckLine,
+  ConnectionCheckError,
   useConnectionCheck,
   type ConnectionCheckState,
 } from './connection-check';
 import { ModelChecklist, type CatalogModel } from './model-checklist';
+import { CompatibleConnectionSetup, presetToCustomModels } from './compatible-connection-setup';
 
 const providerLabelKeys: Record<ProviderPresetId, string> = {
   openai: 'settings.models.providers.openai',
@@ -78,14 +89,22 @@ const providerMarks: Record<ProviderPresetId, string> = {
   'openai-compatible': '{ }',
 };
 
-const QUICK_PROVIDERS: ProviderPresetId[] = [
+const API_KEY_PROVIDERS: ProviderPresetId[] = [
   'openai',
   'anthropic',
   'google',
   'deepseek',
-  'kimi-coding',
+  'moonshot',
+  'zai',
+  'xai',
+  'minimax',
   'openrouter',
 ];
+
+const SIGN_IN_PROVIDERS = [
+  { preset: 'openai', label: 'settings.models.chatgpt' },
+  { preset: 'kimi-coding', label: 'settings.models.kimiCodePlan' },
+] as const satisfies readonly { preset: ProviderPresetId; label: string }[];
 
 export function ProviderMark({
   preset,
@@ -165,9 +184,7 @@ export type OpenAiAuthFlow = {
       }
     | { ok: false; reason: 'unavailable' }
   >;
-  complete: (
-    sessionId: string
-  ) => Promise<
+  complete: (sessionId: string) => Promise<
     | { ok: true; connection: ModelConnection }
     | {
         ok: false;
@@ -178,41 +195,65 @@ export type OpenAiAuthFlow = {
   signOut: (input: { id: string; expectedRevision: number }) => Promise<void>;
 };
 
+/** How a new connection is made: an official plan sign-in or a key for the preset. */
+export type ProviderChoice = { preset: ProviderPresetId; signIn: boolean };
+
+/**
+ * The one provider picker for Settings and onboarding. Plan sign-ins come first when
+ * the desktop bridge offers them; "Custom" presents the `openai-compatible` preset.
+ */
 function ProviderPicker({
-  value,
+  signIn,
   disabled,
   onChange,
 }: {
-  value: ProviderPresetId | '';
+  signIn: boolean;
   disabled: boolean;
-  onChange: (next: ProviderPresetId) => void;
+  onChange: (choice: ProviderChoice) => void;
 }) {
   const { t } = useTranslation();
+  const tile = (preset: ProviderPresetId, label: string, viaSignIn: boolean) => (
+    <button
+      key={`${viaSignIn ? 'plan' : 'key'}:${preset}`}
+      type="button"
+      role="radio"
+      aria-checked={false}
+      disabled={disabled}
+      onClick={() => onChange({ preset, signIn: viaSignIn })}
+      className="flex min-w-0 items-center gap-2 rounded-lg border border-border/60 px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-foreground/[0.03] hover:text-foreground"
+    >
+      <ProviderMark preset={preset} size="sm" />
+      <span className="min-w-0 truncate">{label}</span>
+    </button>
+  );
+  const group = (title: string, tiles: ReactNode) => (
+    <div className="space-y-2">
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+        {title}
+      </p>
+      <div className="grid grid-cols-2 gap-1.5 @[30rem]:grid-cols-3">{tiles}</div>
+    </div>
+  );
+  const keyProviders = signIn ? API_KEY_PROVIDERS : [...API_KEY_PROVIDERS, 'kimi-coding' as const];
   return (
     <div
       role="radiogroup"
-      aria-label={t('settings.models.provider')}
-      className="grid grid-cols-2 gap-1.5 sm:grid-cols-3"
+      aria-label={t('settings.models.chooseProvider')}
+      className="@container space-y-4"
     >
-      {ProviderPresetIdSchema.options.map((preset) => (
-        <button
-          key={preset}
-          type="button"
-          role="radio"
-          aria-checked={value === preset}
-          disabled={disabled}
-          onClick={() => onChange(preset)}
-          className={cn(
-            'flex min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs transition-colors',
-            value === preset
-              ? 'border-foreground bg-foreground/[0.04] text-foreground'
-              : 'border-border/60 text-muted-foreground hover:bg-foreground/[0.03] hover:text-foreground'
-          )}
-        >
-          <ProviderMark preset={preset} size="sm" />
-          <span className="min-w-0 truncate">{t(providerLabelKeys[preset])}</span>
-        </button>
-      ))}
+      {signIn
+        ? group(
+            t('settings.models.groups.signIn'),
+            SIGN_IN_PROVIDERS.map((entry) => tile(entry.preset, t(entry.label), true))
+          )
+        : null}
+      {group(
+        t('settings.models.groups.apiKey'),
+        keyProviders.map((preset) => tile(preset, t(providerLabelKeys[preset]), false))
+      )}
+      {group(t('settings.models.groups.other'), [
+        tile('openai-compatible', t(providerLabelKeys['openai-compatible']), false),
+      ])}
     </div>
   );
 }
@@ -220,6 +261,7 @@ function ProviderPicker({
 export function ModelConnectionForm({
   stored,
   initialProvider,
+  initialSignIn = false,
   catalog,
   metadataSnapshot = null,
   busy = false,
@@ -232,13 +274,16 @@ export function ModelConnectionForm({
 }: {
   stored?: ModelConnection;
   initialProvider?: ProviderPresetId;
+  /** Start a new connection on its plan sign-in rather than its key. */
+  initialSignIn?: boolean;
   /** Packaged catalog models for every native preset; undefined while unread or unavailable. */
   catalog?: readonly CatalogModel[];
   /** Packaged models.dev projection for compatible discovery enrichment. */
   metadataSnapshot?: ModelMetadataSnapshot | null;
   busy?: boolean;
   onSave: (input: SaveModelConnection, check?: ConnectionCheckState) => Promise<void>;
-  onCancel: () => void;
+  /** Absent where there is nothing to cancel back to, such as a first connection. */
+  onCancel?: () => void;
   onCheck?: ModelConnectionCheck;
   onDiscover?: ModelConnectionDiscover;
   /** Main-owned OpenAI sign-in flow; present only where the desktop bridge exists. */
@@ -256,13 +301,16 @@ export function ModelConnectionForm({
     stored?.providerPresetId ?? initial?.provider ?? ''
   );
   const [endpoint, setEndpoint] = useState(stored?.baseUrl ?? initial?.endpoint ?? '');
-  const [pickingProvider, setPickingProvider] = useState(!stored && !initialProvider);
+  const [signInMode, setSignInMode] = useState(!stored && initialSignIn);
   const [customEndpointOpen, setCustomEndpointOpen] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [useNoKey, setUseNoKey] = useState(false);
   const [chooseModels, setChooseModels] = useState(stored?.models !== undefined);
   const [selectedModels, setSelectedModels] = useState<string[]>(stored?.models ?? []);
   const enabled = stored?.enabled ?? true;
+  const [compatibleApi, setCompatibleApi] = useState<CompatibleConnectionApi>(() =>
+    normalizeCompatibleConnectionApi(stored?.compatibleApi)
+  );
   const [customModels, setCustomModels] = useState(
     () =>
       stored?.customModels?.map(compatibleModelDraft) ??
@@ -299,7 +347,7 @@ export function ModelConnectionForm({
   // Cancelling or unmounting the form cancels any pending sign-in flow it started.
   const cancelForm = useCallback(() => {
     cancelSignIn();
-    onCancel();
+    onCancel?.();
   }, [cancelSignIn, onCancel]);
 
   const authFlowRef = useRef(authFlow);
@@ -372,22 +420,42 @@ export function ModelConnectionForm({
   const checkRequest = useMemo<CheckModelConnection | null>(() => {
     if (provider === '' || configurationIssue || !ModelEndpointSchema.safeParse(endpoint).success)
       return null;
-    if (typedKey) return { providerPresetId: provider, baseUrl: endpoint, apiKey: typedKey };
+    const compatible = provider === 'openai-compatible' ? { compatibleApi } : {};
+    if (typedKey)
+      return { providerPresetId: provider, baseUrl: endpoint, apiKey: typedKey, ...compatible };
     if (stored && !requiresKey && !useNoKey)
       return {
         providerPresetId: provider,
         baseUrl: endpoint,
         stored: { id: stored.id, revision: stored.revision },
+        ...compatible,
       };
     return null;
-  }, [configurationIssue, endpoint, provider, requiresKey, stored, typedKey, useNoKey]);
-  const { state: check, recheck } = useConnectionCheck(checkRequest, onCheck);
+  }, [
+    compatibleApi,
+    configurationIssue,
+    endpoint,
+    provider,
+    requiresKey,
+    stored,
+    typedKey,
+    useNoKey,
+  ]);
+  const check = useConnectionCheck(checkRequest, onCheck);
   // Keyless endpoints (Ollama, LM Studio) can be discovered without a key or stored row.
   const discoverable =
     provider === 'openai-compatible' &&
     !configurationIssue &&
     ModelEndpointSchema.safeParse(endpoint).success;
-  const discoveryKey = JSON.stringify([provider, endpoint, typedKey, useNoKey, stored?.id, stored?.revision]);
+  const discoveryKey = JSON.stringify([
+    provider,
+    compatibleApi,
+    endpoint,
+    typedKey,
+    useNoKey,
+    stored?.id,
+    stored?.revision,
+  ]);
   const discoveryKeyRef = useRef(discoveryKey);
   discoveryKeyRef.current = discoveryKey;
   const discoveryAttemptRef = useRef(0);
@@ -399,14 +467,20 @@ export function ModelConnectionForm({
   const discover = useCallback(() => {
     if (!onDiscover || !discoverable) return;
     const input: DiscoverModelConnection = typedKey
-      ? { providerPresetId: 'openai-compatible', baseUrl: endpoint, apiKey: typedKey }
+      ? {
+          providerPresetId: 'openai-compatible',
+          baseUrl: endpoint,
+          compatibleApi,
+          apiKey: typedKey,
+        }
       : stored && !requiresKey && !useNoKey
         ? {
             providerPresetId: 'openai-compatible',
             baseUrl: endpoint,
+            compatibleApi,
             stored: { id: stored.id, revision: stored.revision },
           }
-        : { providerPresetId: 'openai-compatible', baseUrl: endpoint };
+        : { providerPresetId: 'openai-compatible', baseUrl: endpoint, compatibleApi };
     const attempt = ++discoveryAttemptRef.current;
     const current = () =>
       mountedRef.current &&
@@ -426,25 +500,50 @@ export function ModelConnectionForm({
         if (current()) setDiscovery({ phase: 'failed' });
       }
     );
-  }, [discoverable, discoveryKey, endpoint, onDiscover, requiresKey, stored, typedKey, useNoKey]);
+  }, [
+    compatibleApi,
+    discoverable,
+    discoveryKey,
+    endpoint,
+    onDiscover,
+    requiresKey,
+    stored,
+    typedKey,
+    useNoKey,
+  ]);
   const listed =
     check.phase === 'done' && check.result.ok && check.result.models
       ? new Set(check.result.models)
       : undefined;
-  const chooseProvider = (next: ProviderPresetId) => {
+  const resetDraft = (next: ConnectionIdentityDraft, viaSignIn: boolean) => {
     cancelSignIn();
-    const choice = applyProviderChoice({ provider, name, endpoint }, next, labelOf);
-    setProvider(choice.provider);
-    setName(choice.name);
-    setEndpoint(choice.endpoint);
+    setProvider(next.provider);
+    setName(next.name);
+    setEndpoint(next.endpoint);
+    setSignInMode(viaSignIn);
     setApiKey('');
     setUseNoKey(false);
     setChooseModels(false);
     setSelectedModels([]);
-    setPickingProvider(false);
     setCustomModels([]);
+    setCompatibleApi('openai-completions');
     setDiscovery({ phase: 'idle' });
   };
+  const applyPreset = (preset: CompatibleConnectionPreset) => {
+    setCompatibleApi(preset.api);
+    setEndpoint(preset.baseUrl);
+    setApiKey('');
+    setUseNoKey(preset.id === 'ollama');
+    setCustomModels(presetToCustomModels(preset));
+    setDiscovery({ phase: 'idle' });
+  };
+  const chooseProvider = (choice: ProviderChoice) =>
+    resetDraft(
+      applyProviderChoice({ provider, name, endpoint }, choice.preset, labelOf),
+      choice.signIn
+    );
+  const signInOnly =
+    !stored && signInMode && oauthProvider !== undefined && onOpenAiAuth !== undefined;
   const startChoosing = () => {
     // Listed IDs only inform the checklist (not-listed tags). Never pre-select
     // from the key-check listing: a membership key that reports one model (Kimi
@@ -469,6 +568,7 @@ export function ModelConnectionForm({
     baseUrl: endpoint,
     enabled,
     apiKey: typedKey || (keylessInput ? '' : undefined),
+    ...(provider === 'openai-compatible' ? { compatibleApi } : {}),
     ...(provider === 'openai-compatible' && customModels.length > 0
       ? {
           customModels: customModels.map((model) => {
@@ -492,41 +592,76 @@ export function ModelConnectionForm({
     setApiKey('');
     await onSave(input, check);
   };
+  const planLabel = SIGN_IN_PROVIDERS.find((entry) => entry.preset === provider)?.label;
+  const endpointField = showEndpointField ? (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor={`${id}-endpoint`}>{t('settings.models.endpoint')}</Label>
+        {defaultEndpoint ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            disabled={busy}
+            onClick={() => {
+              setEndpoint(defaultEndpoint);
+              setApiKey('');
+              setCustomEndpointOpen(false);
+            }}
+          >
+            {t('settings.models.useDefaultEndpoint')}
+          </Button>
+        ) : null}
+      </div>
+      <Input
+        id={`${id}-endpoint`}
+        value={endpoint}
+        disabled={busy}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder={provider === 'openai-compatible' ? 'https://…/v1' : undefined}
+        onChange={(event) => {
+          setEndpoint(event.target.value);
+          setApiKey('');
+        }}
+      />
+    </div>
+  ) : null;
   return (
     <form className="space-y-5 p-5" onSubmit={(event) => void submit(event)}>
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <Label>
-            {pickingProvider ? t('settings.models.chooseProvider') : t('settings.models.provider')}
-          </Label>
-          {!pickingProvider ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              disabled={busy}
-              onClick={() => setPickingProvider(true)}
-            >
-              {t('settings.models.changeProvider')}
-            </Button>
-          ) : null}
+      {provider === '' ? (
+        <div className="space-y-3">
+          <Label>{t('settings.models.chooseProvider')}</Label>
+          <ProviderPicker
+            signIn={onOpenAiAuth !== undefined}
+            disabled={busy}
+            onChange={chooseProvider}
+          />
         </div>
-        {pickingProvider ? (
-          <ProviderPicker value={provider} disabled={busy} onChange={chooseProvider} />
-        ) : provider !== '' ? (
-          <div className="flex items-center gap-2.5">
+      ) : (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
             <ProviderMark preset={provider} />
-            <span className="text-sm text-foreground">{labelOf(provider)}</span>
+            <span className="truncate text-sm text-foreground">
+              {signInOnly && planLabel ? t(planLabel) : labelOf(provider)}
+            </span>
           </div>
-        ) : null}
-        {provider === 'kimi-coding' && (
-          <p className="text-xs text-muted-foreground">{t('settings.models.kimiCodeHint')}</p>
-        )}
-      </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            disabled={busy}
+            onClick={() => resetDraft({ provider: '', name: '', endpoint: '' }, false)}
+          >
+            {t('settings.models.allProviders')}
+          </Button>
+        </div>
+      )}
       {provider !== '' ? (
         <>
-          {oauthProvider && onOpenAiAuth ? (
+          {oauthProvider && onOpenAiAuth && (stored || signInOnly) ? (
             <div className="space-y-2">
               {authFlow.phase === 'waiting' ? (
                 <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2.5">
@@ -599,7 +734,7 @@ export function ModelConnectionForm({
                           if (!onOpenAiAuth || !stored) return;
                           void onOpenAiAuth
                             .signOut({ id: stored.id, expectedRevision: stored.revision })
-                            .then(() => onCancel())
+                            .then(() => onCancel?.())
                             .catch(() => setAuthFlow({ phase: 'failed', reason: 'unreachable' }));
                         }}
                       >
@@ -614,10 +749,10 @@ export function ModelConnectionForm({
                   ) : null}
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
-                    variant="outline"
+                    variant={signInOnly ? 'default' : 'outline'}
                     size="sm"
                     disabled={busy}
                     onClick={() => void beginSignIn()}
@@ -626,11 +761,21 @@ export function ModelConnectionForm({
                       provider: oauthProvider === 'kimi-coding' ? 'Kimi Code' : 'ChatGPT',
                     })}
                   </Button>
-                  <p className="text-xs text-muted-foreground">
-                    {oauthProvider === 'kimi-coding'
-                      ? t('settings.models.oauth.hintKimi')
-                      : t('settings.models.oauth.hint')}
-                  </p>
+                  {signInOnly ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-muted-foreground"
+                      disabled={busy}
+                      onClick={() => {
+                        cancelSignIn();
+                        setSignInMode(false);
+                      }}
+                    >
+                      {t('settings.models.useKeyInstead')}
+                    </Button>
+                  ) : null}
                 </div>
               )}
               {authFlow.phase === 'failed' ? (
@@ -638,15 +783,33 @@ export function ModelConnectionForm({
                   {t(`settings.models.oauth.failed.${authFlow.reason}`)}
                 </p>
               ) : null}
-              <p className="text-xs text-muted-foreground">{t('settings.models.oauth.orKey')}</p>
             </div>
           ) : null}
-          {!(oauthProvider && onOpenAiAuth && isOAuthConnection) ? (
+          {provider === 'openai-compatible' ? (
+            <>
+              <CompatibleConnectionSetup
+                compatibleApi={compatibleApi}
+                busy={busy}
+                onApiChange={(api) => {
+                  setCompatibleApi(api);
+                  setDiscovery({ phase: 'idle' });
+                }}
+                onApplyPreset={applyPreset}
+              />
+              {endpointField}
+            </>
+          ) : null}
+          {!(oauthProvider && onOpenAiAuth && isOAuthConnection) && !signInOnly ? (
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor={`${id}-key`}>{t('settings.models.apiKey')}</Label>
-                <InfoTip>{t('settings.models.keyHelp')}</InfoTip>
-              </div>
+              <Label htmlFor={`${id}-key`}>
+                {t('settings.models.apiKey')}
+                {keylessInput ? (
+                  <span className="font-normal text-muted-foreground">
+                    {' · '}
+                    {t('settings.models.optional')}
+                  </span>
+                ) : null}
+              </Label>
               <Input
                 id={`${id}-key`}
                 type="password"
@@ -654,11 +817,13 @@ export function ModelConnectionForm({
                 disabled={busy || useNoKey}
                 autoComplete="off"
                 spellCheck={false}
-                placeholder={requiresKey || useNoKey ? undefined : t('settings.models.keyStoredPlaceholder')}
+                placeholder={
+                  requiresKey || useNoKey ? undefined : t('settings.models.keyStoredPlaceholder')
+                }
                 onChange={(event) => setApiKey(event.target.value)}
-                aria-describedby={requiresKey ? `${id}-key-hint` : undefined}
               />
-              <ConnectionCheckLine state={check} baseUrl={endpoint} onRecheck={recheck} />
+              <p className="text-xs text-muted-foreground">{t('settings.models.keyLocalHint')}</p>
+              <ConnectionCheckError state={check} baseUrl={endpoint} />
               {provider === 'openai-compatible' && stored ? (
                 <label className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Switch
@@ -672,144 +837,14 @@ export function ModelConnectionForm({
                   {t('settings.models.useNoKey')}
                 </label>
               ) : null}
-              {requiresKey || keylessInput ? (
-                <p id={`${id}-key-hint`} className="text-xs text-muted-foreground">
-                  {t(keylessInput ? 'settings.models.keyOptional' : 'settings.models.keyRequired')}
-                </p>
-              ) : null}
             </div>
           ) : null}
-          {showEndpointField ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor={`${id}-endpoint`}>{t('settings.models.endpoint')}</Label>
-                {defaultEndpoint ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    disabled={busy}
-                    onClick={() => {
-                      setEndpoint(defaultEndpoint);
-                      setApiKey('');
-                      setCustomEndpointOpen(false);
-                    }}
-                  >
-                    {t('settings.models.useDefaultEndpoint')}
-                  </Button>
-                ) : null}
-              </div>
-              <Input
-                id={`${id}-endpoint`}
-                value={endpoint}
-                disabled={busy}
-                autoComplete="off"
-                spellCheck={false}
-                onChange={(event) => {
-                  setEndpoint(event.target.value);
-                  setApiKey('');
-                }}
-              />
-            </div>
-          ) : defaultEndpoint ? (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="min-w-0 break-all text-xs text-muted-foreground">
-                {t('settings.models.endpointDefault', { url: defaultEndpoint })}
-              </p>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                disabled={busy}
-                onClick={() => setCustomEndpointOpen(true)}
-              >
-                {t('settings.models.useCustomEndpoint')}
-              </Button>
-            </div>
-          ) : null}
+          {provider !== 'openai-compatible' && !signInOnly ? endpointField : null}
           {configurationIssue && (
             <p role="alert" className="text-xs text-destructive">
               {t(issueKeys[configurationIssue])}
             </p>
           )}
-          {native && (providerModels || stored?.models) ? (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label>{t('settings.models.picker.title')}</Label>
-                {providerModels ? (
-                  <SegmentedControl
-                    ariaLabel={t('settings.models.picker.title')}
-                    size="sm"
-                    value={chooseModels ? 'choose' : 'all'}
-                    disabled={busy}
-                    options={[
-                      {
-                        value: 'all',
-                        label: t('settings.models.picker.all', {
-                          count: providerModels.length,
-                        }),
-                      },
-                      { value: 'choose', label: t('settings.models.picker.choose') },
-                    ]}
-                    onChange={(value) =>
-                      value === 'all' ? setChooseModels(false) : startChoosing()
-                    }
-                  />
-                ) : null}
-              </div>
-              {providerModels && chooseModels ? (
-                <ModelChecklist
-                  models={providerModels}
-                  selected={selectedModels}
-                  listed={listed}
-                  disabled={busy}
-                  onChange={setSelectedModels}
-                />
-              ) : null}
-              <p className="text-xs text-muted-foreground">
-                {!providerModels
-                  ? t('settings.models.picker.unavailable')
-                  : chooseModels && models?.length === 0
-                    ? t('settings.models.picker.chooseOne')
-                    : t('settings.models.picker.hint')}
-              </p>
-            </div>
-          ) : null}
-          <Collapsible>
-            <CollapsibleTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                className="group gap-1.5 px-0 text-xs text-muted-foreground"
-              >
-                <ChevronDown
-                  aria-hidden
-                  className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
-                />
-                {t('settings.models.moreOptions')}
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-5 pt-3">
-              <div className="space-y-2">
-                <Label htmlFor={`${id}-name`}>{t('settings.models.name')}</Label>
-                <Input
-                  id={`${id}-name`}
-                  value={name}
-                  disabled={busy}
-                  maxLength={120}
-                  onChange={(event) => setName(event.target.value)}
-                  aria-describedby={`${id}-name-hint`}
-                />
-                <p id={`${id}-name-hint`} className="text-xs text-muted-foreground">
-                  {t('settings.models.nameHint')}
-                </p>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
           {provider === 'openai-compatible' && (
             <>
               <CompatibleModelFields
@@ -829,6 +864,99 @@ export function ModelConnectionForm({
               )}
             </>
           )}
+          {!signInOnly ? (
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  className="group gap-1.5 px-0 text-xs text-muted-foreground"
+                >
+                  <ChevronDown
+                    aria-hidden
+                    className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
+                  />
+                  {t('settings.models.moreOptions')}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-5 pt-3">
+                {!showEndpointField && defaultEndpoint ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="min-w-0 break-all text-xs text-muted-foreground">
+                      {t('settings.models.endpointDefault', { url: defaultEndpoint })}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      disabled={busy}
+                      onClick={() => setCustomEndpointOpen(true)}
+                    >
+                      {t('settings.models.useCustomEndpoint')}
+                    </Button>
+                  </div>
+                ) : null}
+                {native && (providerModels || stored?.models) ? (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Label>{t('settings.models.picker.title')}</Label>
+                      {providerModels ? (
+                        <SegmentedControl
+                          ariaLabel={t('settings.models.picker.title')}
+                          size="sm"
+                          value={chooseModels ? 'choose' : 'all'}
+                          disabled={busy}
+                          options={[
+                            {
+                              value: 'all',
+                              label: t('settings.models.picker.all', {
+                                count: providerModels.length,
+                              }),
+                            },
+                            { value: 'choose', label: t('settings.models.picker.choose') },
+                          ]}
+                          onChange={(value) =>
+                            value === 'all' ? setChooseModels(false) : startChoosing()
+                          }
+                        />
+                      ) : null}
+                    </div>
+                    {providerModels && chooseModels ? (
+                      <ModelChecklist
+                        models={providerModels}
+                        selected={selectedModels}
+                        listed={listed}
+                        disabled={busy}
+                        onChange={setSelectedModels}
+                      />
+                    ) : null}
+                    {!providerModels ? (
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.models.picker.unavailable')}
+                      </p>
+                    ) : chooseModels && models?.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.models.picker.chooseOne')}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="space-y-2">
+                  <Label htmlFor={`${id}-name`}>{t('settings.models.name')}</Label>
+                  <Input
+                    id={`${id}-name`}
+                    value={name}
+                    disabled={busy}
+                    maxLength={120}
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          ) : null}
         </>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
@@ -845,12 +973,16 @@ export function ModelConnectionForm({
           </Button>
         ) : null}
         <div className="ml-auto flex gap-2">
-          <Button variant="outline" type="button" disabled={busy} onClick={cancelForm}>
-            {t('common.cancel')}
-          </Button>
-          <Button type="submit" disabled={busy || !parsed.success || missingRequiredKey}>
-            {t('common.save')}
-          </Button>
+          {onCancel ? (
+            <Button variant="outline" type="button" disabled={busy} onClick={cancelForm}>
+              {t('common.cancel')}
+            </Button>
+          ) : null}
+          {!signInOnly ? (
+            <Button type="submit" disabled={busy || !parsed.success || missingRequiredKey}>
+              {stored ? t('common.save') : t('settings.models.connect')}
+            </Button>
+          ) : null}
         </div>
       </div>
     </form>
@@ -863,8 +995,14 @@ const isNew = (editing: Editing): editing is { kind: 'new'; provider?: ProviderP
 
 export function ModelConnectionSetting({
   onConnectionsChange,
+  variant = 'section',
+  onDone,
 }: {
   onConnectionsChange?: (connections: readonly ModelConnection[]) => void;
+  /** `panel` drops the Settings card chrome so onboarding can show the same body. */
+  variant?: 'section' | 'panel';
+  /** Called after a connection is saved or signed in, or when a first connection is cancelled. */
+  onDone?: () => void;
 } = {}) {
   const { t } = useTranslation();
   const [connections, setConnections] = useState<ModelConnection[]>([]);
@@ -880,6 +1018,8 @@ export function ModelConnectionSetting({
   >({});
   const ipc = useMemo(() => getIpcServices(), []);
   const available = ipc !== null;
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
   useEffect(() => {
     if (ready) onConnectionsChange?.(connections);
   }, [connections, onConnectionsChange, ready]);
@@ -941,6 +1081,7 @@ export function ModelConnectionSetting({
           // The flow saved the connection in main; refresh the list so it appears now.
           const snapshot = await ipc.modelConnections.getSnapshot();
           setConnections(ModelConnectionSchema.array().parse(snapshot.connections));
+          onDoneRef.current?.();
         }
         return result;
       },
@@ -963,6 +1104,9 @@ export function ModelConnectionSetting({
     void onCheck({
       providerPresetId: connection.providerPresetId,
       baseUrl: connection.baseUrl,
+      ...(connection.providerPresetId === 'openai-compatible'
+        ? { compatibleApi: connection.compatibleApi }
+        : {}),
       stored: { id: connection.id, revision: connection.revision },
     }).then(
       (result) => recordCheck(connection, { phase: 'done', result }),
@@ -993,6 +1137,7 @@ export function ModelConnectionSetting({
     if (!saved) return;
     if (check?.phase === 'done') recordCheck(saved, check);
     setEditing(null);
+    onDone?.();
   };
   const remove = async (connection: ModelConnection) => {
     if (!ipc || busy) return;
@@ -1017,12 +1162,8 @@ export function ModelConnectionSetting({
     const entry = checks[connection.id];
     return entry && entry.revision === connection.revision ? entry.state : undefined;
   };
-  return (
-    <CompactSection
-      title={t('settings.models.title')}
-      description={t('settings.models.notVerified')}
-      info={t('settings.models.notVerifiedDetail')}
-    >
+  const body = (
+    <>
       {!available ? (
         <p className="p-5 text-xs text-muted-foreground">{t('settings.models.unavailable')}</p>
       ) : (
@@ -1097,35 +1238,17 @@ export function ModelConnectionSetting({
               />
             </div>
           ) : ready && connections.length === 0 ? (
-            <div className="space-y-4 px-5 pb-5 pt-1">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">{t('settings.models.emptyTitle')}</p>
-                <p className="text-xs text-muted-foreground">{t('settings.models.empty')}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {QUICK_PROVIDERS.map((preset) => (
-                  <Button
-                    key={preset}
-                    variant="outline"
-                    size="sm"
-                    className="gap-2"
-                    disabled={busy}
-                    onClick={() => setEditing({ kind: 'new', provider: preset })}
-                  >
-                    <ProviderMark preset={preset} size="sm" />
-                    {t(providerLabelKeys[preset])}
-                  </Button>
-                ))}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => setEditing({ kind: 'new' })}
-                >
-                  {t('settings.models.moreProviders')}
-                </Button>
-              </div>
-            </div>
+            <ModelConnectionForm
+              key="first"
+              catalog={catalog}
+              metadataSnapshot={metadataSnapshot}
+              busy={busy}
+              onSave={save}
+              onCancel={variant === 'panel' ? onDone : undefined}
+              onCheck={onCheck}
+              onDiscover={onDiscover}
+              onOpenAiAuth={onOpenAiAuth}
+            />
           ) : (
             <div className="border-t border-border/40 px-5 py-3">
               <Button
@@ -1142,6 +1265,16 @@ export function ModelConnectionSetting({
           )}
         </>
       )}
+    </>
+  );
+  if (variant === 'panel') return <div className="-m-5">{body}</div>;
+  return (
+    <CompactSection
+      title={t('settings.models.title')}
+      description={t('settings.models.notVerified')}
+      info={t('settings.models.notVerifiedDetail')}
+    >
+      {body}
     </CompactSection>
   );
 }
@@ -1156,6 +1289,9 @@ const toggledConnection = (connection: ModelConnection) =>
     enabled: !connection.enabled,
     ...(connection.customModels ? { customModels: connection.customModels } : {}),
     ...(connection.models ? { models: connection.models } : {}),
+    ...(connection.providerPresetId === 'openai-compatible'
+      ? { compatibleApi: connection.compatibleApi }
+      : {}),
   });
 
 export function ModelConnectionRow({

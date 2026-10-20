@@ -6,6 +6,8 @@ import {
   ModelThinkingLevelSchema,
   getModelConnectionConfigurationIssue,
   isProviderPresetDefaultEndpoint,
+  normalizeCompatibleConnectionApi,
+  type CompatibleConnectionApi,
   type ModelConnection,
   type ModelSelection,
 } from '@molly/shared/embedded-harness';
@@ -30,10 +32,13 @@ export function configureModelConnection(
     throw new Error('harness_thinking_level_unsupported');
   let providerId = MOLLY_PROVIDER_IDS[connection.providerPresetId];
   if (compatible) {
+    const wireApi: CompatibleConnectionApi = normalizeCompatibleConnectionApi(
+      connection.compatibleApi
+    );
     runtime.registerProvider(providerId, {
       baseUrl: connection.baseUrl,
-      api: 'openai-completions',
-      authHeader: false,
+      api: wireApi,
+      authHeader: wireApi !== 'anthropic-messages',
       models: (connection.customModels ?? []).map((model) => ({
         id: model.modelId,
         name: model.name,
@@ -49,8 +54,12 @@ export function configureModelConnection(
         ),
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         compat: {
-          thinkingFormat: 'openai',
-          supportsReasoningEffort: model.thinking.some((level) => level !== 'off'),
+          ...(wireApi === 'anthropic-messages'
+            ? { supportsReasoningEffort: false }
+            : {
+                thinkingFormat: 'openai' as const,
+                supportsReasoningEffort: model.thinking.some((level) => level !== 'off'),
+              }),
           supportsStore: false,
           supportsDeveloperRole: false,
           supportsUsageInStreaming: model.usageInStreaming ?? false,
@@ -68,11 +77,12 @@ export function configureModelConnection(
           name: 'Connection credential',
           async resolve({ credential }) {
             if (credential?.key === undefined) return undefined;
-            return {
-              auth: credential.key
-                ? { apiKey: credential.key }
-                : { apiKey: 'unused', headers: { Authorization: null } },
-            };
+            if (credential.key) return { auth: { apiKey: credential.key } };
+            const headers: Record<string, string | null> =
+              wireApi === 'anthropic-messages'
+                ? { 'x-api-key': null, Authorization: null }
+                : { Authorization: null };
+            return { auth: { apiKey: 'unused', headers } };
           },
         },
       },

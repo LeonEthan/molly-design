@@ -55,10 +55,6 @@ export class OnboardingPage {
   async skipConfigurationAndEnterProduct(): Promise<void> {
     await this.openAgentConfiguration();
     await this.page.getByRole('button', { name: /^(Skip for now|稍后再说)$/u }).click();
-    await expect(
-      this.page.getByRole('heading', { name: /^(Explore Molly|探索 Molly)$/u })
-    ).toBeVisible();
-    await this.page.getByRole('button', { name: /^(Enter Molly|进入 Molly)$/u }).click();
     await expect(this.page.locator('#chat-prompt')).toBeVisible({ timeout: 60_000 });
     await expect(this.page).toHaveURL(/#\/local\/chat(?:\?.*)?$/u);
   }
@@ -66,7 +62,7 @@ export class OnboardingPage {
   async openAgentConfiguration(): Promise<void> {
     await this.page.getByRole('button', { name: /^(Skip|跳过|Start setup|开始设置)$/u }).click();
     await expect(
-      this.page.getByRole('heading', { name: /^(Connect a model|连接模型)$/u })
+      this.page.getByRole('heading', { name: /^(Connect your models|连接你的模型)$/u })
     ).toBeVisible();
   }
 }

@@ -966,7 +966,8 @@ describe('connection management', () => {
       expect(form?.className).toContain('flex-1');
       expect(form?.className).toContain('flex-col');
       const slot = form?.parentElement;
-      expect(slot?.className).toContain('min-h-0');
+      expect(slot?.className).toContain('min-h-48');
+      expect(slot?.className).not.toContain('min-h-0');
       expect(slot?.className).toContain('grow');
       expect(slot?.className).toContain('shrink-0');
       expect(slot?.className).toContain('basis-0');
@@ -979,6 +980,12 @@ describe('connection management', () => {
     assertPinned(en['common.save'], 4);
     await act(async () => button(en['common.cancel']).click());
     await act(async () => button(en['settings.models.add']).click());
+    const addList = host.querySelector('[data-connection-list]');
+    const addListClasses = addList?.className.split(/\s+/) ?? [];
+    expect(addListClasses).toContain('max-h-16');
+    expect(addListClasses).toContain('shrink-0');
+    expect(addListClasses).not.toContain('flex-1');
+    expect(addListClasses).not.toContain('grow');
     await act(async () => button(en['settings.models.compatible']).click());
     await act(async () => button(en['settings.models.addCustomModel']).click());
     await act(async () => button(en['settings.models.addCustomModel']).click());
@@ -1035,6 +1042,8 @@ describe('connection management', () => {
     expect(footer?.textContent).toContain(en['settings.models.delete']);
     expect(lists.some((list) => list.contains(footer))).toBe(false);
     const slot = footer?.closest('form')?.parentElement;
+    expect(slot?.className).toContain('min-h-48');
+    expect(slot?.className).not.toContain('min-h-0');
     expect(slot?.className).toContain('shrink-0');
     expect(slot?.className).toContain('basis-0');
     expect(slot?.className).toContain('grow');
@@ -1052,6 +1061,8 @@ describe('connection management', () => {
     expect(list?.textContent).toBe('');
     const classes = list?.className.split(/\s+/) ?? [];
     expect(classes).toContain('min-h-0');
+    expect(classes).toContain('max-h-full');
+    expect(classes).toContain('shrink');
     expect(classes).toContain('overflow-y-auto');
     expect(classes).not.toContain('flex-1');
     expect(classes).not.toContain('grow');
@@ -1094,9 +1105,12 @@ describe('connection management', () => {
     expect(list?.textContent).toContain('Second');
     const classes = list?.className.split(/\s+/) ?? [];
     expect(classes).toContain('min-h-0');
+    expect(classes).toContain('max-h-full');
+    expect(classes).toContain('shrink');
     expect(classes).toContain('overflow-y-auto');
     expect(classes).not.toContain('flex-1');
     expect(classes).not.toContain('grow');
+    expect(host.querySelector('[data-drawer-footer]')).toBeNull();
   });
 
   it('deletes a connection only after confirmation and removes its row', async () => {

@@ -126,23 +126,22 @@ export function createSelectionToolbar(options: {
   const signal = controller.signal;
   const style = document.createElement('style');
   style.textContent = `
-.molly-selection-toolbar,.molly-selection-popup,.molly-selection-tooltip{--surface:#fff;--ink:#242424;--muted:#f2f2f2;--line:#00000010;position:fixed;z-index:2147483100;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 6px 20px rgb(0 0 0 / .12);border-radius:16px;font:12px Inter,system-ui,sans-serif;box-sizing:border-box;color-scheme:light}
-[data-molly-toolbar][data-dark=true]{--surface:#262626;--ink:#ededed;--muted:#373737;--line:#ffffff14;color-scheme:dark}
+.molly-selection-toolbar,.molly-selection-popup,.molly-selection-tooltip{position:fixed;z-index:2147483100;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 6px 20px rgb(0 0 0 / .12);border-radius:16px;font:12px Inter,system-ui,sans-serif;box-sizing:border-box}
 .molly-selection-toolbar{display:flex;align-items:center;gap:3px;padding:6px;max-width:calc(100vw - 16px);overflow-x:auto;scrollbar-width:thin}
 [data-molly-toolbar][hidden]{display:none!important}
 [data-molly-toolbar] button,[data-molly-toolbar] input,[data-molly-toolbar] textarea{font:inherit;color:inherit;box-sizing:border-box}
 [data-molly-toolbar] button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:8px;background:transparent;min-width:32px;height:32px;padding:0 8px;white-space:nowrap;cursor:pointer;flex:none}
-[data-molly-toolbar] button:hover,[data-molly-toolbar] button[aria-pressed=true],[data-molly-toolbar] button[aria-expanded=true]{background:var(--muted)}
+[data-molly-toolbar] button:hover,[data-molly-toolbar] button[aria-pressed=true],[data-molly-toolbar] button[aria-expanded=true]{background:var(--chrome-2)}
 [data-molly-toolbar] button:disabled,[data-molly-toolbar] input:disabled{opacity:.4;cursor:default}
-[data-molly-toolbar] :focus-visible{outline:2px solid #6195ed;outline-offset:-2px}
+[data-molly-toolbar] :focus-visible{outline:2px solid var(--ink);outline-offset:-2px}
 [data-molly-toolbar] svg{height:18px;width:18px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 [data-molly-toolbar] svg.caret{height:12px;width:12px;flex:none}
-[data-molly-toolbar] input{height:28px;min-width:0;width:51px;border:0;border-radius:8px;background:var(--muted);padding:0 5px;text-align:center}
+[data-molly-toolbar] input{height:28px;min-width:0;width:51px;border:0;border-radius:8px;background:var(--chrome-2);padding:0 5px;text-align:center}
 [data-molly-toolbar] input[type=number]{appearance:textfield;-moz-appearance:textfield}
 [data-molly-toolbar] input::-webkit-inner-spin-button{appearance:none}
 [data-molly-toolbar] .field{display:flex;align-items:center;gap:4px;padding:0 2px;flex:none}
 [data-molly-toolbar] .field>span{font-size:11px;opacity:.65}
-[data-molly-toolbar] .count{display:flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 6px;border-radius:999px;background:var(--muted);font-weight:500;flex:none;margin:0 3px}
+[data-molly-toolbar] .count{display:flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 6px;border-radius:999px;background:var(--chrome-2);font-weight:500;flex:none;margin:0 3px}
 [data-molly-toolbar] .sep{height:18px;width:1px;background:var(--line);margin:0 5px;flex:none}
 [data-molly-toolbar] .swatch{width:17px;height:17px;border:1px solid #8886;border-radius:50%;display:block}
 .molly-selection-popup{z-index:2147483101;padding:8px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;min-width:150px}
@@ -155,10 +154,10 @@ export function createSelectionToolbar(options: {
 .molly-selection-popup .crop-fields input{width:88px}
 .molly-selection-popup input[type=color]{padding:2px;width:45px;vertical-align:middle}
 .molly-selection-tooltip{z-index:2147483102;border-radius:10px;padding:7px 10px;pointer-events:none;max-width:calc(100vw - 16px)}
-.molly-selection-size{position:fixed;z-index:2147483099;box-sizing:border-box;pointer-events:none;user-select:none;white-space:nowrap;border-radius:5px;padding:2px 6px;background:#566b86;color:#fff;font:500 11px/16px Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.molly-selection-size{position:fixed;z-index:2147483099;box-sizing:border-box;pointer-events:none;user-select:none;white-space:nowrap;border-radius:5px;padding:2px 6px;background:var(--ink);color:var(--surface);font:500 11px/16px Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums}
 .molly-selection-popup.ask{width:300px}
-.molly-selection-popup textarea{display:block;width:100%;box-sizing:border-box;resize:none;border:0;border-radius:10px;background:var(--muted);color:inherit;font:13px/1.45 Inter,system-ui,sans-serif;padding:8px 10px;outline:none}
-.molly-selection-popup textarea:focus-visible{outline:2px solid #6195ed;outline-offset:-2px}
+.molly-selection-popup textarea{display:block;width:100%;box-sizing:border-box;resize:none;border:0;border-radius:10px;background:var(--chrome-2);color:inherit;font:13px/1.45 Inter,system-ui,sans-serif;padding:8px 10px;outline:none}
+.molly-selection-popup textarea:focus-visible{outline:2px solid var(--ink);outline-offset:-2px}
 .molly-selection-popup .ask-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:8px}
 .molly-selection-popup .presets{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
 .molly-selection-popup .presets button{height:26px;min-width:0;padding:0 9px;border-radius:999px;border:1px solid var(--line);font-size:11.5px}
@@ -379,7 +378,6 @@ export function createSelectionToolbar(options: {
     popup = document.createElement('div');
     popup.className = 'molly-selection-popup';
     popup.dataset.mollyToolbar = '';
-    popup.dataset.dark = String(presentation?.dark ?? false);
     popup.setAttribute('role', 'dialog');
     popup.setAttribute('aria-label', name);
     fill(popup);
@@ -568,7 +566,6 @@ export function createSelectionToolbar(options: {
     renderPending = false;
     closePopup();
     bar.replaceChildren();
-    bar.dataset.dark = tooltip.dataset.dark = String(presentation?.dark ?? false);
     bar.setAttribute(
       'aria-label',
       label('selectedElements', 'Selected elements ({{count}})').replace(
@@ -1014,10 +1011,6 @@ export function createSelectionToolbar(options: {
     },
     present(value: DesignToolbarPresentation) {
       presentation = value;
-      // Theme changes must apply even while a field or popup retains focus.
-      bar.dataset.dark = tooltip.dataset.dark = String(value.dark);
-      if (popup) popup.dataset.dark = String(value.dark);
-      document.documentElement.style.colorScheme = value.dark ? 'dark' : 'light';
       render();
     },
     refresh: schedule,

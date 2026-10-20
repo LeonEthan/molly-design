@@ -360,7 +360,6 @@ export function createImageMarks(options: {
   };
   function render() {
     panel.replaceChildren();
-    panel.dataset.dark = String(presentation?.dark ?? false);
     const open = !!target && !readonly && !!presentation;
     panel.hidden = capture.hidden = !open;
     if (!open) {

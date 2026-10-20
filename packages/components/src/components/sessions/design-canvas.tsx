@@ -392,13 +392,40 @@ export function DesignCanvas({
   const runningTurnId = active ? canvasState?.turnId : undefined;
   const runningTurnIndexed =
     !!runningTurnId && designHistory.some((entry) => entry.id === runningTurnId);
+  // Badges for a run started from notes: one numbered group per note, derived from
+  // the references sent into the turn; bound to the turn once it starts running.
+  const notesRun = useRef<{
+    turnId?: string;
+    groups: { badge: number; elementIds: string[] }[];
+  } | null>(null);
   useEffect(() => {
     if (!runningTurnId) return undefined;
     let cancelled = false;
     setOutsideChanges(null);
     pendingSettledHighlight.current = null;
     void readDesignTurnElementIds(turnElements.current.view, runningTurnId).then((elementIds) => {
-      if (!cancelled && elementIds.length) highlight([{ tone: 'working', elementIds }]);
+      if (cancelled || !elementIds.length) return;
+      const run = notesRun.current;
+      if (run) {
+        const covered = new Set(run.groups.flatMap((group) => group.elementIds));
+        const matches =
+          (!run.turnId || run.turnId === runningTurnId) &&
+          covered.size === elementIds.length &&
+          elementIds.every((id) => covered.has(id));
+        if (matches) {
+          run.turnId = runningTurnId;
+          highlight(
+            run.groups.map((group) => ({
+              tone: 'working' as const,
+              elementIds: group.elementIds,
+              badge: group.badge,
+            }))
+          );
+          return;
+        }
+        notesRun.current = null;
+      }
+      highlight([{ tone: 'working', elementIds }]);
     });
     return () => {
       cancelled = true;
@@ -533,9 +560,23 @@ export function DesignCanvas({
         const referenced = await readDesignTurnElementIds(view, committedTurnId);
         if (cancelled) return;
         const { inside, outside, removedOutside } = splitDesignChanges(changes, referenced);
+        const run = notesRun.current;
+        notesRun.current = null;
+        const covered = new Set(run?.groups.flatMap((group) => group.elementIds) ?? []);
+        const badges =
+          run?.turnId === committedTurnId &&
+          covered.size === referenced.length &&
+          referenced.every((id) => covered.has(id))
+            ? run.groups.map((group) => ({
+                tone: 'changed' as const,
+                elementIds: group.elementIds,
+                badge: group.badge,
+              }))
+            : [];
         await settle([
           { tone: 'changed', elementIds: inside },
           { tone: 'outside', elementIds: outside },
+          ...badges,
         ]);
         if (cancelled) return;
         setOutsideChanges(
@@ -726,6 +767,13 @@ export function DesignCanvas({
             t('design.selectionChanged', 'Artwork view changed; select the current elements again')
           );
         sent = await onSendNotes(notes);
+        if (sent)
+          notesRun.current = {
+            groups: notes.map((note, index) => ({
+              badge: index + 1,
+              elementIds: [...note.reference.elementIds],
+            })),
+          };
         if (!sent)
           throw Error(
             t('design.notesNotSent', 'Molly can’t take a new message yet; your notes are kept')

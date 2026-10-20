@@ -20,7 +20,9 @@ host-bound toolbar endpoint and selection epoch. Keep readonly, hidden-view and
 stale-selection checks on the receiving path. Element outlines
 (`window.molly.highlight`) are transient screen feedback keyed by element id:
 they never mutate the document or intercept input, main validates them, and
-only `working` outlines carry over to new preview frames. Note pins are
+only `working` outlines carry over to new preview frames. A group may carry a
+notes-run badge number (`working` shows the number, `changed` a check); the pin
+hover preview uses an in-page-only `hover` tone that never crosses IPC. Note pins are
 screen-only state keyed by element id; requests carry only their epoch.
 Image marks are screen-only, in image-normalized coordinates mapped through the
 rendered image; requests carry only their epoch, and main reads the marked copy. Test visual changes with real

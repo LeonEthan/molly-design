@@ -307,10 +307,13 @@ export const DesignHighlightSchema = z
       .object({
         tone: z.enum(DESIGN_HIGHLIGHT_TONES),
         elementIds: z.array(z.string().min(1).max(200)).max(1000),
+        // A notes run numbers its targets: the canvas shows a non-interactive
+        // badge with this number on a working group and a check on a changed group.
+        badge: z.number().int().min(1).max(DESIGN_NOTES_MAX).optional(),
       })
       .strict()
   )
-  .max(DESIGN_HIGHLIGHT_TONES.length);
+  .max(DESIGN_NOTES_MAX + DESIGN_HIGHLIGHT_TONES.length);
 export type DesignHighlight = z.infer<typeof DesignHighlightSchema>;
 
 /** Decodes a marked copy for the referenced image; rejects other targets and non-image bytes. */

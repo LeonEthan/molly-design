@@ -62,16 +62,24 @@ type ImageConnectionView = Pick<
   'enabled' | 'protocol' | 'baseUrl' | 'model' | 'hasApiKey'
 >;
 
-const PROTOCOL_COPY: Record<ImageConnectionProtocol, { label: string; baseUrlHint: string }> = {
+const PROTOCOL_COPY: Record<
+  ImageConnectionProtocol,
+  { label: string; baseUrlHint: string; defaultBaseUrl: string }
+> = {
   'openai-images': {
     label: 'settings.imageConnection.protocols.openaiImages',
     baseUrlHint: 'settings.imageConnection.baseUrlHint',
+    defaultBaseUrl: 'https://api.openai.com/v1',
   },
   dashscope: {
     label: 'settings.imageConnection.protocols.dashscope',
     baseUrlHint: 'settings.imageConnection.baseUrlHintDashscope',
+    defaultBaseUrl: 'https://dashscope.aliyuncs.com/api/v1',
   },
 };
+
+const isProtocolDefaultBaseUrl = (protocol: ImageConnectionProtocol, baseUrl: string) =>
+  baseUrl.trim().replace(/\/+$/, '') === PROTOCOL_COPY[protocol].defaultBaseUrl;
 
 export const imageProtocolLabelKey = (connection: Pick<ImageConnectionView, 'protocol'>) =>
   PROTOCOL_COPY[imageConnectionProtocol(connection)].label;
@@ -309,7 +317,9 @@ export function ImageConnectionForm({
   const fieldId = useId();
   const [draft, setDraft] = useState(() => createImageConnectionFormDraft(stored));
   const [addressWhenKeyTyped, setAddressWhenKeyTyped] = useState<string | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(true);
+  const [advancedOpen, setAdvancedOpen] = useState(
+    () => !isProtocolDefaultBaseUrl(draft.protocol, draft.baseUrl)
+  );
 
   useEffect(() => {
     setAddressWhenKeyTyped(null);

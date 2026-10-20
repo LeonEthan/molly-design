@@ -334,8 +334,11 @@ describe('ImageConnectionForm', () => {
 
   const baseUrlInput = async (view: HTMLElement): Promise<HTMLInputElement> => {
     const existing = view.querySelector<HTMLInputElement>('input[id$="-base-url"]');
-    expect(existing).not.toBeNull();
-    return existing as HTMLInputElement;
+    if (existing) return existing;
+    await click(button(view, copy('settings.models.moreOptions')));
+    const opened = view.querySelector<HTMLInputElement>('input[id$="-base-url"]');
+    expect(opened).not.toBeNull();
+    return opened as HTMLInputElement;
   };
 
   it('keeps an unsaved draft on rerender and saves only a public CAS update', async () => {
@@ -725,6 +728,43 @@ describe('ImageConnectionForm', () => {
           model: 'gpt-image-2',
         }),
       ]);
+    });
+
+    it('collapses More options when a saved address is the provider root', async () => {
+      const moreOptions = (view: HTMLElement) => button(view, copy('settings.models.moreOptions'));
+      const mount = async (props: Partial<FormProps> = {}) => {
+        await act(async () => {
+          root?.unmount();
+        });
+        root = createRoot(container as HTMLDivElement);
+        return renderForm(props);
+      };
+      const saved = await mount({ stored: storedConnection() });
+      expect(moreOptions(saved).getAttribute('aria-expanded')).toBe('false');
+      expect(saved.querySelector('input[id$="-base-url"]')).toBeNull();
+      const slash = await mount({
+        stored: storedConnection({ baseUrl: 'https://api.openai.com/v1/' }),
+      });
+      expect(moreOptions(slash).getAttribute('aria-expanded')).toBe('false');
+      const dashscope = await mount({
+        stored: storedConnection({
+          protocol: 'dashscope',
+          baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+        }),
+      });
+      expect(moreOptions(dashscope).getAttribute('aria-expanded')).toBe('false');
+      const custom = await mount({
+        stored: storedConnection({ baseUrl: 'https://images.example.com/v1' }),
+      });
+      expect(moreOptions(custom).getAttribute('aria-expanded')).toBe('true');
+      expect(custom.querySelector<HTMLInputElement>('input[id$="-base-url"]')?.value).toBe(
+        'https://images.example.com/v1'
+      );
+      const fresh = await mount();
+      expect(moreOptions(fresh).getAttribute('aria-expanded')).toBe('true');
+      expect(fresh.querySelector<HTMLInputElement>('input[id$="-base-url"]')?.placeholder).toBe(
+        'https://api.example.com/v1'
+      );
     });
 
     it('shows an example placeholder and blocks an empty address before any check', async () => {

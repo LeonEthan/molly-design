@@ -180,6 +180,30 @@ per-model reasoning ladders and Codex model[effort] identities.
 
 ### Session titles
 
+Molly captures `titlePrompt` from the landing's user text before canvas-size instructions
+or Agent configuration are appended. The optional bounded field travels with the frozen
+first Turn input; older inputs without this provenance keep their existing draft name.
+Execution sends it only for the first durable user turn while its metadata source is
+`draft`. Image-plus-text briefs use their text; image bytes and attachment scaffolding
+stay out of naming input. No text means no naming request.
+
+The embedded host reuses its selected `ModelRuntime.completeSimple`, in-memory credential
+grant and ACP `session_info_update`. It starts one tool-free title request alongside main
+inference, with a 30-second bound and provider retries disabled. Run settlement drains
+that request before releasing the credential lease; Stop/retirement abort it. Measured
+completion usage is appended as native `session_title` usage and flushed through the
+existing projection. Naming or usage-publication failure never fails the design turn.
+The CLI marks this notification for draft-only publication, so a late model result cannot
+overwrite a manual rename or committed artwork name. Empty, incomplete, timed-out and
+copied-brief results leave the existing draft unchanged; there is no prompt fallback.
+
+Reuse: the existing title sanitizer/source guard and embedded direct-completion path.
+`generateTitleIsolated` cannot launch Molly because generic ACP startup is retired; its
+Molly branch now returns no title. The retained DSH adapter is not a public Molly runtime
+or credential owner. A new worker, provider client or naming tool would duplicate the
+selected-model and protected-credential infrastructure. Artwork commit naming remains
+owned by the design finalizer.
+
 Builtin Claude owns session title generation through ACP `session_info_update`. Builtin Codex
 still uses the isolated generator in `title-generator.ts`, but its adapter tags every pushed
 title with `_meta.lody.titleSource`. Other providers use `title-generator.ts` /

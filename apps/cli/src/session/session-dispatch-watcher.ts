@@ -23,6 +23,7 @@ import {
   type SessionTurnInputConfig,
   type WorkspaceId,
   normalizeMcpServerIdSelection,
+  normalizeSessionTurnInputConfig,
   getPendingUserTurnActivationId,
   hasPendingUserTurnActivation,
 } from '@molly/shared';
@@ -2042,6 +2043,7 @@ export class SessionDispatchWatcher {
       acpSessionConfig: {
         agentConfigId: entry.inputConfig?.agentConfigId,
         prompt,
+        titlePrompt: entry.inputConfig?.titlePrompt,
         inputBlocks: inputBlocks.length > 0 ? inputBlocks : undefined,
         cliType: entry.inputConfig?.cliType ?? meta.cliType,
         agentType: entry.inputConfig?.agentType ?? meta.agentType,
@@ -2086,6 +2088,7 @@ export class SessionDispatchWatcher {
       acpSessionConfig: {
         agentConfigId: entry.inputConfig?.agentConfigId,
         prompt,
+        titlePrompt: entry.inputConfig?.titlePrompt,
         inputBlocks: inputBlocks.length > 0 ? inputBlocks : undefined,
         cliType: entry.inputConfig?.cliType ?? meta.cliType,
         agentType: entry.inputConfig?.agentType ?? meta.agentType,
@@ -2194,6 +2197,7 @@ export class SessionDispatchWatcher {
       );
       const inputConfig = buildSessionTurnInputConfig({
         inputBlocks,
+        titlePrompt: normalizeSessionTurnInputConfig(queuedItem.acpSessionConfig)?.titlePrompt,
         prompt:
           queuedItem.acpSessionConfig?.prompt ?? extractPromptPreviewFromInputBlocks(inputBlocks),
         cliType: queuedItem.acpSessionConfig?.cliType ?? meta.cliType,

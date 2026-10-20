@@ -38,3 +38,30 @@ it('does not begin title publication after cancellation during metadata reads', 
     await repo.destroy();
   }
 });
+
+it('preserves a real manual rename made while an embedded generated title is pending', async () => {
+  const repo = await LoroRepo.create({});
+  const doc = new SessionDocument(repo, 'title-manual-race' as SessionId);
+  await doc.initOffline();
+  try {
+    await doc.setTitleIfSourceIn('Untitled design', 'draft', []);
+    let release: (() => void) | undefined;
+    let entered: (() => void) | undefined;
+    const reading = new Promise<void>((resolve) => { entered = resolve; });
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const getMetaState = doc.getMetaState.bind(doc);
+    vi.spyOn(doc, 'getMetaState').mockImplementationOnce(async () => {
+      entered?.();
+      await pending;
+      return getMetaState();
+    });
+    const publishing = doc.setTitleIfSourceIn('Warm Jazz Night', 'generated', ['draft']);
+    await reading;
+    await doc.setTitle('Poster study', 'user');
+    release?.();
+    expect(await publishing).toBe(false);
+    expect(await doc.getMetaState()).toMatchObject({ title: 'Poster study', titleSource: 'user' });
+  } finally {
+    await repo.destroy();
+  }
+});

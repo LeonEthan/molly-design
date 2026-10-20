@@ -45,6 +45,7 @@ import {
   savedHostSystemPrompt,
 } from './host-system-prompt';
 import { z } from 'zod';
+import { generateSessionTitle } from './session-title';
 
 const NativeCompletionSchema = z.object({
   execution: z.literal('inference'),
@@ -87,6 +88,7 @@ export class PiAcpHost {
   private credentialStore?: InstanceType<typeof InMemoryCredentialStore>;
   private sessionStarted = false;
   private systemPrompt?: string;
+  private titleAttempted = false;
 
   constructor(
     config: WorkerConfig,
@@ -457,7 +459,64 @@ export class PiAcpHost {
         memoryDiagnostic,
       };
     this.assertModel(wrapper.piSession.model, wrapper.piSession.thinkingLevel);
-    const response = await wrapper.prompt(params.prompt);
+    const titlePrompt = z
+      .string()
+      .trim()
+      .min(1)
+      .max(4000)
+      .safeParse(params._meta?.mollyTitlePrompt);
+    const titleController = new AbortController();
+    const titleSignal = AbortSignal.any([signal, titleController.signal]);
+    const firstTitleAttempt = !this.titleAttempted;
+    this.titleAttempted = true;
+    const titleRun =
+      firstTitleAttempt && titlePrompt.success && wrapper.piSession.model
+        ? generateSessionTitle({
+            runtime: this.runtime!,
+            model: wrapper.piSession.model,
+            userText: titlePrompt.data,
+            signal: titleSignal,
+          }).then((generated) => {
+            if (generated.title && !titleSignal.aborted) {
+              void this.peer
+                .sessionUpdate({
+                  sessionId: wrapper.sessionId,
+                  update: {
+                    sessionUpdate: 'session_info_update',
+                    title: generated.title,
+                    _meta: { lody: { titleSource: 'explicit' } },
+                  },
+                })
+                .catch(() => undefined);
+            }
+            if (!generated.title && !titleSignal.aborted)
+              process.stderr.write('molly_session_title_unavailable\n');
+            return generated;
+          })
+        : undefined;
+    let response: acp.PromptResponse;
+    try {
+      response = await wrapper.prompt(params.prompt);
+      if (response.stopReason === 'cancelled') titleController.abort();
+    } catch (error) {
+      titleController.abort();
+      throw error;
+    } finally {
+      const generated = await titleRun;
+      if (generated?.result) {
+        try {
+          wrapper.piSession.sessionManager.appendUsage(
+            'session_title',
+            generated.result.provider,
+            generated.result.model,
+            generated.result.usage
+          );
+          await wrapper.flush();
+        } catch {
+          process.stderr.write('molly_session_title_usage_failed\n');
+        }
+      }
+    }
     if (response.stopReason === 'cancelled')
       return { response, native: { status: 'cancelled' }, memory, memoryDiagnostic };
     const native = NativeCompletionSchema.safeParse(response._meta?.piAcp);

@@ -660,12 +660,14 @@ export const buildSessionTurnInputConfig = (args: {
   issuePRMentions?: IssuePRMention[];
   resume?: ACPSessionConfig['resume'];
   prompt?: string;
+  titlePrompt?: string;
 }): ACPSessionConfig => {
   const normalizedInputBlocks = normalizeSessionInputBlocks(args.inputBlocks, '');
 
   return {
     ...(args.agentConfigId ? { agentConfigId: args.agentConfigId } : {}),
     prompt: args.prompt ?? extractPromptPreviewFromInputBlocks(normalizedInputBlocks),
+    ...(args.titlePrompt !== undefined ? { titlePrompt: args.titlePrompt.slice(0, 4000) } : {}),
     inputBlocks: normalizedInputBlocks.length > 0 ? normalizedInputBlocks : undefined,
     cliType: args.cliType,
     agentType: args.agentType,

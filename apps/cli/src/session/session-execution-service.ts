@@ -3113,12 +3113,23 @@ export class SessionExecutionService {
                             promptBlocks: promptBlocks.length,
                           },
                           async () => {
+                            const invocation = self.getActiveInvocationContext(sessionId);
+                            const firstUser = readSessionHistory(
+                              sessionDoc.sessionData.history
+                            ).find((entry) => entry.role === 'user');
+                            const draftTitlePrompt =
+                              activeSession.isEmbeddedHarness?.() &&
+                              firstUser?.id === invocation?.sourceTurnId &&
+                              dispatchMeta?.titleSource === 'draft'
+                                ? invocation?.inputConfig.titlePrompt
+                                : undefined;
                             const providerPrompt = activeSession.isEmbeddedHarness?.()
                               ? activeSession.promptEmbeddedHarness!(
                                   self.getActiveInvocationContext(sessionId)?.sourceTurnId ??
                                     runtime.turnId,
                                   promptBlocks,
-                                  signal
+                                  signal,
+                                  draftTitlePrompt
                                 )
                               : agentClient.prompt(acpSessionId, promptBlocks, { signal });
                             if (runtime.canvasPrepared)
@@ -4861,15 +4872,17 @@ export class SessionExecutionService {
       dispatchStartPatch.fromFeedbackPostId = fromFeedbackPostId;
     }
 
-    void this.deps.maybeGenerateAndStoreSessionTitle(
-      sessionId,
-      sessionConfig.agentCliType,
-      sessionConfig.agentType,
-      agentConfig.prompt,
-      env,
-      acpSessionConfig.customAcp,
-      acpSessionConfig.runtimeOverrides
-    );
+    if (sessionConfig.agentType !== 'molly') {
+      void this.deps.maybeGenerateAndStoreSessionTitle(
+        sessionId,
+        sessionConfig.agentCliType,
+        sessionConfig.agentType,
+        agentConfig.prompt,
+        env,
+        acpSessionConfig.customAcp,
+        acpSessionConfig.runtimeOverrides
+      );
+    }
 
     const self = this;
     const turnErrorContext: VisibleSessionTurnUnhandledErrorContext = {

@@ -1520,6 +1520,7 @@ describe('SessionDispatchWatcher', () => {
           agentType: 'codex',
           agentRoleId: 'role-reviewer',
           agentRoleRevision: 7,
+          titlePrompt: 'Warm jazz poster',
         },
       },
     ];
@@ -1612,6 +1613,7 @@ describe('SessionDispatchWatcher', () => {
         inputConfig: expect.objectContaining({
           agentRoleId: 'role-reviewer',
           agentRoleRevision: 7,
+          titlePrompt: 'Warm jazz poster',
         }),
       })
     );
@@ -1625,6 +1627,7 @@ describe('SessionDispatchWatcher', () => {
         acpSessionConfig: expect.objectContaining({
           agentRoleId: 'role-reviewer',
           agentRoleRevision: 7,
+          titlePrompt: 'Warm jazz poster',
         }),
       }),
       { dispatchSource: 'queue' }
@@ -3963,3 +3966,45 @@ describe('SessionDispatchWatcher', () => {
     h.watcher.stop();
   });
 });
+
+it.each(['buildCreateRequestFromHistoryEntry', 'buildChatRequestFromHistoryEntry'] as const)(
+  'preserves naming provenance separately from execution scaffolding in %s',
+  async (method) => {
+    const watcher = createWatcher({
+      logger: createSilentLogger(),
+      machineId: 'machine-1',
+      workspaceId: 'workspace-1' as WorkspaceId,
+      workspaceDocument: {} as LoroDocumentManager,
+      executionService: {} as SessionExecutionService,
+      canUseMachine: createAllowMachineAccess(),
+    });
+    const titlePrompt = 'Design a poster for a jazz night.';
+    const prompt = `${titlePrompt}\nCanvas size: 800 × 600 px.\nInternal scaffold`;
+    const meta = {
+      id: 'title-dispatch' as SessionId,
+      cliType: 'builtin',
+      agentType: 'molly',
+    } as SessionMeta;
+    const entry: SessionHistoryInput = {
+      id: 'first-user',
+      role: 'user',
+      items: [{ type: 'text', text: prompt }],
+      inputConfig: { prompt, titlePrompt },
+    };
+    const host = watcher as unknown as Record<
+      typeof method,
+      (
+        meta: SessionMeta,
+        entry: SessionHistoryInput,
+        config: undefined,
+        user: { id: string; name: string; email: string }
+      ) => Promise<{ acpSessionConfig: { prompt: string; titlePrompt?: string } }>
+    >;
+    const result = await host[method](meta, entry, undefined, {
+      id: 'synthetic-user',
+      name: 'User',
+      email: 'user@example.com',
+    });
+    expect(result.acpSessionConfig).toMatchObject({ prompt, titlePrompt });
+  }
+);

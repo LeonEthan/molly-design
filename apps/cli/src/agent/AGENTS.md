@@ -88,8 +88,11 @@ context/acp-agent-edit-evidence.md; adapter repos: [apps/cli/AGENTS.md](../../AG
   Machine Flock writes ignore `fetchedAt` when comparing entries.
 - Builtin Claude owns session titles through ACP `session_info_update`; store them only after
   `sanitizeLodyInternalInstructions`, and never start `title-generator.ts`'s isolated session
-  for Claude. Molly names a draft from the first user sentence at dispatch, with no
-  title worker; a user rename and a failed generation stay. For Codex accept only
+  for Claude. Molly's first user turn requests a short title from its selected embedded model;
+  pass only the captured user `titlePrompt`, before size/config/system scaffolding. Publish
+  through `setTitleIfSourceIn(..., 'generated', ['draft'])`; failures retain the draft,
+  with no prompt/first-sentence fallback. See [title lifecycle](README.md#session-titles).
+  For Codex accept only
   `explicit` `_meta.lody.titleSource` names, ignore its
   first-prompt `fallback`, and require `_meta.lody.messagePhase === 'final_answer'`; untyped
   chunks, error/warning payloads, and internal-instruction tails are never candidates.

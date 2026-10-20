@@ -141,7 +141,8 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
   async promptEmbeddedHarness(
     turnId: string,
     prompt: import('@agentclientprotocol/sdk').ContentBlock[],
-    signal: AbortSignal
+    signal: AbortSignal,
+    titlePrompt?: string
   ) {
     const client = this.agentClient;
     const sessionId = this.acpSessionId;
@@ -153,7 +154,10 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
       prompt: async (snapshot) => {
         const response = await client.prompt(sessionId, prompt, {
           signal,
-          _meta: runRequestMeta(snapshot),
+          _meta: {
+            ...runRequestMeta(snapshot),
+            ...(titlePrompt?.trim() ? { mollyTitlePrompt: titlePrompt } : {}),
+          },
         });
         if (!response) throw new Error('harness_native_outcome_missing');
         return response;

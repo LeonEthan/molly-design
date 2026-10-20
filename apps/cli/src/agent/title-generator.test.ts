@@ -116,24 +116,24 @@ describe('applyTitleConfigOptions', () => {
 describe('generateTitleIsolated for embedded Molly', () => {
   const logger = { debug: vi.fn() } as unknown as Logger;
 
-  it('titles the session from the first sentence without spawning a worker', async () => {
+  it('never substitutes a first sentence for embedded selected-model generation', async () => {
     const title = await generateTitleIsolated({
       cliType: 'builtin',
       agentType: 'molly',
       taskPrompt: 'Design a poster for a jazz night. Use warm colours.',
       logger,
     });
-    expect(title).toBe('Design a poster for a jazz night');
+    expect(title).toBeNull();
   });
 
-  it('keeps an image-and-text prompt title on the user sentence', async () => {
+  it('never substitutes image-and-text input for a generated title', async () => {
     const title = await generateTitleIsolated({
       cliType: 'builtin',
       agentType: 'molly',
       taskPrompt: '优化一下这个构图\n\n[image attached]',
       logger,
     });
-    expect(title).toBe('优化一下这个构图');
+    expect(title).toBeNull();
   });
 
   it('returns null instead of throwing when the prompt has no title text', async () => {

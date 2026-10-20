@@ -3,6 +3,8 @@ import {
   buildPendingUserHistoryEntry,
   buildSessionTurnInputConfig,
   historyItemsToInputBlocks,
+  extractPromptPreviewFromInputBlocks,
+  normalizeSessionTurnInputConfig,
   type SessionInputBlock,
 } from '@molly/shared';
 import {
@@ -39,6 +41,7 @@ describe('landing canvas submission through durable turn input', () => {
     expect(submission.dimensions).toEqual({ width, height });
     const config = buildSessionTurnInputConfig({
       inputBlocks: submission.inputBlocks,
+      titlePrompt: extractPromptPreviewFromInputBlocks(draft),
       cliType: 'codex',
       agentType: 'codex',
     });
@@ -49,6 +52,7 @@ describe('landing canvas submission through durable turn input', () => {
       inputConfig: config,
     });
     expect(config.prompt).toContain(instruction({ width, height }));
+    expect(normalizeSessionTurnInputConfig(entry?.inputConfig)?.titlePrompt).toBe('Make a poster');
     expect(historyItemsToInputBlocks(entry!.items)).toEqual(submission.inputBlocks);
     expect(submission.inputBlocks.slice(0, draft.length)).toEqual(draft);
     expect(submit()).toEqual(submission); // Retrying rebuilds from the untouched draft.

@@ -113,9 +113,9 @@ reference amendment, or dedicated readback. Legacy optional outcome fields and
 existing image files remain stored; the current read view ignores retired fields.
 A committed `design.yaml` `title` becomes the Session name through the ordinary
 `setTitleIfSourceIn` guard, so draft and generated names follow the artwork while
-a user rename stays. Dispatch may already have replaced a draft title with the
-first user sentence. Receipt recovery and uncommitted turns rename nothing; no
-title model request is added.
+a user rename stays. The first user turn may replace a draft with a short title from
+the selected model ([Agent title lifecycle](../agent/README.md#session-titles)).
+Receipt recovery and uncommitted artwork collection rename nothing.
 
 Molly design sessions use the sealed embedded Pi SDK. The external `pi-acp`
 launcher, temporary command shim and separate design/MCP extensions are retired

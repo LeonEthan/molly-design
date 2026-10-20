@@ -295,19 +295,69 @@ void test('a hidden editor still publishes its edited and cleared notes', async 
   const f = await openedCanvas()
   const lease = f.leases.at(-1)
   f.hideDesign('artwork')
-  assert.equal((await f.postToolbar(lease, { type: 'notes-sync', notes: pinnedNote })).status, 200)
-  assert.equal((await f.postToolbar(lease, { type: 'notes-sync', notes: [] })).status, 200)
+  assert.equal(
+    (
+      await f.postToolbar(lease, {
+        type: 'notes-sync',
+        notesEpoch: 1,
+        notesInstance: 'page-1',
+        notes: pinnedNote
+      })
+    ).status,
+    200
+  )
+  assert.equal(
+    (
+      await f.postToolbar(lease, {
+        type: 'notes-sync',
+        notesEpoch: 1,
+        notesInstance: 'page-1',
+        notes: []
+      })
+    ).status,
+    200
+  )
 })
 
 void test('notes-sync from a destroyed or replaced canvas instance is refused', async () => {
   const f = await openedCanvas()
   const retired = f.leases.at(-1)
   await f.destroyDesign('artwork')
-  assert.equal((await f.postToolbar(retired, { type: 'notes-sync', notes: [] })).status, 400)
+  assert.equal(
+    (
+      await f.postToolbar(retired, {
+        type: 'notes-sync',
+        notesEpoch: 1,
+        notesInstance: 'page-1',
+        notes: []
+      })
+    ).status,
+    400
+  )
   await f.attachDesign(f.owner, 'artwork', { x: 0, y: 0, width: 800, height: 600 })
   const replacement = f.leases.at(-1)
-  assert.equal((await f.postToolbar(retired, { type: 'notes-sync', notes: [] })).status, 400)
-  assert.equal((await f.postToolbar(replacement, { type: 'notes-sync', notes: [] })).status, 200)
+  assert.equal(
+    (
+      await f.postToolbar(retired, {
+        type: 'notes-sync',
+        notesEpoch: 1,
+        notesInstance: 'page-1',
+        notes: []
+      })
+    ).status,
+    400
+  )
+  assert.equal(
+    (
+      await f.postToolbar(replacement, {
+        type: 'notes-sync',
+        notesEpoch: 1,
+        notesInstance: 'page-1',
+        notes: []
+      })
+    ).status,
+    200
+  )
 })
 
 void test('closing a canvas asks it to publish unsent notes before disposal', async () => {

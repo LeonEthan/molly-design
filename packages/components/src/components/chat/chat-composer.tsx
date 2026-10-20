@@ -23,6 +23,7 @@ import {
   type VisualAnnotationReferenceChipItem,
 } from './visual-annotation-reference-chip';
 import { DesignSelectionChip, type DesignSelectionChipItem } from './design-selection-chip';
+import { DesignNotesChip, type DesignNotesChipItem } from './design-notes-chip';
 import { cn } from '@/lib/utils';
 import {
   CombinedMentionTextarea,
@@ -158,6 +159,10 @@ export interface ChatComposerProps {
   designSelectionItem?: DesignSelectionChipItem | null;
   designSelectionRemoveLabel?: string;
   onDesignSelectionRemove?: () => void;
+  /** Canvas comments staged for the next message, shown as one chip. */
+  stagedNotesItem?: DesignNotesChipItem | null;
+  stagedNotesRemoveLabel?: string;
+  onStagedNotesRemove?: () => void;
   /** @deprecated Use footerSelector instead */
   selector?: ReactNode;
   /** Selector node displayed above the textarea (e.g., repo, agent) */
@@ -265,6 +270,9 @@ export function ChatComposer({
   designSelectionItem = null,
   designSelectionRemoveLabel = '',
   onDesignSelectionRemove,
+  stagedNotesItem = null,
+  stagedNotesRemoveLabel = '',
+  onStagedNotesRemove,
   onVisualAnnotationReferenceRemove,
   selector,
   topSelector,
@@ -646,7 +654,7 @@ export function ChatComposer({
                       if (
                         !event.currentTarget.contains(target) ||
                         target.closest(
-                          'button, a, input, textarea, select, [role="button"], [role="menuitem"], [role="option"], [data-comment-ref], [data-visual-annotation-ref], [data-design-selection-ref]'
+                          'button, a, input, textarea, select, [role="button"], [role="menuitem"], [role="option"], [data-comment-ref], [data-visual-annotation-ref], [data-design-selection-ref], [data-design-notes-ref]'
                         )
                       ) {
                         return;
@@ -666,6 +674,15 @@ export function ChatComposer({
                     item={designSelectionItem}
                     removeLabel={designSelectionRemoveLabel}
                     onRemove={onDesignSelectionRemove}
+                  />
+                </div>
+              ) : null}
+              {stagedNotesItem ? (
+                <div className="flex flex-wrap gap-2 pb-1">
+                  <DesignNotesChip
+                    item={stagedNotesItem}
+                    removeLabel={stagedNotesRemoveLabel}
+                    onRemove={onStagedNotesRemove}
                   />
                 </div>
               ) : null}

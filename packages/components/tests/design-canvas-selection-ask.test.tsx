@@ -65,6 +65,8 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
         ipc.cleared.push(args);
         return true;
       },
+      compareAvailable: async () => false,
+      compareHold: async () => false,
       hidePreview: async () => {},
       closePreview: async () => {},
       selectionSummary: async () => null,
@@ -230,7 +232,7 @@ describe('region notes with a marked image from the canvas', () => {
       },
       onReferenceSelection: () => {},
     });
-    await emit({ action: 'notes', notes: regionNotes, notesEpoch: 4, image });
+    await emit({ action: 'notes', notes: regionNotes, notesEpoch: 4, notesInstance: 'page-1', image });
     expect(sent).toHaveLength(1);
     const [value, attachment] = sent[0] as [unknown, { intro: string; image: File }];
     expect(value).toEqual(regionNotes);
@@ -256,15 +258,15 @@ describe('numbered notes from the canvas', () => {
       },
       onReferenceSelection: () => {},
     });
-    await emit({ action: 'notes', notes, notesEpoch: 4 });
+    await emit({ action: 'notes', notes, notesEpoch: 4, notesInstance: 'page-1' });
     expect(sent).toEqual([notes]);
-    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, true]]);
+    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, true, 'page-1']]);
   });
 
   it('keeps the pins and says so when the turn is not accepted', async () => {
     await mount({ onSendNotes: async () => false, onReferenceSelection: () => {} });
-    await emit({ action: 'notes', notes, notesEpoch: 4 });
-    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, false]]);
+    await emit({ action: 'notes', notes, notesEpoch: 4, notesInstance: 'page-1' });
+    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, false, 'page-1']]);
     expect(container.textContent).toContain('your notes are kept');
   });
 
@@ -281,8 +283,58 @@ describe('numbered notes from the canvas', () => {
       action: 'notes',
       notes: [notes[0], { ...notes[1], reference: { ...reference, artworkId: 'other-artwork' } }],
       notesEpoch: 4,
+      notesInstance: 'page-1',
     });
     expect(sent).toEqual([]);
-    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, false]]);
+    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, false, 'page-1']]);
+  });
+});
+
+describe('staged notes from the canvas', () => {
+  const notes = [
+    { reference, prompt: 'Warmer headline' },
+    { reference: { ...reference, elementIds: ['photo'] }, prompt: 'Crop tighter' },
+  ];
+
+  it('stages the notes, the snapshot and the marked copy instead of sending', async () => {
+    const staged: unknown[] = [];
+    const sent: unknown[] = [];
+    await mount({
+      onStageNotes: (value, attachments, meta) => {
+        staged.push([value, attachments, meta]);
+        return true;
+      },
+      onSendNotes: async (value) => {
+        sent.push(value);
+        return true;
+      },
+      onReferenceSelection: () => {},
+    });
+    const png = { mimeType: 'image/png' as const, bytes: new Uint8Array([0x89, 0x50]) };
+    await emit({ action: 'notes', notes, notesEpoch: 4, notesInstance: 'page-1', stage: true, image: png, snapshot: png });
+    expect(sent).toEqual([]);
+    expect(staged).toHaveLength(1);
+    const [stagedNotes, attachments, meta] = staged[0] as [
+      unknown,
+      { intro: string; image: File }[],
+      { artworkId: string; notesEpoch: number },
+    ];
+    expect(stagedNotes).toEqual(notes);
+    expect(meta).toEqual({ artworkId: SESSION_ID, notesEpoch: 4, notesInstance: 'page-1' });
+    expect(attachments.map((attachment) => attachment.image.name)).toEqual([
+      'comments-snapshot.png',
+      'marked.png',
+    ]);
+    expect(attachments[0]?.intro).toContain('snapshot of the whole artwork');
+    expect(attachments[1]?.intro).toContain('copy of one artwork image');
+    // Staging settles unsent: the canvas keeps its pins.
+    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, false, 'page-1']]);
+  });
+
+  it('keeps the pins and says so when the composer cannot stage them', async () => {
+    await mount({ onStageNotes: () => false, onReferenceSelection: () => {} });
+    await emit({ action: 'notes', notes, notesEpoch: 4, notesInstance: 'page-1', stage: true });
+    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, false, 'page-1']]);
+    expect(container.textContent).toContain('your notes are kept');
   });
 });

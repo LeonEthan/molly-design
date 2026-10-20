@@ -38,7 +38,7 @@ import {
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
-import { Check, Copy, Download, History, Maximize2, Minimize2, Save } from 'lucide-react';
+import { Check, Columns2, Copy, Download, History, Maximize2, Minimize2, Save } from 'lucide-react';
 import { writeStoredLastActiveTabState } from '@/lib/session-draft-tabs';
 import { DESIGN_CANVAS_LABEL_KEYS } from './design-canvas-labels';
 import {
@@ -154,6 +154,7 @@ export function DesignCanvas({
   onReferenceSelection,
   onSendSelection,
   onSendNotes,
+  onStageNotes,
   onSyncSelection,
   toolbarHost = null,
 }: {
@@ -183,6 +184,16 @@ export function DesignCanvas({
     notes: readonly { reference: DesignElementReference; prompt: string }[],
     attachment?: { intro: string; image: File }
   ) => Promise<boolean>;
+  /**
+   * Stage the notes in the composer instead of sending: the "N comments" chip
+   * plus the annotated snapshot and the one marked region image as ordinary
+   * image attachments. The canvas keeps its pins until the staged message sends.
+   */
+  onStageNotes?: (
+    notes: readonly { reference: DesignElementReference; prompt: string }[],
+    attachments: readonly { intro: string; image: File }[],
+    meta: { artworkId: string; notesEpoch: number; notesInstance: string }
+  ) => boolean;
   /** Passive mirror of the live canvas selection into the composer chip. */
   onSyncSelection?: (reference: DesignElementReference | null, label: string) => void;
   /** Renders the canvas toolbar into the side panel's top row instead of a row of its own. */
@@ -398,6 +409,76 @@ export function DesignCanvas({
     if (designElementFocus.artworkId !== artworkId || !designElementFocus.elementIds.length) return;
     void settle([{ tone: 'changed', elementIds: [...designElementFocus.elementIds] }]);
   }, [artworkId, designElementFocus, setDesignElementFocus, settle]);
+  // Hold-to-compare: main prepares the pre-turn frame after a committed turn
+  // reloads this canvas; holding `\` (or the toolbar button) shows it.
+  const [compareAvailable, setCompareAvailable] = useState(false);
+  const holdCompare = useCallback(
+    (holding: boolean) => {
+      void getIpcServices()
+        ?.design.compareHold(artworkId, hostId, holding)
+        .catch(() => {});
+    },
+    [artworkId, hostId]
+  );
+  useEffect(() => {
+    if (!active) return undefined;
+    let cancelled = false;
+    void getIpcServices()
+      ?.design.compareAvailable(artworkId)
+      .then((available) => {
+        if (!cancelled) setCompareAvailable(available === true);
+      })
+      .catch(() => {});
+    const stop = onIpcEvent('design.compare', (event) => {
+      if (event.artworkId === artworkId) setCompareAvailable(event.available);
+    });
+    return () => {
+      cancelled = true;
+      stop();
+    };
+  }, [active, artworkId]);
+  useEffect(() => {
+    // A running turn supersedes the frame prepared for the previous one.
+    if (canvasState?.turnId) setCompareAvailable(false);
+  }, [canvasState?.turnId]);
+  const compareHeldRef = useRef(false);
+  useEffect(() => {
+    if (!compareAvailable || !active || preview) return undefined;
+    const down = (event: KeyboardEvent) => {
+      if (
+        event.key !== '\\' ||
+        event.repeat ||
+        compareHeldRef.current ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.isComposing ||
+        (event.target as HTMLElement | null)?.closest('input, textarea, [contenteditable="true"]')
+      )
+        return;
+      compareHeldRef.current = true;
+      holdCompare(true);
+    };
+    const up = (event: KeyboardEvent) => {
+      if (event.key !== '\\' || !compareHeldRef.current) return;
+      compareHeldRef.current = false;
+      holdCompare(false);
+    };
+    const release = () => {
+      if (!compareHeldRef.current) return;
+      compareHeldRef.current = false;
+      holdCompare(false);
+    };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', release);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', release);
+      release();
+    };
+  }, [compareAvailable, active, preview, holdCompare]);
   const runningTurnId = active ? canvasState?.turnId : undefined;
   const runningTurnIndexed =
     !!runningTurnId && designHistory.some((entry) => entry.id === runningTurnId);
@@ -741,9 +822,24 @@ export function DesignCanvas({
       preset ? [presetPrompt(preset), prompt].filter(Boolean).join('\n') : prompt,
       send
     );
+  const notesImageFile = (
+    image: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array },
+    baseName: 'marked' | 'comments-snapshot'
+  ) =>
+    new File(
+      [new Uint8Array(image.bytes)],
+      image.mimeType === 'image/png' ? `${baseName}.png` : `${baseName}.jpg`,
+      { type: image.mimeType }
+    );
+  const notesRegionIntro = () =>
+    t(
+      'design.notesRegionIntro',
+      "The attached image is a copy of one artwork image with numbered regions drawn on it. Each numbered region belongs to the note with the same number. Edit that image using its current asset as the source, changing only what those notes describe; the region outlines are guides and must not appear in the result. Replace only that image’s asset and preserve the rest of the artwork."
+    );
   const sendNotes = (
     notes: readonly { reference: DesignElementReference; prompt: string }[],
     notesEpoch: number,
+    notesInstance: string,
     image?: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array }
   ) => {
     const generation = attachmentGeneration.current;
@@ -757,19 +853,7 @@ export function DesignCanvas({
           );
         sent = await onSendNotes(
           notes,
-          image
-            ? {
-                intro: t(
-                  'design.notesRegionIntro',
-                  "The attached image is a copy of one artwork image with numbered regions drawn on it. Each numbered region belongs to the note with the same number. Edit that image using its current asset as the source, changing only what those notes describe; the region outlines are guides and must not appear in the result. Replace only that image’s asset and preserve the rest of the artwork."
-                ),
-                image: new File(
-                  [new Uint8Array(image.bytes)],
-                  image.mimeType === 'image/png' ? 'marked.png' : 'marked.jpg',
-                  { type: image.mimeType }
-                ),
-              }
-            : undefined
+          image ? { intro: notesRegionIntro(), image: notesImageFile(image, 'marked') } : undefined
         );
         if (sent)
           notesRun.current = {
@@ -783,12 +867,50 @@ export function DesignCanvas({
             t('design.notesNotSent', 'Molly can’t take a new message yet; your notes are kept')
           );
       } finally {
-        await getIpcServices()?.design.settleNotes(artworkId, hostId, notesEpoch, sent);
+        await getIpcServices()?.design.settleNotes(artworkId, hostId, notesEpoch, sent, notesInstance);
       }
     });
   };
-  const actionCallback = useRef({ selectionAction, askSelection, sendNotes });
-  actionCallback.current = { selectionAction, askSelection, sendNotes };
+  // Staging parks the notes in the composer and never sends: the settle is
+  // always sent=false, so the pins stay on the canvas until the staged message
+  // actually leaves.
+  const stageNotes = (
+    notes: readonly { reference: DesignElementReference; prompt: string }[],
+    notesEpoch: number,
+    notesInstance: string,
+    image?: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array },
+    snapshot?: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array }
+  ) => {
+    const generation = attachmentGeneration.current;
+    run(async () => {
+      try {
+        if (!onStageNotes) throw Error('Local workspace is not ready');
+        if (generation !== attachmentGeneration.current)
+          throw Error(
+            t('design.selectionChanged', 'Artwork view changed; select the current elements again')
+          );
+        const attachments: { intro: string; image: File }[] = [];
+        if (snapshot)
+          attachments.push({
+            intro: t(
+              'design.notesSnapshotIntro',
+              'The attached image is a snapshot of the whole artwork with each comment drawn as a numbered pin where it was placed. Each number belongs to the comment with the same number.'
+            ),
+            image: notesImageFile(snapshot, 'comments-snapshot'),
+          });
+        if (image)
+          attachments.push({ intro: notesRegionIntro(), image: notesImageFile(image, 'marked') });
+        if (!onStageNotes(notes, attachments, { artworkId, notesEpoch, notesInstance }))
+          throw Error(
+            t('design.notesNotSent', 'Molly can’t take a new message yet; your notes are kept')
+          );
+      } finally {
+        await getIpcServices()?.design.settleNotes(artworkId, hostId, notesEpoch, false, notesInstance);
+      }
+    });
+  };
+  const actionCallback = useRef({ selectionAction, askSelection, sendNotes, stageNotes });
+  actionCallback.current = { selectionAction, askSelection, sendNotes, stageNotes };
   useEffect(
     () =>
       onIpcEvent('design.selectionAction', (event) => {
@@ -799,10 +921,24 @@ export function DesignCanvas({
             !readonlyView &&
             event.notes.every((note) => note.reference.artworkId === artworkId)
           )
-            actionCallback.current.sendNotes(event.notes, event.notesEpoch, event.image);
+            if (event.stage)
+              actionCallback.current.stageNotes(
+                event.notes,
+                event.notesEpoch,
+                event.notesInstance,
+                event.image,
+                event.snapshot
+              );
+            else
+              actionCallback.current.sendNotes(
+                event.notes,
+                event.notesEpoch,
+                event.notesInstance,
+                event.image
+              );
           else
             void getIpcServices()
-              ?.design.settleNotes(artworkId, hostId, event.notesEpoch, false)
+              ?.design.settleNotes(artworkId, hostId, event.notesEpoch, false, event.notesInstance)
               .catch(() => {});
           return;
         }
@@ -943,6 +1079,32 @@ export function DesignCanvas({
       </span>
       <TooltipProvider>
         <div className={cn('ml-auto flex shrink-0 items-center gap-1', WINDOW_DRAG_EXEMPT_CLASS)}>
+          {compareAvailable && !preview ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+                  aria-label={t('design.compareHold', "Hold to see before Molly's edit")}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    holdCompare(true);
+                  }}
+                  onPointerUp={() => holdCompare(false)}
+                  onPointerLeave={() => holdCompare(false)}
+                  onPointerCancel={() => holdCompare(false)}
+                  onBlur={() => holdCompare(false)}
+                  onContextMenu={(event) => event.preventDefault()}
+                >
+                  <Columns2 className="size-[18px] shrink-0" aria-hidden="true" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {t('design.compareHoldHint', 'Hold to see before Molly’s edit (\\)')}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="inline-flex">

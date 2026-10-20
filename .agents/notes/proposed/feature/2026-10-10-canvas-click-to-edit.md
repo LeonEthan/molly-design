@@ -18,7 +18,9 @@ Phase B is implemented in
 [canvas numbered notes](../../implemented/feature/2026-10-11-canvas-numbered-notes.md);
 phases C and E are implemented in
 [canvas image marks and quick edits](../../implemented/feature/2026-10-12-canvas-image-marks-and-presets.md).
-Only phase D's hold-to-compare remains a proposal, and the research comes from
+Phase D's hold-to-compare is implemented in
+[canvas comment phase 3](../../implemented/feature/2026-10-20-canvas-comment-stage-and-compare.md);
+the research comes from
 public documentation, not hands-on use.
 
 ## Research (public sources, 2026-10-10)
@@ -62,8 +64,10 @@ payload Codex sends to its agent are not publicly documented.
   editor" by adding only an annotated reference. Automatic object recognition
   (Lovart Cmd-click) is out of scope: it needs a segmentation model. Changes
   Spec intent.
-- **D. Feedback at the target.** Implemented except hold-to-compare, see
-  [canvas target feedback](../../implemented/feature/2026-10-10-canvas-target-feedback.md).
+- **D. Feedback at the target.** Implemented, see
+  [canvas target feedback](../../implemented/feature/2026-10-10-canvas-target-feedback.md)
+  and, for hold-to-compare,
+  [canvas comment phase 3](../../implemented/feature/2026-10-20-canvas-comment-stage-and-compare.md).
   A working outline on referenced elements during
   a run; afterwards fading "changed" outlines, hold-to-compare against "Before
   Molly's edit", and an advisory element-ID diff that reports changes outside

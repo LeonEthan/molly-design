@@ -37,6 +37,7 @@ import {
   type MentionPromptExpansionArgs,
 } from '@/components/mentions/mention-expansion';
 import { appendDesignSelectionMention } from '@/components/mentions/design-element-mention';
+import { getIpcServices } from '@/lib/electron-ipc-client';
 import { reanchorMessageTextSpansForTrim } from '@molly/shared';
 import type { Mention as MentionRange } from '@/ui/mention/index';
 import {
@@ -143,6 +144,26 @@ type PendingFile = {
 const sessionImageDraftsCache = new Map<SessionId, PendingImage[]>();
 const sessionFileDraftsCache = new Map<SessionId, PendingFile[]>();
 const sessionPastedTextDraftsCache = new Map<SessionId, PastedTextDraft[]>();
+
+/**
+ * Canvas comments staged in the composer as one chip before their turn is sent.
+ * The canvas keeps its pins until the staged message is accepted; only that
+ * acceptance settles them away.
+ */
+type StagedDesignNotes = {
+  sessionId: SessionId;
+  artworkId: string;
+  hostId: string;
+  notesEpoch: number;
+  /** Identity of the canvas page that produced the notes; epochs restart on recreation. */
+  notesInstance: string;
+  notes: readonly { reference: DesignElementReference; label: string; prompt: string }[];
+  /** Localized attachment intros (the annotated snapshot, then the one region image). */
+  intros: readonly string[];
+  /** Pending images staged with the chip; removing the chip removes them. */
+  imageLocalIds: readonly string[];
+};
+const sessionStagedNotesCache = new Map<SessionId, StagedDesignNotes>();
 
 const getSessionImageDrafts = (sessionId: SessionId): PendingImage[] => [
   ...(sessionImageDraftsCache.get(sessionId) ?? []),
@@ -414,6 +435,16 @@ export type SessionChatInputAreaHandle = {
     notes: readonly { reference: DesignElementReference; label: string; prompt: string }[],
     attachment?: { intro: string; image: File }
   ) => Promise<boolean>;
+  /**
+   * Stage numbered canvas notes as a removable composer chip with their annotated
+   * images parked as ordinary image attachments. Returns false without touching
+   * the draft when the composer is read-only; the canvas keeps its pins either way.
+   */
+  stageDesignNotes: (
+    notes: readonly { reference: DesignElementReference; label: string; prompt: string }[],
+    attachments: readonly { intro: string; image: File }[],
+    meta: { artworkId: string; notesEpoch: number; notesInstance: string }
+  ) => boolean;
   insertSessionMention: (sessionId: string) => boolean;
 };
 
@@ -529,6 +560,13 @@ export const SessionChatInputArea = memo(
       designSelectionState?.sessionId === session.id ? designSelectionState : null;
     const designSelectionRef = useRef(designSelection);
     designSelectionRef.current = designSelection;
+
+    const [stagedNotesState, setStagedNotesState] = useState<StagedDesignNotes | null>(
+      () => sessionStagedNotesCache.get(session.id) ?? null
+    );
+    const stagedNotes = stagedNotesState?.sessionId === session.id ? stagedNotesState : null;
+    const stagedNotesRef = useRef(stagedNotes);
+    stagedNotesRef.current = stagedNotes;
 
     const publishCommentReferences = useCallback(
       (items: CommentReferenceChipItem[]) => {
@@ -743,6 +781,7 @@ export const SessionChatInputArea = memo(
       setCommentReferences([]);
       visualAnnotationReferencesRef.current = [];
       setVisualAnnotationReferences([]);
+      setStagedNotesState(sessionStagedNotesCache.get(session.id) ?? null);
     }
 
     useEffect(() => {
@@ -1045,7 +1084,9 @@ export const SessionChatInputArea = memo(
         const oversizeImageFiles: File[] = [];
         const issues: string[] = [];
         let invalidCount = 0;
-        let currentCount = pendingImages.length;
+        // Read the live cache, not the render-captured state: a synchronous
+        // burst (paste, drop, staged canvas notes) must not see a stale count.
+        let currentCount = getSessionImageDrafts(session.id).length;
 
         for (const file of files) {
           if (currentCount >= SESSION_IMAGE_MAX_COUNT) {
@@ -1103,7 +1144,6 @@ export const SessionChatInputArea = memo(
         enqueueFileAttachments,
         imageCountLimitLabel,
         isArchived,
-        pendingImages.length,
         session.id,
         showImageSelectionIssues,
         startUpload,
@@ -1480,6 +1520,87 @@ export const SessionChatInputArea = memo(
       [sendDesignMentions]
     );
 
+    const publishStagedNotes = useCallback(
+      (value: StagedDesignNotes | null) => {
+        stagedNotesRef.current = value;
+        setStagedNotesState(value);
+        if (value) sessionStagedNotesCache.set(value.sessionId, value);
+        else sessionStagedNotesCache.delete(session.id);
+      },
+      [session.id]
+    );
+    /** Unstaging drops only the images that were staged with the chip. */
+    const removeStagedDesignNotes = useCallback(() => {
+      const staged = stagedNotesRef.current;
+      if (!staged) return;
+      publishStagedNotes(null);
+      if (!staged.imageLocalIds.length) return;
+      const removing = new Set(staged.imageLocalIds);
+      const stagedImages = getSessionImageDrafts(staged.sessionId).filter((image) =>
+        removing.has(image.localId)
+      );
+      updatePendingImagesForSession(staged.sessionId, (prev) =>
+        prev.filter((image) => !removing.has(image.localId))
+      );
+      revokeImagePreviewUrls(stagedImages);
+    }, [publishStagedNotes, updatePendingImagesForSession]);
+    const stageDesignNotes = useCallback(
+      (
+        notes: readonly { reference: DesignElementReference; label: string; prompt: string }[],
+        attachments: readonly { intro: string; image: File }[],
+        meta: { artworkId: string; notesEpoch: number; notesInstance: string }
+      ): boolean => {
+        if (isArchived) return false;
+        removeStagedDesignNotes();
+        // All-or-nothing: a chip missing part of its image context would send
+        // the model an incomplete picture. The canvas keeps its pins on failure.
+        const room = SESSION_IMAGE_MAX_COUNT - getSessionImageDrafts(session.id).length;
+        if (attachments.length > room) return false;
+        const before = new Set(getSessionImageDrafts(session.id).map((entry) => entry.localId));
+        if (attachments.length)
+          handleAddFiles(attachments.map((attachment) => attachment.image));
+        const added = getSessionImageDrafts(session.id).filter(
+          (entry) => !before.has(entry.localId)
+        );
+        if (added.length !== attachments.length) {
+          const partial = new Set(added.map((entry) => entry.localId));
+          updatePendingImagesForSession(session.id, (prev) =>
+            prev.filter((entry) => !partial.has(entry.localId))
+          );
+          revokeImagePreviewUrls(added);
+          return false;
+        }
+        const intros: string[] = [];
+        const imageLocalIds: string[] = [];
+        for (const { intro, image } of attachments) {
+          const entry = added.find((candidate) => candidate.file === image);
+          if (!entry) continue;
+          if (intro.trim()) intros.push(intro.trim());
+          imageLocalIds.push(entry.localId);
+        }
+        publishStagedNotes({
+          sessionId: session.id,
+          artworkId: meta.artworkId,
+          hostId: session.id,
+          notesEpoch: meta.notesEpoch,
+          notesInstance: meta.notesInstance,
+          notes,
+          intros,
+          imageLocalIds,
+        });
+        textareaRef.current?.focus();
+        return true;
+      },
+      [
+        handleAddFiles,
+        isArchived,
+        publishStagedNotes,
+        removeStagedDesignNotes,
+        session.id,
+        updatePendingImagesForSession,
+      ]
+    );
+
     const insertSessionMention = useCallback(
       (sessionId: string) => {
         if (isArchived) {
@@ -1507,6 +1628,7 @@ export const SessionChatInputArea = memo(
         syncDesignSelection,
         sendDesignSelection,
         sendDesignNotes,
+        stageDesignNotes,
       }),
       [
         setInputText,
@@ -1520,6 +1642,7 @@ export const SessionChatInputArea = memo(
         syncDesignSelection,
         sendDesignSelection,
         sendDesignNotes,
+        stageDesignNotes,
       ]
     );
 
@@ -1569,14 +1692,34 @@ export const SessionChatInputArea = memo(
         ? appendDesignSelectionMention(typedValue, selection.reference, selection.label)
         : null;
       const currentValue = withSelection?.text ?? typedValue;
+      // Staged canvas comments join the message as numbered lines, each with its
+      // own element mention — the same text the tray's direct send would build.
+      const staged = stagedNotesRef.current;
+      let notesValue = currentValue;
+      const noteMentions: MentionRange[] = [];
+      if (staged) {
+        for (const intro of staged.intros) notesValue = notesValue ? `${notesValue}\n${intro}` : intro;
+        staged.notes.forEach((note, index) => {
+          const line = `${index + 1}. ${note.prompt.trim()}`;
+          const next = appendDesignSelectionMention(
+            notesValue ? `${notesValue}\n${line}` : line,
+            note.reference,
+            note.label
+          );
+          notesValue = next.text;
+          noteMentions.push(next.mention);
+        });
+      }
       // One pass: pasted placeholders, `$skill`, `@session:`, and the mentions
       // that need no rewrite all resolve against the same original text, and
       // the spans record where each landed.
       const expandedPrompt = expandPromptMentionsRef.current({
-        text: currentValue,
-        mentions: withSelection
-          ? [...mentionRangesRef.current, withSelection.mention]
-          : mentionRangesRef.current,
+        text: notesValue,
+        mentions: [
+          ...mentionRangesRef.current,
+          ...(withSelection ? [withSelection.mention] : []),
+          ...noteMentions,
+        ],
         pastedTextDrafts,
       });
       const trimmedPrompt = expandedPrompt.text.trim();
@@ -1665,6 +1808,7 @@ export const SessionChatInputArea = memo(
             publishCommentReferences([]);
             publishVisualAnnotationReferences([]);
             if (withSelection) setDesignSelectionState(null);
+            if (staged && stagedNotesRef.current === staged) publishStagedNotes(null);
           } else if (
             sessionDraftsCache.get(session.id) === submittedDraft.text &&
             sessionImageDraftsCache.get(session.id) === submittedDraft.images &&
@@ -1675,7 +1819,21 @@ export const SessionChatInputArea = memo(
             // A later edit owns a different snapshot and must survive. Never
             // write component state from a retired submission.
             clearSessionChatInputDrafts(session.id);
+            if (staged && sessionStagedNotesCache.get(session.id) === staged)
+              sessionStagedNotesCache.delete(session.id);
           }
+          // The turn actually left, so the canvas may clear the pins this staged
+          // chip carried; pins edited since staging keep a different epoch and stay.
+          if (staged)
+            void getIpcServices()
+              ?.design.settleNotes(
+                staged.artworkId,
+                staged.hostId,
+                staged.notesEpoch,
+                true,
+                staged.notesInstance
+              )
+              .catch(() => {});
           if (submittedVisualAnnotationReferences.length > 0) {
             void onVisualAnnotationReferencesSubmitted?.(submittedVisualAnnotationReferences);
           }
@@ -1699,6 +1857,7 @@ export const SessionChatInputArea = memo(
       pendingImages,
       pastedTextDrafts,
       publishCommentReferences,
+      publishStagedNotes,
       publishVisualAnnotationReferences,
       session.id,
       updatePastedTextDraftsForSession,
@@ -2037,6 +2196,23 @@ export const SessionChatInputArea = memo(
         designSelectionRemoveLabel={t('design.removeSelection', 'Remove selection')}
         onDesignSelectionRemove={
           submissionPending || isArchived ? undefined : () => setDesignSelectionState(null)
+        }
+        stagedNotesItem={
+          submissionPending || !stagedNotes
+            ? null
+            : {
+                label:
+                  stagedNotes.notes.length === 1
+                    ? t('design.notesCountOne', '1 comment')
+                    : t('design.notesCount', '{{count}} comments', {
+                        count: stagedNotes.notes.length,
+                      }),
+                comments: stagedNotes.notes,
+              }
+        }
+        stagedNotesRemoveLabel={t('design.removeStagedNotes', 'Remove staged comments')}
+        onStagedNotesRemove={
+          submissionPending || isArchived ? undefined : removeStagedDesignNotes
         }
         onVisualAnnotationReferenceRemove={
           submissionPending || isArchived ? undefined : removeVisualAnnotationReference

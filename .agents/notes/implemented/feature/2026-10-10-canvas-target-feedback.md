@@ -86,3 +86,6 @@ person had to compare by eye to see what moved.
 - Feedback appears only when the canvas is open at commit; a later attach reads
   the store without outlines.
 - Press-and-hold comparison with "Before Molly's edit" is not implemented.
+  (Implemented 2026-10-20 by
+  [canvas comment phase 3](2026-10-20-canvas-comment-stage-and-compare.md),
+  which renders the matching history entry offscreen into a memory-only frame.)

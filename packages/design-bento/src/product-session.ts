@@ -26,6 +26,7 @@ import {
 } from '@molly/shared/ui-icons';
 import { createElementHighlight } from './element-highlight';
 import { createNotePins } from './note-pins';
+import { createCompareOverlay } from './compare-overlay';
 import { createLayersPanel, type LayerElement } from './layers-panel';
 import { createSelectionToolbar } from './selection-toolbar';
 
@@ -98,18 +99,40 @@ export function createProductSession(options: {
       keepalive,
     });
   const request = async (input: unknown) => (await post(input)).json();
-  const publishNotes = async (notes: DesignNote[], keepalive: boolean) => {
-    const input = { type: 'notes-sync', notes };
+  const publishNotes = async (
+    notes: DesignNote[],
+    notesEpoch: number,
+    notesInstance: string,
+    keepalive: boolean
+  ) => {
+    const input = { type: 'notes-sync', notesEpoch, notesInstance, notes };
     const sendKeepalive =
       keepalive &&
       new TextEncoder().encode(JSON.stringify(input)).byteLength < DESIGN_NOTES_KEEPALIVE_BODY_LIMIT;
     const response = await post(input, sendKeepalive);
     if (!response.ok) throw Error(`Notes sync failed with status ${response.status}`);
   };
+  /** Main serves the freshly rendered saved artwork here while it reads an annotated snapshot. */
+  const snapshotImage = async () => {
+    const response = await fetch(`/ws/${encodeURIComponent(options.sessionId)}/notes-snapshot`);
+    if (!response.ok) throw Error(`Notes snapshot failed with status ${response.status}`);
+    const url = URL.createObjectURL(await response.blob());
+    const image = new Image();
+    image.src = url;
+    try {
+      await image.decode();
+    } catch (cause) {
+      URL.revokeObjectURL(url);
+      throw cause;
+    }
+    return { image, release: () => URL.revokeObjectURL(url) };
+  };
   const highlight = createElementHighlight();
+  const compare = createCompareOverlay();
   const pins = createNotePins({
     request,
     publish: publishNotes,
+    snapshotImage,
     selectedIds: () => selectedIds,
     elements: options.elements,
     highlight,
@@ -133,6 +156,7 @@ export function createProductSession(options: {
       toolbar.dispose();
       pins.dispose();
       highlight.dispose();
+      compare.dispose();
     },
     { once: true }
   );
@@ -569,6 +593,59 @@ export function createProductSession(options: {
     },
     { capture: true, signal: keys.signal }
   );
+  // Hold-to-compare: holding `\` asks main for the pre-turn frame it prepared
+  // after the last committed turn; releasing the key or losing focus hides it.
+  // The readonly input capture above swallows the key while a turn runs.
+  let compareHeld = false;
+  const releaseCompare = () => {
+    compareHeld = false;
+    compare.hide();
+  };
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (
+        event.key !== '\\' ||
+        compareHeld ||
+        event.repeat ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.isComposing ||
+        (event.target as Element | null)?.closest('input,textarea,[contenteditable="true"]')
+      )
+        return;
+      compareHeld = true;
+      void request({ type: 'compare' })
+        .then((result: unknown) => {
+          const frame =
+            typeof result === 'object' && result !== null && 'frame' in result
+              ? result.frame
+              : null;
+          const src =
+            typeof frame === 'object' &&
+            frame !== null &&
+            'src' in frame &&
+            typeof frame.src === 'string'
+              ? frame.src
+              : '';
+          if (src && compareHeld) compare.show(src);
+          else compareHeld = false;
+        })
+        .catch(() => {
+          compareHeld = false;
+        });
+    },
+    { capture: true, signal: keys.signal }
+  );
+  document.addEventListener(
+    'keyup',
+    (event) => {
+      if (event.key === '\\') releaseCompare();
+    },
+    { capture: true, signal: keys.signal }
+  );
+  window.addEventListener('blur', releaseCompare, { signal: keys.signal });
   document.addEventListener(
     'pointerdown',
     (event) => {
@@ -680,8 +757,8 @@ export function createProductSession(options: {
       notes(expected?: number) {
         return pins.read(expected);
       },
-      settleNotes(expected: number, sent: boolean) {
-        return pins.settle(expected, sent);
+      settleNotes(expected: number, sent: boolean, instance?: string | null) {
+        return pins.settle(expected, sent, typeof instance === 'string' && instance ? instance : undefined);
       },
       restoreNotes(notes: Parameters<typeof pins.restore>[0]) {
         pins.restore(notes);
@@ -691,6 +768,13 @@ export function createProductSession(options: {
       },
       marked(expected: number) {
         return pins.marked(expected);
+      },
+      annotateNotesSnapshot(expected: number) {
+        return pins.annotate(expected);
+      },
+      showCompare(src: string | null) {
+        if (typeof src === 'string' && src) compare.show(src);
+        else compare.hide();
       },
       state() {
         return {

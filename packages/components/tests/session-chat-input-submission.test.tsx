@@ -32,6 +32,11 @@ vi.mock('../src/hooks/use-code-collab-session-file-provider', () => ({
     message: null,
   }),
 }));
+vi.mock('../src/lib/session-image-upload', async (importOriginal) => ({
+  ...(await importOriginal()),
+  // Uploads never settle in jsdom; staged and dropped images stay 'uploading'.
+  uploadSessionReferenceImage: () => new Promise(() => {}),
+}));
 
 import {
   SessionChatInputArea,
@@ -751,6 +756,137 @@ describe('SessionChatInputArea submission feedback', () => {
       expect(accepted).toBe(false);
       expect(chip()).toBeNull();
       expect(textarea.value).toBe('focus regression draft');
+    });
+
+    it('refuses to stage when the image cap has no room for every attachment', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      const textarea = await renderComposer({ composerRef, onSendMessage: async () => true });
+      const image = () => new File([new Uint8Array([1])], 'a.png', { type: 'image/png' });
+      URL.createObjectURL = () => 'blob:stub';
+      URL.revokeObjectURL = () => {};
+      await act(async () => {
+        composerRef.current?.handleImageDrop(Array.from({ length: 7 }, image));
+      });
+      expect(container!.querySelectorAll('button[aria-label="a.png"]')).toHaveLength(7);
+      let staged: boolean | undefined;
+      await act(async () => {
+        staged = composerRef.current?.stageDesignNotes(
+          [{ reference, label: 'Note 1', prompt: 'Warmer.' }],
+          [
+            { intro: 'snapshot', image: image() },
+            { intro: 'region', image: image() },
+          ],
+          { artworkId: reference.artworkId, notesEpoch: 1, notesInstance: 'page-1' }
+        );
+      });
+      // One slot free, two attachments to stage: refuse whole, touch nothing.
+      expect(staged).toBe(false);
+      expect(container!.querySelector('[data-design-notes-ref]')).toBeNull();
+      expect(container!.querySelectorAll('button[aria-label="a.png"]')).toHaveLength(7);
+      expect(textarea.value).toBe('focus regression draft');
+    });
+
+    it('stages canvas notes as a chip that sends numbered with the draft', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      let sent: SessionInputBlock[] | undefined;
+      const settled: unknown[][] = [];
+      Object.assign(window, {
+        ipc: {
+          invoke: async (channel: string, ...args: unknown[]) => {
+            if (channel === 'design.settleNotes') settled.push(args);
+            return true;
+          },
+        },
+      });
+      try {
+        const textarea = await renderComposer({
+          composerRef,
+          sessionId: 'session-staged-notes',
+          onSendMessage: async (blocks) => {
+            sent = blocks;
+            return true;
+          },
+        });
+        const second = { ...reference, elementIds: ['photo'] };
+        const stagedChip = () => container!.querySelector('[data-design-notes-ref]');
+        await act(async () => {
+          expect(
+            composerRef.current?.stageDesignNotes(
+              [
+                { reference, label: 'Note 1', prompt: ' Warmer headline. ' },
+                { reference: second, label: 'Note 2', prompt: 'Crop tighter.' },
+              ],
+              [],
+              { artworkId: reference.artworkId, notesEpoch: 4, notesInstance: 'page-1' }
+            )
+          ).toBe(true);
+        });
+        expect(stagedChip()?.textContent).toContain('2 comments');
+        expect(textarea.value).toBe('focus regression draft');
+        await submit('keyboard');
+        expect(sent).toHaveLength(1);
+        const block = sent![0] as { type: string; text: string };
+        const lines = block.text.split('\n');
+        expect(lines).toHaveLength(3);
+        expect(lines[0]).toBe('focus regression draft');
+        expect(lines[1].startsWith('1. Warmer headline. <molly-elements>')).toBe(true);
+        expect(lines[2].startsWith('2. Crop tighter. <molly-elements>')).toBe(true);
+        expect(readDesignElementReferences(block.text)).toEqual([reference, second]);
+        expect(stagedChip()).toBeNull();
+        expect(textarea.value).toBe('');
+        // The accepted turn settles the staged epoch as sent, so the canvas
+        // clears pins that never changed since staging.
+        expect(settled).toEqual([[reference.artworkId, 'session-staged-notes', 4, true, 'page-1']]);
+      } finally {
+        delete (window as { ipc?: unknown }).ipc;
+      }
+    });
+
+    it('removes the staged chip without touching the draft or settling the pins', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      const settled: unknown[][] = [];
+      Object.assign(window, {
+        ipc: {
+          invoke: async (channel: string, ...args: unknown[]) => {
+            if (channel === 'design.settleNotes') settled.push(args);
+            return true;
+          },
+        },
+      });
+      try {
+        let sent: SessionInputBlock[] | undefined;
+        const textarea = await renderComposer({
+          composerRef,
+          sessionId: 'session-staged-remove',
+          onSendMessage: async (blocks) => {
+            sent = blocks;
+            return true;
+          },
+        });
+        await act(async () => {
+          expect(
+            composerRef.current?.stageDesignNotes(
+              [{ reference, label: 'Note 1', prompt: 'Warmer.' }],
+              [],
+              { artworkId: reference.artworkId, notesEpoch: 2, notesInstance: 'page-1' }
+            )
+          ).toBe(true);
+        });
+        const remove = () =>
+          container!.querySelector<HTMLButtonElement>(
+            '[data-design-notes-ref] button[aria-label="Remove staged comments"]'
+          );
+        expect(remove()).toBeTruthy();
+        await act(async () => remove()!.click());
+        expect(container!.querySelector('[data-design-notes-ref]')).toBeNull();
+        expect(textarea.value).toBe('focus regression draft');
+        await submit('keyboard');
+        expect(sent).toHaveLength(1);
+        expect((sent![0] as { text: string }).text).toBe('focus regression draft');
+        expect(settled).toEqual([]);
+      } finally {
+        delete (window as { ipc?: unknown }).ipc;
+      }
     });
   });
 

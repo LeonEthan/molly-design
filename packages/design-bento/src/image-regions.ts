@@ -94,6 +94,26 @@ export function regionAnchor(region: NoteRegion): NormalizedPoint {
   return regionOutline(region)[0];
 }
 
+/** The numbered badge radius for a marked copy or snapshot of the given edge. */
+export function noteBadgeRadius(edge: number) {
+  return Math.max(10, Math.round(edge * 0.018));
+}
+
+function paintBadge(context: Canvas2D, x: number, y: number, radius: number, number: number) {
+  context.beginPath();
+  context.arc(x, y, radius, 0, Math.PI * 2);
+  context.fillStyle = REGION_COLOR;
+  context.fill();
+  context.strokeStyle = '#ffffff';
+  context.lineWidth = Math.max(2, radius / 6);
+  context.stroke();
+  context.fillStyle = '#ffffff';
+  context.font = `700 ${Math.round(radius * 1.1)}px Inter, system-ui, sans-serif`;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(String(number), x, y);
+}
+
 export function drawNoteRegions(
   context: Canvas2D,
   regions: readonly { badge: number; region: NoteRegion }[],
@@ -102,7 +122,7 @@ export function drawNoteRegions(
 ) {
   const edge = Math.max(width, height);
   const line = Math.max(3, Math.round(edge * 0.005));
-  const badge = Math.max(10, Math.round(edge * 0.018));
+  const badge = noteBadgeRadius(edge);
   regions.forEach(({ badge: number, region }) => {
     const points = regionOutline(region).map(
       ([u, v]): NormalizedPoint => [u * width, v * height]
@@ -121,18 +141,42 @@ export function drawNoteRegions(
     context.lineWidth = line;
     context.stroke();
     const [x, y] = points[0];
-    context.beginPath();
-    context.arc(x, y, badge, 0, Math.PI * 2);
-    context.fillStyle = REGION_COLOR;
-    context.fill();
-    context.strokeStyle = '#ffffff';
-    context.lineWidth = Math.max(2, badge / 6);
-    context.stroke();
-    context.fillStyle = '#ffffff';
-    context.font = `700 ${Math.round(badge * 1.1)}px Inter, system-ui, sans-serif`;
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText(String(number), x, y);
+    paintBadge(context, x, y, badge, number);
+  });
+}
+
+/**
+ * One note's annotation on the whole-artwork snapshot, already projected into
+ * snapshot pixels: every note gets its numbered badge; a region note also gets
+ * its outline. Badge and stroke sizes follow the snapshot edge, matching the
+ * marked-copy style at any canvas size.
+ */
+export function drawNoteAnnotations(
+  context: Canvas2D,
+  notes: readonly { badge: number; at: NormalizedPoint; outline?: NormalizedPoint[]; closed?: boolean }[],
+  width: number,
+  height: number
+) {
+  const edge = Math.max(width, height);
+  const line = Math.max(3, Math.round(edge * 0.005));
+  const badge = noteBadgeRadius(edge);
+  notes.forEach((note) => {
+    if (note.outline?.length) {
+      context.beginPath();
+      note.outline.forEach(([x, y], index) =>
+        index ? context.lineTo(x, y) : context.moveTo(x, y)
+      );
+      if (note.closed) context.closePath();
+      context.lineJoin = 'round';
+      context.lineCap = 'round';
+      context.strokeStyle = '#ffffff';
+      context.lineWidth = line + 4;
+      context.stroke();
+      context.strokeStyle = REGION_COLOR;
+      context.lineWidth = line;
+      context.stroke();
+    }
+    paintBadge(context, note.at[0], note.at[1], badge, note.badge);
   });
 }
 

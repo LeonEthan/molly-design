@@ -51,12 +51,20 @@ export type IpcPushMap = {
         action: 'notes';
         notes: { reference: DesignElementReference; prompt: string; region?: true }[];
         notesEpoch: number;
+        /** Identity of the canvas page that produced the notes; epochs restart on recreation. */
+        notesInstance: string;
+        /** stage: park in the composer as a draft instead of sending a turn at once. */
+        stage?: boolean;
         /** Marked copy of the one image that region notes mark, numbered to match them. */
         image?: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array };
+        /** Whole-artwork snapshot with each note's number drawn where it sits. */
+        snapshot?: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array };
       };
   'design.selection': {
     hostId: string;
   } & DesignSelectionSummary;
+  /** A pre-turn frame for hold-to-compare was prepared or invalidated in main. */
+  'design.compare': { artworkId: string; available: boolean };
   'loro.event': LocalLoroDataPlaneServerMessage;
   'loro.status': boolean;
   'cli.output': CliOutputEvent;
@@ -85,6 +93,7 @@ export const IPC_PUSH_CHANNELS = {
   designPreview: 'design.preview',
   designSelection: 'design.selection',
   designSelectionAction: 'design.selectionAction',
+  designCompare: 'design.compare',
   loroEvent: 'loro.event',
   loroStatus: 'loro.status',
   cliOutput: 'cli.output',

@@ -7,6 +7,7 @@ import { readLocalPlatformSnapshot } from '../platform'
 import type { CliService } from './cli-service'
 import {
   designCanvasAccess,
+  invalidateDesignCompare,
   notifyDesignState,
   setDesignCanvasStateQuery,
   syncDesignCanvasFromStore
@@ -19,6 +20,7 @@ export function startDesignCanvasHost(cli: CliService): () => void {
   let pending: Promise<void> | undefined
   let stopped = false
   let lastState = ''
+  let activeArtworks = new Set<string>()
   const exchange = (): Promise<void> => {
     if (pending) return pending
     pending = (async () => {
@@ -37,12 +39,16 @@ export function startDesignCanvasHost(cli: CliService): () => void {
         const response = DesignCanvasHostResultSchema.parse(result.result)
         if (!machineSupportsDesignCanvasSerialEditing(response.machine))
           throw Error('Daemon does not support serial canvas editing')
+        // A turn starting supersedes any prepared hold-to-compare frame.
+        const nextActive = new Set(response.active.map((state) => state.artworkId))
+        for (const id of nextActive) if (!activeArtworks.has(id)) invalidateDesignCompare(id)
+        activeArtworks = nextActive
         let released = false
         reports = [
           ...reports.slice(100),
           ...(await designCanvasAccess.update(response.active, async (id) => {
             refreshDesignThumbnailInBackground(id)
-            await syncDesignCanvasFromStore(id)
+            await syncDesignCanvasFromStore(id, undefined, { compare: true })
             released = true
           }))
         ]

@@ -1357,6 +1357,11 @@ export type SessionChatInterfaceHandle = {
     notes: readonly { reference: DesignElementReference; label: string; prompt: string }[],
     attachment?: { intro: string; image: File }
   ) => Promise<boolean>;
+  stageDesignNotes: (
+    notes: readonly { reference: DesignElementReference; label: string; prompt: string }[],
+    attachments: readonly { intro: string; image: File }[],
+    meta: { artworkId: string; notesEpoch: number; notesInstance: string }
+  ) => boolean;
   insertSessionMention: (sessionId: string) => boolean;
 };
 
@@ -3518,6 +3523,8 @@ export const SessionChatInterface = memo(
           false,
         sendDesignNotes: async (notes, attachment) =>
           (await inputAreaRef.current?.sendDesignNotes(notes, attachment)) ?? false,
+        stageDesignNotes: (notes, attachments, meta) =>
+          inputAreaRef.current?.stageDesignNotes(notes, attachments, meta) ?? false,
         insertSessionMention: (sessionId: string) => {
           return inputAreaRef.current?.insertSessionMention(sessionId) ?? false;
         },

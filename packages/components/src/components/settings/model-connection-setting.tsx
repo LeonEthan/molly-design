@@ -272,6 +272,7 @@ export function ModelConnectionForm({
   onOpenAiAuth,
   onDelete,
   pinActions = false,
+  grow = true,
 }: {
   stored?: ModelConnection;
   initialProvider?: ProviderPresetId;
@@ -292,6 +293,7 @@ export function ModelConnectionForm({
   onDelete?: () => void;
   /** Keep Connect/Save visible and scroll the fields above it. */
   pinActions?: boolean;
+  grow?: boolean;
 }) {
   const { t } = useTranslation();
   const id = useId();
@@ -633,7 +635,13 @@ export function ModelConnectionForm({
   ) : null;
   return (
     <form
-      className={pinActions ? 'flex h-full min-h-0 flex-1 flex-col' : 'space-y-5 p-5'}
+      className={
+        pinActions
+          ? grow
+            ? 'flex h-full min-h-0 flex-1 flex-col'
+            : 'flex min-h-0 flex-col'
+          : 'space-y-5 p-5'
+      }
       onSubmit={(event) => void submit(event)}
     >
       <div
@@ -1320,6 +1328,7 @@ export function ModelConnectionSetting({
           ) : ready && connections.length === 0 ? (
             <ModelConnectionForm
               key="first"
+              grow={false}
               pinActions={variant === 'panel'}
               catalog={catalog}
               metadataSnapshot={metadataSnapshot}

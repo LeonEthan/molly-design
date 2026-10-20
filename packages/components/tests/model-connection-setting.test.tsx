@@ -1053,7 +1053,7 @@ describe('connection management', () => {
     expect(host.querySelector<HTMLInputElement>('[id$="-name"]')?.value).toBe('Saved 4');
   });
 
-  it('does not let an empty connection list claim card space from the first form', async () => {
+  it('keeps the first form content-sized without empty list space or stretched footer spacing', async () => {
     connectionIpc.getSnapshot.mockResolvedValue({ connections: [] });
     await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
     const list = host.querySelector('[data-connection-list]');
@@ -1067,7 +1067,11 @@ describe('connection management', () => {
     expect(classes).not.toContain('flex-1');
     expect(classes).not.toContain('grow');
     const form = host.querySelector('form');
-    expect(form?.className).toContain('flex-1');
+    const formClasses = () => host.querySelector('form')?.className.split(/\s+/) ?? [];
+    expect(formClasses()).not.toContain('flex-1');
+    expect(formClasses()).not.toContain('h-full');
+    expect(formClasses()).not.toContain('grow');
+    expect(formClasses()).toContain('min-h-0');
     expect(list?.nextElementSibling).toBe(form);
     const footer = () => host.querySelector('[data-drawer-footer]');
     expect(footer()?.textContent).toContain(en['settings.models.connect']);
@@ -1083,6 +1087,11 @@ describe('connection management', () => {
       await act(async () => tile(provider).click());
       expect(footer()?.textContent).toContain(en['settings.models.connect']);
       expect(body()?.contains(footer() ?? null)).toBe(false);
+      expect(formClasses()).not.toContain('flex-1');
+      expect(formClasses()).not.toContain('h-full');
+      expect(formClasses()).not.toContain('grow');
+      expect(body()?.className).toContain('min-h-0');
+      expect(body()?.className).toContain('overflow-y-auto');
       expect(host.querySelector('[data-connection-list]')?.className).not.toContain('flex-1');
       await act(async () =>
         [...host.querySelectorAll<HTMLButtonElement>('button')]

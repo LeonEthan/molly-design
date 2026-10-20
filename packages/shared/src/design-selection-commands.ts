@@ -9,6 +9,8 @@ import { z } from 'zod';
 
 export const DESIGN_SELECTION_BODY_LIMIT = 8192;
 export const DESIGN_NOTES_SYNC_BODY_LIMIT = 256 * 1024;
+/** Chromium rejects keepalive request bodies above 64 KiB; only the pagehide flush sends keepalive. */
+export const DESIGN_NOTES_KEEPALIVE_BODY_LIMIT = 64 * 1024;
 export const DESIGN_SELECTION_SUMMARY_ELEMENTS_MAX = 8;
 
 export const DESIGN_ELEMENT_KINDS = [
@@ -214,6 +216,11 @@ export const DesignMarkedImageSchema = z
 export type DesignMarkedImage = z.infer<typeof DesignMarkedImageSchema>;
 
 const unitInterval = z.number().finite().min(0).max(1);
+/**
+ * Points in notes are rounded to this many decimals on the canvas. At 1e-4 of a 4096 px edge
+ * the rounding error is 0.4 px, so the rounded point still lands on the same pixel.
+ */
+export const DESIGN_NOTE_COORDINATE_DECIMALS = 4;
 const NormalizedPointSchema = z.tuple([unitInterval, unitInterval]);
 
 /**

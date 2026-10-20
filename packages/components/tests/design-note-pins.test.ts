@@ -28,6 +28,8 @@ vi.mock('../../design-bento/src/image-regions', async (importOriginal) => {
 let pins: ReturnType<typeof createNotePins>;
 let requests: DesignToolbarRequest[];
 let published: { elementIds: string[]; prompt: string }[][];
+let keepalives: boolean[];
+let publishFailures: number;
 let events: string[];
 let highlights: HighlightGroup[][];
 let selected: string[];
@@ -107,6 +109,8 @@ beforeEach(() => {
     });
   requests = [];
   published = [];
+  keepalives = [];
+  publishFailures = 0;
   events = [];
   highlights = [];
   selected = [];
@@ -117,9 +121,14 @@ beforeEach(() => {
       events.push(input.type);
       return { ok: true };
     },
-    publish: async (notes) => {
+    publish: async (notes, keepalive) => {
       published.push(notes);
+      keepalives.push(keepalive);
       events.push('publish');
+      if (publishFailures > 0) {
+        publishFailures--;
+        throw Error('Canvas sync failed');
+      }
       return { ok: true };
     },
     selectedIds: () => selected,
@@ -660,6 +669,43 @@ it('publishes pending notes at once when the canvas is disposed', () => {
   pins.add(['title'], 'Warmer');
   pins.dispose();
   expect(published).toEqual([[{ elementIds: ['title'], prompt: 'Warmer' }]]);
+});
+
+it('uses keepalive only for the dispose flush, never for a normal publish', async () => {
+  pins.add(['title'], 'Warmer');
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  await flushMicrotasks();
+  pins.add(['photo'], 'Crop tighter');
+  pins.dispose();
+  expect(keepalives).toEqual([false, true]);
+});
+
+it('flushes text still inside the debounce window, so a teardown keeps the latest text', async () => {
+  press(element('title').querySelector('span')!, { metaKey: true, clientX: 150, clientY: 300 });
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  await flushMicrotasks();
+  type('Warmer headline');
+  await pins.flushUnsent();
+  expect(published.at(-1)?.[0]).toMatchObject({ elementIds: ['title'], prompt: 'Warmer headline' });
+});
+
+it('flushes an emptied tray inside the debounce window, so a teardown keeps the notes cleared', async () => {
+  pins.add(['title'], 'Warmer');
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  await flushMicrotasks();
+  button('Clear all notes').click();
+  await pins.flushUnsent();
+  expect(published.at(-1)).toEqual([]);
+});
+
+it('keeps unpublished notes after a failed publish and retries on the next flush', async () => {
+  pins.add(['title'], 'Warmer');
+  publishFailures = 1;
+  await pins.flushUnsent();
+  expect(published).toHaveLength(1);
+  await pins.flushUnsent();
+  expect(published).toHaveLength(2);
+  expect(published.at(-1)).toMatchObject([{ elementIds: ['title'], prompt: 'Warmer' }]);
 });
 
 it('does not publish on dispose when nothing changed since the canvas loaded', () => {

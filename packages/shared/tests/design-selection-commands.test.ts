@@ -7,6 +7,7 @@ import {
   DesignSelectionSummarySchema,
   DesignToolbarRequestSchema,
   DESIGN_ASK_PROMPT_MAX,
+  DESIGN_NOTES_SYNC_BODY_LIMIT,
   DESIGN_SELECTION_BODY_LIMIT,
   DesignToolbarPresentationSchema,
   DesignHighlightSchema,
@@ -492,5 +493,20 @@ describe('canvas notes sync', () => {
     ];
     for (const input of invalid)
       expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
+  });
+});
+
+describe('notes-sync body size', () => {
+  it('a worst-case sync body stays under the sync limit and the schema accepts it', () => {
+    const point = [0.1234, 0.5678] as const;
+    const stroke = Array.from({ length: DESIGN_STROKE_POINTS_MAX }, () => [...point]);
+    const notes = Array.from({ length: DESIGN_NOTES_MAX }, () => ({
+      elementIds: ['photo'],
+      prompt: 'x'.repeat(DESIGN_ASK_PROMPT_MAX),
+      region: { kind: 'stroke' as const, points: stroke },
+    }));
+    const body = JSON.stringify({ type: 'notes-sync', notes });
+    expect(new TextEncoder().encode(body).byteLength).toBeLessThan(DESIGN_NOTES_SYNC_BODY_LIMIT);
+    expect(DesignNotesSchema.safeParse(notes).success).toBe(true);
   });
 });

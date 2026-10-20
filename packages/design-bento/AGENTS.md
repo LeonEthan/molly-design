@@ -31,10 +31,20 @@ an empty one is dropped) and returns to select for either tool; Escape during IM
 does not exit, and `V` typed in the editor is text. Both keys are consumed in the
 capture phase so Bento's legacy `c` handler never sees them. Unsent pins are pushed to main
 (`notes-sync` on `/ws/<id>/toolbar`) after every change, debounced by `NOTE_PUBLISH_DEBOUNCE_MS`
-through an injectable clock and flushed on dispose (`pagehide`). Main keeps the last valid push per
-artwork and host (`design-note-retention-core.ts`); an invalid push is rejected by the request
-schema and leaves that copy. Nothing is read from the page on reload, so a crashed frame loses
-nothing already published. Every attach restores the copy with `window.molly.restoreNotes`, which
+through an injectable clock. Every publish is an awaited POST; only the dispose flush (`pagehide`)
+uses `keepalive`, and only when the body is under `DESIGN_NOTES_KEEPALIVE_BODY_LIMIT` (64 KiB,
+Chromium's keepalive cap). A failed publish keeps the pending flag, so the next change or flush
+retries. Points are rounded to `DESIGN_NOTE_COORDINATE_DECIMALS` (4) on the canvas; that is 0.4 px
+at a 4096 px edge. The largest body the schema admits (10 notes, 200-point strokes, 4000-character
+prompts) is about 73 KB, above the keepalive cap, so that case relies on the awaited POST and the
+pagehide flush can be dropped by the browser. Main-driven teardown (reload, conflict reload,
+version restore, discard, copy) first calls `window.molly.flushNotes()` through
+`retireDesignInstance`, bounded by `DESIGN_NOTES_FLUSH_TIMEOUT_MS` (1500 ms); a failed or timed-out
+flush keeps the last published copy and still tears the instance down. A failed initial load tears
+down without a flush, because that page never became ready and holds no unsent notes. Main keeps
+the last valid push per artwork and host (`design-note-retention-core.ts`); an invalid push is
+rejected by the request schema and leaves that copy. A crashed frame cannot be asked to flush, so
+it loses only edits made since its last successful publish. Every attach restores the copy with `window.molly.restoreNotes`, which
 merges into the pins, prunes missing targets and never fails the attach. A failed restore keeps the
 copy for the next attach. A pending publish is never sent while a send is in flight, so a reload
 cannot put sent notes back. Sending flushes the latest state first; main then moves the copy into

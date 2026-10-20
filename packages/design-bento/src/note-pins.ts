@@ -1,6 +1,7 @@
 import {
   DESIGN_ASK_PROMPT_MAX,
   DESIGN_MARKED_IMAGE_MAX_BYTES,
+  DESIGN_NOTE_COORDINATE_DECIMALS,
   DESIGN_NOTES_MAX,
   type DesignMarkedImage,
   type DesignNote,
@@ -69,7 +70,7 @@ const moved = (origin: { x: number; y: number }, event: { clientX: number; clien
  */
 export function createNotePins(options: {
   request(input: DesignToolbarRequest): Promise<{ ok: boolean; error?: string }>;
-  publish?(notes: DesignNote[]): Promise<unknown>;
+  publish?(notes: DesignNote[], keepalive: boolean): Promise<unknown>;
   selectedIds(): readonly string[];
   elements(): readonly { id: string; kind: string }[];
   highlight?: { show(groups: readonly HighlightGroup[]): void };
@@ -154,7 +155,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     clock.clearTimeout(publishTimer);
     publishTimer = clock.setTimeout(() => void flush(false), NOTE_PUBLISH_DEBOUNCE_MS);
   };
-  async function flush(force: boolean) {
+  async function flush(force: boolean, keepalive = false) {
     clock.clearTimeout(publishTimer);
     publishTimer = undefined;
     for (let pending = inFlight; pending; pending = inFlight) await pending;
@@ -162,7 +163,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     if (!publish || !unpublished || (busy && !force)) return;
     unpublished = false;
     const notes = snapshot();
-    const sending = (async () => publish(notes))().then(
+    const sending = (async () => publish(notes, keepalive))().then(
       () => undefined,
       () => {
         unpublished = true;
@@ -636,11 +637,17 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
   window.addEventListener('resize', () => editing && placeEditor(), { signal });
 
   const sentNotes = () => pins.filter((pin) => pin.text.trim());
+  const roundCoordinate = (value: number) => Number(value.toFixed(DESIGN_NOTE_COORDINATE_DECIMALS));
+  const roundPoint = ([x, y]: NormalizedPoint): NormalizedPoint => [roundCoordinate(x), roundCoordinate(y)];
+  const roundRegion = (region: NoteRegion): NoteRegion =>
+    region.kind === 'box'
+      ? { ...region, from: roundPoint(region.from), to: roundPoint(region.to) }
+      : { ...region, points: region.points.map(roundPoint) };
   const toNote = (pin: Pin): DesignNote => ({
     elementIds: [...pin.elementIds],
     prompt: pin.text.trim(),
-    ...(pin.pin ? { pin: { elementId: pin.pin.elementId, at: [...pin.pin.at] as NormalizedPoint } } : {}),
-    ...(pin.region ? { region: pin.region } : {}),
+    ...(pin.pin ? { pin: { elementId: pin.pin.elementId, at: roundPoint(pin.pin.at) } } : {}),
+    ...(pin.region ? { region: roundRegion(pin.region) } : {}),
   });
 
   return {
@@ -730,8 +737,11 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
       presentation = value;
       render();
     },
+    flushUnsent() {
+      return flush(false);
+    },
     dispose() {
-      void flush(false);
+      void flush(false, true);
       controller.abort();
       cancelAnimationFrame(frame);
       clearHover();

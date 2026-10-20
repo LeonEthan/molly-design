@@ -54,7 +54,7 @@ import {
   type CanvasReadonlyReason
 } from './design-canvas-access'
 import { drainRelevantLoads } from './design-leave-drain-core'
-import { createRetainedNotes } from './design-note-retention-core'
+import { createRetainedNotes, flushBeforeTeardown } from './design-note-retention-core'
 import { waitForCanvasReady } from './design-canvas-ready-core'
 import { acquireDesignSession } from './design-session'
 import { translateUi } from '../ui-locale'
@@ -544,6 +544,16 @@ function destroyDesignInstance(key: string) {
   if (!record.owner.isDestroyed()) record.owner.contentView.removeChildView(record.view)
   record.dispose()
 }
+const DESIGN_NOTES_FLUSH_TIMEOUT_MS = 1500
+async function retireDesignInstance(key: string) {
+  const record = records.get(key)
+  if (record)
+    await flushBeforeTeardown(
+      () => record.view.webContents.executeJavaScript('window.molly?.flushNotes?.()'),
+      DESIGN_NOTES_FLUSH_TIMEOUT_MS
+    )
+  destroyDesignInstance(key)
+}
 export function destroyDesign(id: string) {
   for (const [key, record] of records) if (record.artworkId === id) destroyDesignInstance(key)
 }
@@ -920,7 +930,7 @@ async function reloadDesignCanvas(id: string, hostId?: string) {
   for (const [key, record] of entries) {
     const visible = hosts.has(key)
     const bounds = record.view.getBounds()
-    destroyDesignInstance(key)
+    await retireDesignInstance(key)
     if (visible) await attachDesign(record.owner, id, bounds, key, false)
   }
   return Array.isArray(before?.elements) ? (before as { elements: { id: string }[] }) : null
@@ -970,7 +980,7 @@ export async function leaveDesign(id: string, hostId?: string): Promise<boolean>
       })
       if (answer.response === 1) {
         if (!(await leaveDesign(id, key))) return false
-      } else if (answer.response === 2) destroyDesignInstance(key)
+      } else if (answer.response === 2) await retireDesignInstance(key)
       else {
         await unfreezeDesigns()
         return false
@@ -1196,7 +1206,7 @@ export async function finishDesignCopy(sourceId: string, targetId: string, hostI
   const saved = await designRequest({ operation: 'read', sessionId: targetId })
   if (!isDeepStrictEqual(current.doc, saved.doc))
     throw Error('Drawing changed during copy; save the newer edits before leaving')
-  destroyDesignInstance(key)
+  await retireDesignInstance(key)
 }
 export async function renameDesign(id: string, name: string) {
   await saveDesign(id)

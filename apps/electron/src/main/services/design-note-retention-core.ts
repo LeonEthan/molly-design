@@ -1,3 +1,31 @@
+export type TeardownClock = {
+  setTimeout(run: () => void, ms: number): unknown
+  clearTimeout(handle: unknown): void
+}
+
+export async function flushBeforeTeardown(
+  flush: () => Promise<unknown>,
+  timeoutMs: number,
+  clock: TeardownClock = {
+    setTimeout: (run, ms) => setTimeout(run, ms),
+    clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>)
+  }
+): Promise<boolean> {
+  let timer: unknown
+  const timeout = new Promise<false>((resolve) => {
+    timer = clock.setTimeout(() => resolve(false), timeoutMs)
+  })
+  const flushed = flush().then(
+    () => true,
+    () => false
+  )
+  try {
+    return await Promise.race([flushed, timeout])
+  } finally {
+    clock.clearTimeout(timer)
+  }
+}
+
 export function createRetainedNotes<T>({ max }: { max: number }) {
   const copies = new Map<string, readonly T[]>()
   const flights = new Map<string, { epoch: number; notes: readonly T[] }>()

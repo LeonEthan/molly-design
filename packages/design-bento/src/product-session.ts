@@ -1,7 +1,9 @@
-import type {
-  DesignHighlight,
-  DesignSelectionSummary,
-  DesignToolbarPresentation,
+import {
+  DESIGN_NOTES_KEEPALIVE_BODY_LIMIT,
+  type DesignHighlight,
+  type DesignNote,
+  type DesignSelectionSummary,
+  type DesignToolbarPresentation,
 } from '@molly/shared/design-selection-commands';
 import {
   arrowShapeIcon,
@@ -96,10 +98,18 @@ export function createProductSession(options: {
       keepalive,
     });
   const request = async (input: unknown) => (await post(input)).json();
+  const publishNotes = async (notes: DesignNote[], keepalive: boolean) => {
+    const input = { type: 'notes-sync', notes };
+    const sendKeepalive =
+      keepalive &&
+      new TextEncoder().encode(JSON.stringify(input)).byteLength < DESIGN_NOTES_KEEPALIVE_BODY_LIMIT;
+    const response = await post(input, sendKeepalive);
+    if (!response.ok) throw Error(`Notes sync failed with status ${response.status}`);
+  };
   const highlight = createElementHighlight();
   const pins = createNotePins({
     request,
-    publish: (notes) => post({ type: 'notes-sync', notes }, true),
+    publish: publishNotes,
     selectedIds: () => selectedIds,
     elements: options.elements,
     highlight,
@@ -675,6 +685,9 @@ export function createProductSession(options: {
       },
       restoreNotes(notes: Parameters<typeof pins.restore>[0]) {
         pins.restore(notes);
+      },
+      flushNotes() {
+        return pins.flushUnsent();
       },
       marked(expected: number) {
         return pins.marked(expected);

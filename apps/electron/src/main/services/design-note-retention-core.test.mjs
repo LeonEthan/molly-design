@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createRetainedNotes } from './design-note-retention-core.ts'
+import { createRetainedNotes, flushBeforeTeardown } from './design-note-retention-core.ts'
 
 const note = (prompt, elementId = 'title') => ({ elementIds: [elementId], prompt })
 const retainedFor = (max = 10) => createRetainedNotes({ max })
@@ -113,4 +113,50 @@ void test('a restore is skipped when nothing is retained', async () => {
     calls += 1
   })
   assert.equal(calls, 0)
+})
+
+void test('a flush that never settles times out, keeps the last copy, and reports failure', async () => {
+  const retained = retainedFor()
+  retained.publish('artwork:host-a', [note('Warmer')])
+  const timers = []
+  const clock = {
+    setTimeout: (run, ms) => {
+      const timer = { run, ms, cleared: false }
+      timers.push(timer)
+      return timer
+    },
+    clearTimeout: (timer) => {
+      timer.cleared = true
+    }
+  }
+  const pending = flushBeforeTeardown(() => new Promise(() => {}), 1500, clock)
+  assert.equal(timers.length, 1)
+  assert.equal(timers[0].ms, 1500)
+  timers[0].run()
+  assert.equal(await pending, false)
+  assert.deepEqual(retained.peek('artwork:host-a'), [note('Warmer')])
+})
+
+void test('a flush that settles in time reports success and clears its timer', async () => {
+  const timers = []
+  const clock = {
+    setTimeout: (run, ms) => {
+      const timer = { run, ms, cleared: false }
+      timers.push(timer)
+      return timer
+    },
+    clearTimeout: (timer) => {
+      timer.cleared = true
+    }
+  }
+  assert.equal(await flushBeforeTeardown(async () => {}, 1500, clock), true)
+  assert.equal(timers[0].cleared, true)
+})
+
+void test('a flush that rejects reports failure without waiting for the timeout', async () => {
+  const clock = { setTimeout: () => 0, clearTimeout: () => {} }
+  assert.equal(
+    await flushBeforeTeardown(() => Promise.reject(Error('Retired canvas')), 1500, clock),
+    false
+  )
 })

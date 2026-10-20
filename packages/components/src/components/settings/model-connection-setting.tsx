@@ -1022,7 +1022,7 @@ const panelListClass = (variant: 'section' | 'panel', editing: Editing): string 
   if (editing !== null && !isNew(editing))
     return `flex min-h-0 flex-1 flex-col overflow-hidden ${PANEL_LIST}`;
   if (isNew(editing)) return `min-h-0 shrink overflow-y-auto ${PANEL_LIST}`;
-  return `min-h-0 flex-1 overflow-y-auto ${PANEL_LIST}`;
+  return `min-h-0 overflow-y-auto ${PANEL_LIST}`;
 };
 
 const panelSiblingListClass = 'min-h-0 shrink overflow-y-auto divide-y divide-border/40';
@@ -1246,7 +1246,7 @@ export function ModelConnectionSetting({
               {t('settings.models.loading')}
             </p>
           )}
-          <div className={panelListClass(variant, editing)}>
+          <div data-connection-list="" className={panelListClass(variant, editing)}>
             {editingPanelConnection && editingPanelIndex >= 0 ? (
               <>
                 {connections.slice(0, editingPanelIndex).length > 0 ? (

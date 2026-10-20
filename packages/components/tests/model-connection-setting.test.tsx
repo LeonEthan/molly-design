@@ -1019,7 +1019,11 @@ describe('connection management', () => {
       expect(classes).toContain('min-h-0');
       expect(classes).toContain('shrink');
       expect(classes).not.toContain('shrink-0');
+      expect(classes).not.toContain('flex-1');
+      expect(classes).not.toContain('grow');
     }
+    const stack = host.querySelector('[data-connection-list]');
+    expect(stack?.className).toContain('flex-1');
     expect(lists[0]?.textContent).toContain('Saved 1');
     expect(lists[0]?.textContent).toContain('Saved 3');
     expect(lists[1]?.textContent).toContain('Saved 5');
@@ -1034,6 +1038,65 @@ describe('connection management', () => {
     expect(lists.some((list) => list.contains(slot ?? null))).toBe(false);
     await openMoreOptions();
     expect(host.querySelector<HTMLInputElement>('[id$="-name"]')?.value).toBe('Saved 4');
+  });
+
+  it('does not let an empty connection list claim card space from the first form', async () => {
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [] });
+    await act(async () =>
+      root.render(createElement(ModelConnectionSetting, { variant: 'panel' }))
+    );
+    const list = host.querySelector('[data-connection-list]');
+    expect(list).not.toBeNull();
+    expect(list?.textContent).toBe('');
+    const classes = list?.className.split(/\s+/) ?? [];
+    expect(classes).toContain('min-h-0');
+    expect(classes).toContain('overflow-y-auto');
+    expect(classes).not.toContain('flex-1');
+    expect(classes).not.toContain('grow');
+    const form = host.querySelector('form');
+    expect(form?.className).toContain('flex-1');
+    expect(list?.nextElementSibling).toBe(form);
+    const footer = () => host.querySelector('[data-drawer-footer]');
+    expect(footer()?.textContent).toContain(en['settings.models.connect']);
+    const body = () => host.querySelector('[data-drawer-body]');
+    const tile = (label: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((node) =>
+        node.textContent?.endsWith(label)
+      )!;
+    for (const provider of [
+      en['settings.models.providers.deepseek'],
+      en['settings.models.compatible'],
+    ]) {
+      await act(async () => tile(provider).click());
+      expect(footer()?.textContent).toContain(en['settings.models.connect']);
+      expect(body()?.contains(footer() ?? null)).toBe(false);
+      expect(host.querySelector('[data-connection-list]')?.className).not.toContain('flex-1');
+      await act(async () =>
+        [...host.querySelectorAll<HTMLButtonElement>('button')]
+          .find((button) => button.textContent === en['settings.models.allProviders'])!
+          .click()
+      );
+    }
+  });
+
+  it('does not grow an idle saved-connection list into the card', async () => {
+    const second: ModelConnection = {
+      ...stored,
+      id: '00000000-0000-4000-8000-000000000002',
+      displayName: 'Second',
+    };
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [stored, second] });
+    await act(async () =>
+      root.render(createElement(ModelConnectionSetting, { variant: 'panel' }))
+    );
+    const list = host.querySelector('[data-connection-list]');
+    expect(list?.textContent).toContain('Synthetic');
+    expect(list?.textContent).toContain('Second');
+    const classes = list?.className.split(/\s+/) ?? [];
+    expect(classes).toContain('min-h-0');
+    expect(classes).toContain('overflow-y-auto');
+    expect(classes).not.toContain('flex-1');
+    expect(classes).not.toContain('grow');
   });
 
   it('deletes a connection only after confirmation and removes its row', async () => {

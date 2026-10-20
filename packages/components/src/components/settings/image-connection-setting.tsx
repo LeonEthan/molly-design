@@ -35,6 +35,7 @@ import {
 } from '@/ui/dropdown-menu';
 import {
   ChevronDown,
+  CircleAlert,
   CircleCheck,
   Ellipsis,
   Image as ImageIcon,
@@ -62,40 +63,29 @@ type ImageConnectionView = Pick<
   'enabled' | 'protocol' | 'baseUrl' | 'model' | 'hasApiKey'
 >;
 
-const PROTOCOL_COPY: Record<
-  ImageConnectionProtocol,
-  { label: string; baseUrlHint: string; defaultBaseUrl: string }
-> = {
+const PROTOCOL_COPY: Record<ImageConnectionProtocol, { label: string; baseUrlHint: string }> = {
   'openai-images': {
     label: 'settings.imageConnection.protocols.openaiImages',
     baseUrlHint: 'settings.imageConnection.baseUrlHint',
-    defaultBaseUrl: 'https://api.openai.com/v1',
   },
   dashscope: {
     label: 'settings.imageConnection.protocols.dashscope',
     baseUrlHint: 'settings.imageConnection.baseUrlHintDashscope',
-    defaultBaseUrl: 'https://dashscope.aliyuncs.com/api/v1',
   },
 };
 
 export const imageProtocolLabelKey = (connection: Pick<ImageConnectionView, 'protocol'>) =>
   PROTOCOL_COPY[imageConnectionProtocol(connection)].label;
 
-const isProtocolDefaultBaseUrl = (protocol: ImageConnectionProtocol, baseUrl: string) =>
-  baseUrl.trim().replace(/\/+$/, '') === PROTOCOL_COPY[protocol].defaultBaseUrl;
-
 /**
- * Switching the connection type moves a suggested or empty address to the new
- * type's documented root, but never replaces an address the user typed.
+ * Switching the connection type keeps the address already in the field.
+ * An empty address stays empty — the field has no vendor default to swap in.
  */
 export function applyImageProtocolChoice(
   draft: ImageConnectionFormDraft,
   protocol: ImageConnectionProtocol
 ): ImageConnectionFormDraft {
-  const suggested =
-    draft.baseUrl.trim() === '' || isProtocolDefaultBaseUrl(draft.protocol, draft.baseUrl);
-  const baseUrl = suggested ? PROTOCOL_COPY[protocol].defaultBaseUrl : draft.baseUrl;
-  return { ...draft, protocol, baseUrl, apiKey: baseUrl === draft.baseUrl ? draft.apiKey : '' };
+  return { ...draft, protocol };
 }
 
 export type ImageConnectionFormDraft = {
@@ -120,7 +110,7 @@ export function createImageConnectionFormDraft(
   return {
     enabled: stored?.enabled ?? true,
     protocol: imageConnectionProtocol(stored ?? {}),
-    baseUrl: stored?.baseUrl ?? PROTOCOL_COPY['openai-images'].defaultBaseUrl,
+    baseUrl: stored?.baseUrl ?? '',
     apiKey: '',
     clearApiKey: false,
     model: stored?.model ?? '',
@@ -142,6 +132,24 @@ export function buildImageConnectionSave(
     clearApiKey: draft.clearApiKey,
   });
   return parsed.success ? parsed.data : undefined;
+}
+
+const IMAGE_NOT_FOUND_STATUSES = new Set([404, 405, 501]);
+
+/** Copy for image-check failures that must stay in plain language. Other reasons use the shared check line. */
+export function imageConnectionCheckMessageKey(
+  result: Extract<ConnectionCheckResult, { ok: false }>
+):
+  | 'settings.imageConnection.check.keyRejected'
+  | 'settings.imageConnection.check.notFound'
+  | 'settings.imageConnection.check.unreachable'
+  | null {
+  if (result.reason === 'key_rejected') return 'settings.imageConnection.check.keyRejected';
+  if (result.status !== undefined && IMAGE_NOT_FOUND_STATUSES.has(result.status)) {
+    return 'settings.imageConnection.check.notFound';
+  }
+  if (result.reason === 'unreachable') return 'settings.imageConnection.check.unreachable';
+  return null;
 }
 
 /** Which field the user still has to fix; the component maps these to copy. */
@@ -293,9 +301,14 @@ export function ImageConnectionForm({
     return null;
   }, [baseUrl, draft.clearApiKey, draft.protocol, hasStoredKey, stored, typedKey]);
   const check = useConnectionCheck(checkRequest, onCheck);
-  const [advancedOpen, setAdvancedOpen] = useState(
-    () => !isProtocolDefaultBaseUrl(draft.protocol, draft.baseUrl)
-  );
+  const checkMessageKey =
+    check.phase === 'done' && !check.result.ok
+      ? imageConnectionCheckMessageKey(check.result)
+      : null;
+  // A key with no address must not leave the machine. Say why the check did not run.
+  const blockEmptyBaseUrl =
+    baseUrl.length === 0 && (typedKey.length > 0 || (hasStoredKey && !draft.clearApiKey));
+  const [advancedOpen, setAdvancedOpen] = useState(true);
   const listed = check.phase === 'done' && check.result.ok ? (check.result.models ?? []) : [];
 
   const submit = (event: FormEvent) => {
@@ -370,7 +383,13 @@ export function ImageConnectionForm({
               ) : null}
             </div>
             <p className="text-xs text-muted-foreground">{t('settings.models.keyLocalHint')}</p>
-            <ConnectionCheckError state={check} baseUrl={baseUrl} />
+            {blockEmptyBaseUrl ? (
+              <ImageCheckLine>{t('settings.imageConnection.check.enterBaseUrl')}</ImageCheckLine>
+            ) : checkMessageKey ? (
+              <ImageCheckLine>{t(checkMessageKey)}</ImageCheckLine>
+            ) : (
+              <ConnectionCheckError state={check} baseUrl={baseUrl} />
+            )}
           </div>
         </Field>
 
@@ -443,7 +462,7 @@ export function ImageConnectionForm({
                 autoComplete="off"
                 spellCheck={false}
                 className="font-mono text-xs"
-                placeholder={protocolCopy.defaultBaseUrl}
+                placeholder={t('settings.imageConnection.baseUrlPlaceholder')}
                 value={draft.baseUrl}
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, baseUrl: event.target.value, apiKey: '' }))
@@ -508,6 +527,15 @@ export function ImageConnectionForm({
   );
 }
 
+function ImageCheckLine({ children }: { children: ReactNode }) {
+  return (
+    <p role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
+      <CircleAlert aria-hidden className="h-3.5 w-3.5 shrink-0" />
+      {children}
+    </p>
+  );
+}
+
 const hostOf = (url: string) => {
   try {
     return new URL(url).host;
@@ -551,7 +579,9 @@ export function ImageConnectionSummary({
           <p className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-sm">
             <span className="shrink-0">{t(PROTOCOL_COPY[protocol].label)}</span>
             <span aria-hidden>·</span>
-            <span className="min-w-0 font-mono break-all" title={stored.model}>{stored.model}</span>
+            <span className="min-w-0 font-mono break-all" title={stored.model}>
+              {stored.model}
+            </span>
           </p>
           <ConnectionCheckBadge state={check} />
         </div>

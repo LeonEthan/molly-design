@@ -3775,6 +3775,86 @@ describe('SessionExecutionService', () => {
     ]);
   });
 
+  it('requests a Molly design title at dispatch for text and image prompts', async () => {
+    let history: Array<Record<string, unknown>> = [
+      {
+        id: 'turn-user-1',
+        role: 'user',
+        status: 'pending',
+        read: false,
+      },
+    ];
+    const sessionDoc = withHistoryPort({
+      getMetaState: vi.fn(async () => ({
+        isArchived: false,
+        title: 'Untitled design',
+        titleSource: 'draft',
+      })),
+      setStatus: vi.fn(async () => {}),
+      setProject: vi.fn(async () => {}),
+      getHistory: vi.fn(() => history),
+      updateHistory: vi.fn(async (updater: (prev: typeof history) => typeof history) => {
+        history = updater(history);
+      }),
+      roomId: 'session-molly-title',
+    });
+    const createSession = vi.fn(async () => {
+      throw new Error('title dispatch must not wait for an agent');
+    });
+    const deps = createBaseDeps({
+      sessionManager: {
+        getSession: vi.fn(() => null),
+        getPendingSession: vi.fn(() => null),
+        createSession,
+        setSessionError: vi.fn(),
+        terminateSession: vi.fn(),
+        refreshGhTokenForSession: vi.fn(async () => {}),
+      } as unknown as SessionManager,
+      workspaceDocument: {
+        repo: {
+          upsertDocMeta: vi.fn(async () => {}),
+          getDocMeta: vi.fn(async () => undefined),
+        },
+        getOrCreateSessionDoc: vi.fn(async () => sessionDoc),
+        updateAcpCapabilities: vi.fn(async () => {}),
+      } as unknown as LoroDocumentManager,
+      evictForMemoryPressure: vi.fn(async () => ({
+        availableMemoryBytes: 128 * 1024 * 1024,
+        thresholdBytes: 1024 * 1024 * 1024,
+        hadMemoryPressure: true,
+        stillUnderPressure: true,
+        evictedSessionIds: [],
+        pressureReason: 'physical',
+      })),
+    });
+
+    const service = new SessionExecutionService(deps);
+    const prompt = '优化一下这个构图';
+    await service.startSession({
+      type: 'session/create',
+      sessionId: 'session-molly-title' as SessionId,
+      machineId: 'machine-1',
+      workspaceId: 'workspace-1' as WorkspaceId,
+      project: undefined,
+      acpSessionConfig: { prompt, cliType: 'builtin', agentType: 'molly' },
+      userTurnId: 'turn-user-1',
+      userId: 'user-1',
+      userName: 'User',
+      userEmail: 'user@example.com',
+    });
+
+    expect(deps.maybeGenerateAndStoreSessionTitle).toHaveBeenCalledWith(
+      'session-molly-title',
+      'builtin',
+      'molly',
+      prompt,
+      undefined,
+      undefined,
+      undefined
+    );
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
   it('starts create prompt block building only after session creation registers the workspace', async () => {
     const events: string[] = [];
     let history: Array<Record<string, unknown>> = [

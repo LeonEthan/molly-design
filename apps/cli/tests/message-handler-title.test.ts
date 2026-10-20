@@ -37,9 +37,10 @@ const createHandler = async (
   options?: {
     agentConfigId?: string;
     agentConfigMeta?: { titleGeneration?: { configOptionValues: Record<string, string> } } | null;
+    logger?: Logger;
   }
 ) => {
-  const logger = createSilentLogger();
+  const logger = options?.logger ?? createSilentLogger();
 
   const sessionDoc = {
     getMetaState: vi
@@ -379,6 +380,83 @@ describe('MessageHandler title generation', () => {
     expect(mockedGenerateTitleIsolated).toHaveBeenCalledTimes(1);
     expect(mockedGenerateTitleIsolated).toHaveBeenCalledWith(
       expect.objectContaining({ titleConfig: undefined })
+    );
+  });
+
+  it('replaces an Untitled design draft for Molly and keeps a manual rename', async () => {
+    const untitled = await createHandler('Untitled design', 'draft');
+    const untitledHost = untitled.handler as unknown as {
+      maybeGenerateAndStoreSessionTitle: (
+        sessionId: SessionId,
+        cliType: string,
+        agentType: string,
+        taskPrompt: string
+      ) => Promise<void>;
+    };
+    await untitledHost.maybeGenerateAndStoreSessionTitle(
+      's-untitled' as SessionId,
+      'builtin',
+      'molly',
+      '优化一下这个构图'
+    );
+    expect(untitled.sessionDoc.setTitleIfSourceIn).toHaveBeenCalledWith(
+      'Generated Title',
+      'generated',
+      ['draft'],
+      expect.any(AbortSignal)
+    );
+
+    const renamed = await createHandler('Poster study', 'user', {
+      title: 'Poster study',
+      titleSource: 'user',
+    });
+    const renamedHost = renamed.handler as unknown as {
+      maybeGenerateAndStoreSessionTitle: (
+        sessionId: SessionId,
+        cliType: string,
+        agentType: string,
+        taskPrompt: string
+      ) => Promise<void>;
+    };
+    await renamedHost.maybeGenerateAndStoreSessionTitle(
+      's-renamed' as SessionId,
+      'builtin',
+      'molly',
+      '优化一下这个构图'
+    );
+    expect(mockedGenerateTitleIsolated).toHaveBeenCalledTimes(1);
+    expect(renamed.sessionDoc.setTitleIfSourceIn).not.toHaveBeenCalled();
+  });
+
+  it('keeps Untitled design and logs when Molly title generation fails', async () => {
+    mockedGenerateTitleIsolated.mockRejectedValueOnce(new Error('title unavailable'));
+    const debug = vi.fn();
+    const logger = createSilentLogger();
+    logger.debug = debug;
+    logger.child = () => logger;
+    const { handler, sessionDoc } = await createHandler('Untitled design', 'draft', undefined, {
+      logger,
+    });
+    const titleHost = handler as unknown as {
+      maybeGenerateAndStoreSessionTitle: (
+        sessionId: SessionId,
+        cliType: string,
+        agentType: string,
+        taskPrompt: string
+      ) => Promise<void>;
+    };
+
+    await expect(
+      titleHost.maybeGenerateAndStoreSessionTitle(
+        's-fail' as SessionId,
+        'builtin',
+        'molly',
+        '优化一下这个构图'
+      )
+    ).resolves.toBeUndefined();
+    expect(sessionDoc.setTitleIfSourceIn).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to generate/store session title')
     );
   });
 });

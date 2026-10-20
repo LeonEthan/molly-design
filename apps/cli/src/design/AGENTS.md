@@ -75,5 +75,6 @@ make an inherited draft live. A newly frozen turn baseline with elements becomes
 `before-agent` entry unless history already holds its exact content; it never moves
 the selected base, and failure is logged without blocking the turn. See [history](README.md#design-history).
 
-Only a just-committed `design.yaml` `title` may rename the Session, and only over
-`draft`/`generated` sources; never override a user rename or request a title model.
+A just-committed `design.yaml` `title` may rename the Session over `draft` or
+`generated` sources. Dispatch may first replace a `draft` title with the user's
+first sentence, without a title model. Never override a user rename.

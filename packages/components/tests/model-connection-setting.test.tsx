@@ -967,7 +967,9 @@ describe('connection management', () => {
       expect(form?.className).toContain('flex-col');
       const slot = form?.parentElement;
       expect(slot?.className).toContain('min-h-0');
-      expect(slot?.className).toContain('flex-1');
+      expect(slot?.className).toContain('grow');
+      expect(slot?.className).toContain('shrink-0');
+      expect(slot?.className).toContain('basis-48');
       expect(slot?.className).toContain('flex-col');
       expect(slot?.className).toContain('overflow-hidden');
       expect(slot?.className).not.toContain('overflow-y-auto');
@@ -981,6 +983,57 @@ describe('connection management', () => {
     await act(async () => button(en['settings.models.addCustomModel']).click());
     await act(async () => button(en['settings.models.addCustomModel']).click());
     assertPinned(en['settings.models.connect'], 3);
+  });
+
+  it('scrolls saved rows beside an edited connection instead of clipping its actions', async () => {
+    const connections = Array.from({ length: 6 }, (_, index) => ({
+      ...stored,
+      id: `00000000-0000-4000-8000-00000000000${index + 1}`,
+      displayName: `Saved ${index + 1}`,
+    }));
+    connectionIpc.getSnapshot.mockResolvedValue({ connections });
+    await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
+    const editSaved = (name: string) => {
+      const label = [...host.querySelectorAll('p')].find((node) => node.textContent === name);
+      let row = label?.parentElement ?? null;
+      while (
+        row &&
+        ![...row.querySelectorAll('button')].some(
+          (button) => button.textContent?.trim() === en['common.edit']
+        )
+      ) {
+        row = row.parentElement;
+      }
+      const edit = [...(row?.querySelectorAll('button') ?? [])].find(
+        (button) => button.textContent?.trim() === en['common.edit']
+      );
+      expect(edit).toBeDefined();
+      edit?.click();
+    };
+    await act(async () => editSaved('Saved 4'));
+    const lists = [...host.querySelectorAll('[data-saved-connection-list]')];
+    expect(lists).toHaveLength(2);
+    for (const list of lists) {
+      const classes = list.className.split(/\s+/);
+      expect(classes).toContain('overflow-y-auto');
+      expect(classes).toContain('min-h-0');
+      expect(classes).toContain('shrink');
+      expect(classes).not.toContain('shrink-0');
+    }
+    expect(lists[0]?.textContent).toContain('Saved 1');
+    expect(lists[0]?.textContent).toContain('Saved 3');
+    expect(lists[1]?.textContent).toContain('Saved 5');
+    expect(lists[1]?.textContent).toContain('Saved 6');
+    const footer = host.querySelector('[data-drawer-footer]');
+    expect(footer?.textContent).toContain(en['common.save']);
+    expect(footer?.textContent).toContain(en['settings.models.delete']);
+    expect(lists.some((list) => list.contains(footer))).toBe(false);
+    const slot = footer?.closest('form')?.parentElement;
+    expect(slot?.className).toContain('shrink-0');
+    expect(slot?.className).toContain('basis-48');
+    expect(lists.some((list) => list.contains(slot ?? null))).toBe(false);
+    await openMoreOptions();
+    expect(host.querySelector<HTMLInputElement>('[id$="-name"]')?.value).toBe('Saved 4');
   });
 
   it('deletes a connection only after confirmation and removes its row', async () => {

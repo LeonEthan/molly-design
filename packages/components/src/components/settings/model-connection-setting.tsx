@@ -1025,10 +1025,12 @@ const panelListClass = (variant: 'section' | 'panel', editing: Editing): string 
   return `min-h-0 flex-1 overflow-y-auto ${PANEL_LIST}`;
 };
 
+const panelSiblingListClass = 'min-h-0 shrink overflow-y-auto divide-y divide-border/40';
+
 const panelFormSlotClass = (variant: 'section' | 'panel', extra = ''): string => {
   const tone = extra ? `${extra} bg-foreground/[0.015]` : 'bg-foreground/[0.015]';
   if (variant !== 'panel') return tone;
-  return `flex min-h-0 flex-1 flex-col overflow-hidden ${tone}`;
+  return `flex min-h-0 grow shrink-0 basis-48 flex-col overflow-hidden ${tone}`;
 };
 
 export function ModelConnectionSetting({
@@ -1200,6 +1202,29 @@ export function ModelConnectionSetting({
     const entry = checks[connection.id];
     return entry && entry.revision === connection.revision ? entry.state : undefined;
   };
+  const connectionRow = (connection: ModelConnection) => (
+    <ModelConnectionRow
+      key={connection.id}
+      connection={connection}
+      check={rowCheck(connection)}
+      catalogCount={
+        connection.providerPresetId === 'openai-compatible'
+          ? undefined
+          : catalog?.filter((model) => model.providerPresetId === connection.providerPresetId)
+              .length
+      }
+      busy={busy}
+      onEdit={() => setEditing(connection)}
+      onToggle={(input) => void persist(input)}
+      onCheck={() => checkRow(connection)}
+      onDelete={() => void remove(connection)}
+    />
+  );
+  const editingPanelConnection =
+    variant === 'panel' && editing !== null && !isNew(editing) ? editing : null;
+  const editingPanelIndex = editingPanelConnection
+    ? connections.findIndex((connection) => connection.id === editingPanelConnection.id)
+    : -1;
   const body = (
     <>
       {!available ? (
@@ -1222,13 +1247,18 @@ export function ModelConnectionSetting({
             </p>
           )}
           <div className={panelListClass(variant, editing)}>
-            {connections.map((connection) =>
-              !isNew(editing) && editing?.id === connection.id ? (
-                <div key={connection.id} className={panelFormSlotClass(variant)}>
+            {editingPanelConnection && editingPanelIndex >= 0 ? (
+              <>
+                {connections.slice(0, editingPanelIndex).length > 0 ? (
+                  <div data-saved-connection-list="" className={panelSiblingListClass}>
+                    {connections.slice(0, editingPanelIndex).map(connectionRow)}
+                  </div>
+                ) : null}
+                <div className={panelFormSlotClass(variant)}>
                   <ModelConnectionForm
-                    key={`${editing.id}:${editing.revision}`}
-                    pinActions={variant === 'panel'}
-                    stored={editing}
+                    key={`${editingPanelConnection.id}:${editingPanelConnection.revision}`}
+                    pinActions
+                    stored={editingPanelConnection}
                     catalog={catalog}
                     metadataSnapshot={metadataSnapshot}
                     busy={busy}
@@ -1237,27 +1267,37 @@ export function ModelConnectionSetting({
                     onCheck={onCheck}
                     onDiscover={onDiscover}
                     onOpenAiAuth={onOpenAiAuth}
-                    onDelete={() => void remove(connection)}
+                    onDelete={() => void remove(editingPanelConnection)}
                   />
                 </div>
-              ) : (
-                <ModelConnectionRow
-                  key={connection.id}
-                  connection={connection}
-                  check={rowCheck(connection)}
-                  catalogCount={
-                    connection.providerPresetId === 'openai-compatible'
-                      ? undefined
-                      : catalog?.filter(
-                          (model) => model.providerPresetId === connection.providerPresetId
-                        ).length
-                  }
-                  busy={busy}
-                  onEdit={() => setEditing(connection)}
-                  onToggle={(input) => void persist(input)}
-                  onCheck={() => checkRow(connection)}
-                  onDelete={() => void remove(connection)}
-                />
+                {connections.slice(editingPanelIndex + 1).length > 0 ? (
+                  <div data-saved-connection-list="" className={panelSiblingListClass}>
+                    {connections.slice(editingPanelIndex + 1).map(connectionRow)}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              connections.map((connection) =>
+                !isNew(editing) && editing?.id === connection.id ? (
+                  <div key={connection.id} className={panelFormSlotClass(variant)}>
+                    <ModelConnectionForm
+                      key={`${editing.id}:${editing.revision}`}
+                      pinActions={variant === 'panel'}
+                      stored={editing}
+                      catalog={catalog}
+                      metadataSnapshot={metadataSnapshot}
+                      busy={busy}
+                      onSave={save}
+                      onCancel={() => setEditing(null)}
+                      onCheck={onCheck}
+                      onDiscover={onDiscover}
+                      onOpenAiAuth={onOpenAiAuth}
+                      onDelete={() => void remove(connection)}
+                    />
+                  </div>
+                ) : (
+                  connectionRow(connection)
+                )
               )
             )}
           </div>

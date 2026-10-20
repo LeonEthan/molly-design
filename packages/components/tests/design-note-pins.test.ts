@@ -304,6 +304,21 @@ it('draws a freehand stroke on an image in brush mode and reads it as that note'
   expect(pins.snapshot()).toEqual(pins.read().notes);
 });
 
+it('keeps a closed brush loop that releases back near its start', () => {
+  pins.setTool('brush');
+  stroke(element('photo'), [
+    [200, 250],
+    [300, 350],
+    [201, 251],
+  ]);
+  expect(document.querySelector('.molly-note-editor textarea')).not.toBeNull();
+  type('Loop');
+  button('Save note').click();
+  expect(pins.read().notes).toEqual([
+    expect.objectContaining({ elementIds: ['photo'], region: expect.objectContaining({ kind: 'stroke' }) }),
+  ]);
+});
+
 it('caps a dense stroke to the schema point limit and ends it within one thinning step of release', () => {
   pins.setTool('brush');
   const dense = Array.from({ length: 1000 }, (_, index) => [100 + (400 * index) / 999, 300]);

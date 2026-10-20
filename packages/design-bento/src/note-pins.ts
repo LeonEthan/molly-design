@@ -50,6 +50,7 @@ type Drag =
       geo: ImageGeometry;
       origin: { x: number; y: number };
       points: NormalizedPoint[];
+      travelled: boolean;
     };
 
 const EDITOR_LINE_CAP = 4;
@@ -541,7 +542,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     const origin = { x: event.clientX, y: event.clientY };
     drag =
       tool === 'brush'
-        ? { kind: 'stroke', elementId, geo, origin, points: [start] }
+        ? { kind: 'stroke', elementId, geo, origin, points: [start], travelled: false }
         : { kind: 'box', elementId, geo, origin, start, current: start };
   }
   document.addEventListener(
@@ -558,6 +559,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     'pointermove',
     (event) => {
       if (!drag) return;
+      if (drag.kind === 'stroke' && moved(drag.origin, event)) drag.travelled = true;
       const point = toImage(drag.geo, event.clientX, event.clientY);
       if (!point) return;
       if (drag.kind === 'box') drag.current = point;
@@ -580,7 +582,8 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     if (end) appendStrokePoint(finished.points, end);
     paintRegions();
     const stroke = strokeRegion(finished.points);
-    if (commit && stroke && moved(finished.origin, event)) addRegion(finished.elementId, stroke);
+    if (commit && stroke && (finished.travelled || moved(finished.origin, event)))
+      addRegion(finished.elementId, stroke);
   };
   document.addEventListener('pointerup', (event) => endRegion(event, true), {
     capture: true,

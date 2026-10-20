@@ -65,9 +65,10 @@ Preserve historical catalog fields when editing unrelated values.
   ticks only saved model/image setups, never Pinterest, and leaves unread items empty. Preserve old config/setup rows without mounting login, installation,
   retry, refresh, editing or automatic migration. Device management retains monitoring
   independently.
-- Image forms validate the shared image endpoint contract before enabling Save/check.
+- Image forms validate the endpoint contract before Save or check.
+  A typed key follows its saved protocol and the address committed on blur.
   Private IP HTTP is image-only; explain unencrypted transport. Invalid endpoints show
-  field errors, not credential-storage failures.
+  field errors, not storage failures.
 - A settings row (`compact-layout.tsx`) is one grid: the label column takes the
   remaining space and the control column hugs its content. Never size either column
   from a viewport breakpoint — settings render in a panel far narrower than the window,

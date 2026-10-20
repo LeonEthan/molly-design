@@ -3,7 +3,6 @@ import {
   useEffect,
   useId,
   useMemo,
-  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -37,12 +36,14 @@ import {
 import {
   CircleAlert,
   CircleCheck,
+  ChevronDown,
   Ellipsis,
   Image as ImageIcon,
   LoaderCircle,
   Trash2,
   X,
 } from '@/ui/icons';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
 import { Input } from '@/ui/input';
 import { Switch } from '@/ui/switch';
 import { CompactSection } from './compact-layout';
@@ -87,6 +88,44 @@ export function applyImageProtocolChoice(
 ): ImageConnectionFormDraft {
   if (draft.protocol === protocol) return draft;
   return { ...draft, protocol, apiKey: '' };
+}
+
+/**
+ * A key typed before any address stays while that address is typed, including a
+ * short prefix that already parses (`https://i`). A key typed for an address
+ * already in the field does not follow a different one. The first address is
+ * committed on blur, so the check does not run against an unfinished prefix.
+ */
+export function applyImageAddressEdit(
+  addressWhenKeyTyped: string | null,
+  nextUrl: string
+): { addressWhenKeyTyped: string | null; clearTypedKey: boolean } {
+  const stillEnteringFirstAddress =
+    addressWhenKeyTyped === null || addressWhenKeyTyped.trim() === '';
+  if (stillEnteringFirstAddress || addressWhenKeyTyped.trim() === nextUrl.trim()) {
+    return { addressWhenKeyTyped, clearTypedKey: false };
+  }
+  return { addressWhenKeyTyped: null, clearTypedKey: true };
+}
+
+export function commitImageAddress(addressWhenKeyTyped: string | null, url: string): string | null {
+  if (addressWhenKeyTyped !== null && addressWhenKeyTyped.trim() !== '') return addressWhenKeyTyped;
+  if (url.trim() === '') return addressWhenKeyTyped;
+  return url.trim();
+}
+
+/** Bind a key to an address already in the field. An empty binding means the first address is still being typed. */
+export function addressForTypedKey(addressWhenKeyTyped: string | null, currentUrl: string): string {
+  if (addressWhenKeyTyped !== null && addressWhenKeyTyped.trim() === '') return '';
+  return currentUrl.trim();
+}
+
+export function typedKeyMatchesAddress(
+  addressWhenKeyTyped: string | null,
+  currentUrl: string
+): boolean {
+  const bound = addressWhenKeyTyped?.trim() ?? '';
+  return bound !== '' && bound === currentUrl.trim();
 }
 
 /** A saved credential belongs to one protocol and one address. */
@@ -170,6 +209,17 @@ export function imageConnectionCheckMessageKey(
   }
   if (result.reason === 'unreachable') return 'settings.imageConnection.check.unreachable';
   return null;
+}
+
+export function imageConnectionCanSave(
+  draft: ImageConnectionFormDraft,
+  stored: Pick<ImageConnectionView, 'protocol' | 'baseUrl' | 'hasApiKey'> | undefined
+): boolean {
+  const issues = imageConnectionDraftIssues(draft);
+  if (issues.baseUrl || issues.model) return false;
+  if (draft.apiKey.trim().length > 0) return true;
+  if (draft.clearApiKey) return Boolean(stored?.hasApiKey);
+  return imageConnectionUsesStoredKey(draft, stored);
 }
 
 /** Which field the user still has to fix; the component maps these to copy. */
@@ -295,20 +345,16 @@ export function ImageConnectionForm({
   const { t } = useTranslation();
   const fieldId = useId();
   const [draft, setDraft] = useState(() => createImageConnectionFormDraft(stored));
-  // The address present when the user last typed a key. Empty means the key was
-  // entered before any address, so filling that address must keep it.
-  const keyBoundUrl = useRef<string | null>(null);
+  const [addressWhenKeyTyped, setAddressWhenKeyTyped] = useState<string | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(true);
 
-  // The stored row is the reset point: after a save, the container hands back the
-  // row it wrote and the form shows exactly that.
   useEffect(() => {
-    keyBoundUrl.current = null;
+    setAddressWhenKeyTyped(null);
     setDraft(createImageConnectionFormDraft(stored));
   }, [stored]);
 
   const issues = useMemo(() => imageConnectionDraftIssues(draft), [draft]);
   const dirty = isDirty(draft, stored);
-  const invalid = issues.baseUrl || issues.model;
   const hasStoredKey = Boolean(stored?.hasApiKey);
   const baseUrl = draft.baseUrl.trim();
   const typedKey = draft.apiKey.trim();
@@ -324,25 +370,26 @@ export function ImageConnectionForm({
   const checkRequest = useMemo<CheckImageConnection | null>(() => {
     if (draft.protocol === 'dashscope' || !ImageConnectionEndpointSchema.safeParse(baseUrl).success)
       return null;
-    if (typedKey) return { protocol: draft.protocol, baseUrl, apiKey: typedKey };
+    if (typedKey && typedKeyMatchesAddress(addressWhenKeyTyped, baseUrl))
+      return { protocol: draft.protocol, baseUrl, apiKey: typedKey };
     if (stored?.revision && imageConnectionUsesStoredKey(draft, stored))
       return { protocol: draft.protocol, baseUrl, expectedRevision: stored.revision };
     return null;
-  }, [baseUrl, draft, stored, typedKey]);
+  }, [addressWhenKeyTyped, baseUrl, draft, stored, typedKey]);
   const check = useConnectionCheck(checkRequest, onCheck);
   const checkMessageKey =
     check.phase === 'done' && !check.result.ok
       ? imageConnectionCheckMessageKey(check.result)
       : null;
-  // A key with no address must not leave the machine. Say why the check did not run.
   const blockEmptyBaseUrl =
     baseUrl.length === 0 && (typedKey.length > 0 || (hasStoredKey && !draft.clearApiKey));
+  const canSave = imageConnectionCanSave(draft, stored);
   const listed = check.phase === 'done' && check.result.ok ? (check.result.models ?? []) : [];
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (invalid || destinationNeedsKey || saving) return;
-    keyBoundUrl.current = null;
+    if (!canSave || destinationNeedsKey || saving) return;
+    setAddressWhenKeyTyped(null);
     setDraft((current) => ({ ...current, apiKey: '' }));
     void onSave(draft, check);
   };
@@ -362,48 +409,8 @@ export function ImageConnectionForm({
               label: t(PROTOCOL_COPY[protocol].label),
             }))}
             onChange={(protocol) => {
-              keyBoundUrl.current = null;
+              setAddressWhenKeyTyped(null);
               setDraft((current) => applyImageProtocolChoice(current, protocol));
-            }}
-          />
-        </Field>
-
-        <Field
-          htmlFor={`${fieldId}-base-url`}
-          label={t('settings.imageConnection.baseUrl')}
-          icon={
-            <InfoTip>
-              {t(protocolCopy.baseUrlHint)} {t('settings.imageConnection.endpointTransportHint')}
-            </InfoTip>
-          }
-          hint={
-            issues.baseUrl && baseUrl.length > 0
-              ? t('settings.imageConnection.invalidBaseUrl')
-              : undefined
-          }
-        >
-          <Input
-            id={`${fieldId}-base-url`}
-            disabled={saving}
-            autoComplete="off"
-            spellCheck={false}
-            className="font-mono text-xs"
-            placeholder={t('settings.imageConnection.baseUrlPlaceholder')}
-            value={draft.baseUrl}
-            onChange={(event) => {
-              const next = event.target.value;
-              const bound = keyBoundUrl.current;
-              const unbound = bound === null || bound.trim() === '';
-              const completing =
-                unbound && ImageConnectionEndpointSchema.safeParse(next.trim()).success;
-              const clearTypedKey = !unbound && bound !== next;
-              if (clearTypedKey) keyBoundUrl.current = null;
-              else if (completing) keyBoundUrl.current = next;
-              setDraft((current) => ({
-                ...current,
-                baseUrl: next,
-                apiKey: clearTypedKey ? '' : current.apiKey,
-              }));
             }}
           />
         </Field>
@@ -427,7 +434,7 @@ export function ImageConnectionForm({
                 }
                 value={draft.apiKey}
                 onChange={(event) => {
-                  keyBoundUrl.current = draft.baseUrl;
+                  setAddressWhenKeyTyped((current) => addressForTypedKey(current, draft.baseUrl));
                   setDraft((current) => ({
                     ...current,
                     apiKey: event.target.value,
@@ -445,7 +452,7 @@ export function ImageConnectionForm({
                   title={t('settings.imageConnection.removeApiKey')}
                   disabled={saving}
                   onClick={() => {
-                    keyBoundUrl.current = null;
+                    setAddressWhenKeyTyped(null);
                     setDraft((current) => ({ ...current, apiKey: '', clearApiKey: true }));
                     void onClearApiKey();
                   }}
@@ -496,6 +503,64 @@ export function ImageConnectionForm({
           </div>
         </Field>
 
+        <Collapsible open={advancedOpen || issues.baseUrl} onOpenChange={setAdvancedOpen}>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={saving}
+              className="group gap-1.5 px-0 text-xs text-muted-foreground"
+            >
+              <ChevronDown
+                aria-hidden
+                className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
+              />
+              {t('settings.models.moreOptions')}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-3">
+            <Field
+              htmlFor={`${fieldId}-base-url`}
+              label={t('settings.imageConnection.baseUrl')}
+              icon={
+                <InfoTip>
+                  {t(protocolCopy.baseUrlHint)}{' '}
+                  {t('settings.imageConnection.endpointTransportHint')}
+                </InfoTip>
+              }
+              hint={
+                issues.baseUrl && baseUrl.length > 0
+                  ? t('settings.imageConnection.invalidBaseUrl')
+                  : undefined
+              }
+            >
+              <Input
+                id={`${fieldId}-base-url`}
+                disabled={saving}
+                autoComplete="off"
+                spellCheck={false}
+                className="font-mono text-xs"
+                placeholder={t('settings.imageConnection.baseUrlPlaceholder')}
+                value={draft.baseUrl}
+                onBlur={() => {
+                  setAddressWhenKeyTyped((current) => commitImageAddress(current, draft.baseUrl));
+                }}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  const edited = applyImageAddressEdit(addressWhenKeyTyped, next);
+                  setAddressWhenKeyTyped(edited.addressWhenKeyTyped);
+                  setDraft((current) => ({
+                    ...current,
+                    baseUrl: next,
+                    apiKey: edited.clearTypedKey ? '' : current.apiKey,
+                  }));
+                }}
+              />
+            </Field>
+          </CollapsibleContent>
+        </Collapsible>
+
         {saveError ? (
           <p
             role="alert"
@@ -533,7 +598,7 @@ export function ImageConnectionForm({
             <Button
               type="submit"
               size="sm"
-              disabled={saving || invalid || !dirty || destinationNeedsKey}
+              disabled={saving || !dirty || !canSave || destinationNeedsKey}
             >
               {saving ? (
                 <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />

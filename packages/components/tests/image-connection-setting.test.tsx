@@ -17,10 +17,15 @@ import {
   ImageConnectionSetting,
   applyImageProtocolChoice,
   buildImageConnectionSave,
+  addressForTypedKey,
+  applyImageAddressEdit,
+  commitImageAddress,
   createImageConnectionFormDraft,
+  imageConnectionCanSave,
   imageConnectionCheckMessageKey,
   imageConnectionDraftIssues,
   imageConnectionUsesStoredKey,
+  typedKeyMatchesAddress,
   type ImageConnectionFormDraft,
 } from '../src/components/settings/image-connection-setting';
 import { CONNECTION_CHECK_DELAY_MS } from '../src/components/settings/connection-check';
@@ -177,6 +182,33 @@ describe('image connection form values', () => {
       applyImageProtocolChoice(draftOf({ protocol: 'dashscope', apiKey: 'synthetic' }), 'dashscope')
         .apiKey
     ).toBe('synthetic');
+    const url = 'https://images.example.com/v1';
+    let bound = addressForTypedKey(null, '');
+    expect(bound).toBe('');
+    for (let index = 1; index <= url.length; index += 1) {
+      const edited = applyImageAddressEdit(bound, url.slice(0, index));
+      expect(edited.clearTypedKey).toBe(false);
+      bound = edited.addressWhenKeyTyped ?? '';
+    }
+    expect(typedKeyMatchesAddress(bound, 'https://i')).toBe(false);
+    expect(typedKeyMatchesAddress(bound, url)).toBe(false);
+    bound = commitImageAddress(bound, url) ?? '';
+    expect(typedKeyMatchesAddress(bound, url)).toBe(true);
+    expect(applyImageAddressEdit(bound, 'https://elsewhere.example.com/v1').clearTypedKey).toBe(
+      true
+    );
+    expect(addressForTypedKey(null, url)).toBe(url);
+    expect(imageConnectionCanSave(draftOf({ apiKey: 'synthetic' }), undefined)).toBe(true);
+    expect(imageConnectionCanSave(draftOf({ apiKey: '' }), undefined)).toBe(false);
+    expect(imageConnectionCanSave(draftOf({ apiKey: '' }), storedConnection())).toBe(true);
+    expect(
+      imageConnectionCanSave(
+        draftOf({ apiKey: '', baseUrl: 'https://elsewhere.example/v1' }),
+        storedConnection()
+      )
+    ).toBe(false);
+    expect(imageConnectionCanSave(draftOf({ clearApiKey: true }), storedConnection())).toBe(true);
+    expect(imageConnectionCanSave(draftOf({ clearApiKey: true }), undefined)).toBe(false);
     expect(createImageConnectionFormDraft(storedConnection()).baseUrl).toBe(
       storedConnection().baseUrl
     );
@@ -207,6 +239,7 @@ describe('image connection form values', () => {
     expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 501 })).toBe(
       null
     );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported' })).toBe(null);
     expect(imageConnectionCheckMessageKey({ ok: false, reason: 'http_error', status: 404 })).toBe(
       'settings.imageConnection.check.notFound'
     );
@@ -304,6 +337,12 @@ describe('ImageConnectionForm', () => {
   const click = async (target: HTMLElement) => {
     await act(async () => {
       target.click();
+    });
+  };
+
+  const blur = async (input: HTMLInputElement) => {
+    await act(async () => {
+      input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
     });
   };
 
@@ -427,6 +466,22 @@ describe('ImageConnectionForm', () => {
       baseUrl: 'https://images.example.com/v1',
       apiKey: 'synthetic-renewed-key',
     });
+  });
+
+  it('does not save a new image connection that has no key', async () => {
+    const saves: ImageConnectionFormDraft[] = [];
+    const view = await renderForm({ onSave: (draft) => void saves.push(draft) });
+    await typeInto(await baseUrlInput(view), 'https://images.example.com/v1');
+    await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'gpt-image-2');
+    const connect = button(view, copy('settings.models.connect'));
+    expect(connect.disabled).toBe(true);
+    await click(connect);
+    await act(async () => {
+      view
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(saves).toEqual([]);
   });
 
   it.each([
@@ -568,8 +623,12 @@ describe('ImageConnectionForm', () => {
         },
       });
       await typeInto(apiKeyInput(fresh), 'synthetic-typed-key');
-      await typeInto(await baseUrlInput(fresh), 'https://images.example.com/v1');
+      const freshUrl = await baseUrlInput(fresh);
+      await typeInto(freshUrl, 'https://images.example.com/v1');
       expect(apiKeyInput(fresh).value).toBe('synthetic-typed-key');
+      await settle();
+      expect(requests).toEqual([]);
+      await blur(freshUrl);
       await settle();
       expect(requests).toEqual([
         {
@@ -614,9 +673,11 @@ describe('ImageConnectionForm', () => {
         },
       });
       await typeInto(apiKeyInput(view), 'synthetic-typed-key');
-      await typeInto(await baseUrlInput(view), 'https://images.example.com/v1');
+      const firstAddress = await baseUrlInput(view);
+      await typeInto(firstAddress, 'https://images.example.com/v1');
       expect(apiKeyInput(view).value).toBe('synthetic-typed-key');
-      await typeInto(await baseUrlInput(view), 'https://elsewhere.example.com/v1');
+      await blur(firstAddress);
+      await typeInto(firstAddress, 'https://elsewhere.example.com/v1');
       expect(apiKeyInput(view).value).toBe('');
       await settle();
       expect(requests).toEqual([]);
@@ -642,6 +703,46 @@ describe('ImageConnectionForm', () => {
       expect(apiKeyInput(view).value).toBe('');
       await settle();
       expect(requests).toEqual([]);
+    });
+
+    it('keeps a key through each character of the first address and saves it', async () => {
+      const requests: CheckImageConnection[] = [];
+      const saves: ImageConnectionFormDraft[] = [];
+      const view = await renderForm({
+        onSave: (draft) => void saves.push(draft),
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true, models: [] };
+        },
+      });
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      const url = 'https://images.example.com/v1';
+      const input = await baseUrlInput(view);
+      for (let index = 1; index <= url.length; index += 1) {
+        const slice = url.slice(0, index);
+        await typeInto(input, slice);
+        expect(apiKeyInput(view).value).toBe('synthetic-typed-key');
+        if (slice === 'https://i' || slice === url) {
+          await settle();
+          expect(requests).toEqual([]);
+        }
+      }
+      await blur(input);
+      await settle();
+      expect(requests).toEqual([
+        { protocol: 'openai-images', baseUrl: url, apiKey: 'synthetic-typed-key' },
+      ]);
+      await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'gpt-image-2');
+      const connect = button(view, copy('settings.models.connect'));
+      expect(connect.disabled).toBe(false);
+      await click(connect);
+      expect(saves).toEqual([
+        draftOf({
+          baseUrl: url,
+          apiKey: 'synthetic-typed-key',
+          model: 'gpt-image-2',
+        }),
+      ]);
     });
 
     it('shows an example placeholder and blocks an empty address before any check', async () => {

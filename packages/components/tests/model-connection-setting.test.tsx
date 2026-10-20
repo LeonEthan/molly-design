@@ -906,33 +906,81 @@ describe('free key check and model choice', () => {
 });
 
 describe('connection management', () => {
-  it('keeps an edited or added panel form in a bounded slot', async () => {
-    connectionIpc.getSnapshot.mockResolvedValue({ connections: [stored] });
+  it('scrolls only the body of a tall compatible form in edit and add', async () => {
+    const customModels: NonNullable<ModelConnection['customModels']> = Array.from(
+      { length: 4 },
+      (_, index) => ({
+        modelId: `vendor/model-${index}`,
+        name: `Model ${index}`,
+        input: ['text'],
+        contextWindow: 32768,
+        maxTokens: 4096,
+        thinking: ['off'],
+        toolCalls: true,
+        maxTokensField: 'max_tokens',
+      })
+    );
+    connectionIpc.getSnapshot.mockResolvedValue({
+      connections: [
+        {
+          ...stored,
+          providerPresetId: 'openai-compatible',
+          displayName: 'Synthetic compatible',
+          baseUrl: 'https://compatible.example.invalid/v1',
+          customModels,
+        },
+      ],
+    });
     await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
     const button = (label: string) =>
       [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-        (node) => node.textContent === label
+        (node) => node.textContent?.trim() === label || node.textContent?.includes(label)
       )!;
-    const slotOf = () => {
-      const form = host.querySelector('[data-drawer-footer]')?.closest('form');
-      expect(form).not.toBeNull();
-      return form?.parentElement;
+    const scrollingAncestor = (node: Element) => {
+      let current = node.parentElement;
+      while (current && current !== host) {
+        if (/\boverflow-y-auto\b/.test(current.className)) return current;
+        current = current.parentElement;
+      }
+      return null;
+    };
+    const assertPinned = (action: string, modelFieldCount: number) => {
+      const footer = host.querySelector('[data-drawer-footer]');
+      const body = host.querySelector('[data-drawer-body]');
+      expect(footer).not.toBeNull();
+      expect(body).not.toBeNull();
+      expect(body!.contains(footer)).toBe(false);
+      expect(footer!.textContent).toContain(action);
+      expect(body!.textContent).toContain(en['settings.models.compatibleLead']);
+      const modelFields = [...body!.querySelectorAll('input')].filter((input) =>
+        input.id.endsWith('-modelId')
+      );
+      expect(modelFields).toHaveLength(modelFieldCount);
+      expect(body!.className).toContain('overflow-y-auto');
+      expect(body!.className).toContain('min-h-0');
+      expect(body!.className).toContain('flex-1');
+      expect(scrollingAncestor(footer!)).toBeNull();
+      expect(scrollingAncestor(body!)).toBeNull();
+      const form = footer!.closest('form');
+      expect(form?.className).toContain('min-h-0');
+      expect(form?.className).toContain('flex-1');
+      expect(form?.className).toContain('flex-col');
+      const slot = form?.parentElement;
+      expect(slot?.className).toContain('min-h-0');
+      expect(slot?.className).toContain('flex-1');
+      expect(slot?.className).toContain('flex-col');
+      expect(slot?.className).toContain('overflow-hidden');
+      expect(slot?.className).not.toContain('overflow-y-auto');
     };
     await act(async () => button(en['common.edit']).click());
-    const edited = slotOf();
-    expect(edited?.className).toContain('min-h-0');
-    expect(edited?.className).toContain('flex-1');
-    expect(edited?.className).toContain('flex-col');
-    expect(edited?.className).toContain('overflow-hidden');
-    expect(edited?.parentElement?.className).toContain('overflow-hidden');
-    expect(edited?.parentElement?.className).toContain('flex-col');
+    assertPinned(en['common.save'], 4);
     await act(async () => button(en['common.cancel']).click());
     await act(async () => button(en['settings.models.add']).click());
-    const added = slotOf();
-    expect(added?.className).toContain('min-h-0');
-    expect(added?.className).toContain('flex-1');
-    expect(added?.className).toContain('overflow-hidden');
-    expect(added?.parentElement?.className).toContain('flex-col');
+    await act(async () => button(en['settings.models.compatible']).click());
+    await act(async () => button(en['settings.models.addCustomModel']).click());
+    await act(async () => button(en['settings.models.addCustomModel']).click());
+    await act(async () => button(en['settings.models.addCustomModel']).click());
+    assertPinned(en['settings.models.connect'], 3);
   });
 
   it('deletes a connection only after confirmation and removes its row', async () => {

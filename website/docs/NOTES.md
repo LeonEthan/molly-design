@@ -57,10 +57,10 @@ Every shipped image and video was checked by eye. Raw masters (app captures and 
 
 ## Hero animation
 
-- The hero demo still is a 1536×864 landscape. A warm stone photograph fills the stage edge to edge. HTML text sits on the left: the headline and the Material, Finish and Made lines. The speckled kettle is a separate transparent layer on the right. Mobile scales that same frame (#184).
+- The hero demo still is a 1536×864 landscape. A warm stone photograph fills the stage edge to edge. The text block is vertically centered on the left. The speckled kettle is a separate transparent layer whose body sits on the right third, with room around it for a later selection box (#184).
 - Selection, drag, scale and the Regenerate pill are not wired on this still.
 - The hero headline is one sentence per line in both languages. The second sentence keeps the highlight. The subheadline under it is gone (#184).
-- The labelled image role wraps the still, so the page's `h1` stays the LCP element.
+- The plate photograph is the LCP element. The labelled image role describes the still; it does not change which element Lighthouse paints first.
 
 ## Videos
 

@@ -314,11 +314,11 @@
    "crop": null
   },
   "hero-kettle": {
-   "w": 964,
-   "h": 682,
+   "w": 1014,
+   "h": 782,
    "files": {
     "480": "img/hero-kettle-480.webp",
-    "964": "img/hero-kettle.webp"
+    "1014": "img/hero-kettle.webp"
    },
    "src": "generated-184/hero-kettle.png",
    "crop": null

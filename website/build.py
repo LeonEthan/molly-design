@@ -147,7 +147,7 @@ def trust_line():
 def hero_stage():
     return f'''<div class="stage"><div class="stage-fit" role="img" aria-label="[[示意静帧：横版石材画面铺满画幅。左侧是可编辑的标题和材质说明，右侧是单独的粗陶茶壶图层。||Illustration: a landscape still filling the frame. Editable headline and material specs sit on the left. A separate stoneware kettle layer sits on the right.]]">
     <img class="hero-plate" src="@@A:img/hero-plate.webp@@" srcset="@@A:img/hero-plate-768.webp@@ 768w, @@A:img/hero-plate.webp@@ 1536w" sizes="(max-width:700px) calc(100vw - 40px), (max-width:1224px) calc(100vw - 64px), 1096px" width="1536" height="864" alt="" aria-hidden="true" fetchpriority="high" decoding="sync">
-    <img class="hero-kettle" src="@@A:img/hero-kettle.webp@@" srcset="@@A:img/hero-kettle-480.webp@@ 480w, @@A:img/hero-kettle.webp@@ 964w" sizes="(max-width:700px) 56vw, 614px" width="964" height="682" alt="" aria-hidden="true">
+    <img class="hero-kettle" src="@@A:img/hero-kettle.webp@@" srcset="@@A:img/hero-kettle-480.webp@@ 480w, @@A:img/hero-kettle.webp@@ 1014w" sizes="(max-width:700px) 40vw, 442px" width="1014" height="782" alt="" aria-hidden="true">
     <div class="hero-copy">
       <p class="hs-mast"><span>Stillwater Clay</span><span>[[日常器物 / 01||Everyday objects / 01]]</span></p>
       <p class="hs-head">[[留一点时间，慢慢来。||Time, well spent.]]</p>

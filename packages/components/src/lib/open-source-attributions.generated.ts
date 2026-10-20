@@ -6093,7 +6093,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "J Liew",
       "description": "A coding agent CLI hook - block destructive commands and secret file access",
       "versions": [
-        "2.6.12"
+        "2.6.16"
       ]
     },
     {

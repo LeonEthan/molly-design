@@ -37,6 +37,8 @@ function fixture() {
   const scripts = []
   let ready = false
   let view
+  const leases = []
+  const loadedUrls = []
   class WebContentsView {
     visible = true
     bounds = { x: 0, y: 0, width: 800, height: 600 }
@@ -45,7 +47,8 @@ function fixture() {
       setWindowOpenHandler() {},
       on() {},
       isDestroyed: () => false,
-      loadURL: async () => {
+      loadURL: async (url) => {
+        loadedUrls.push(url)
         loadStarted.resolve()
         await loading.promise
       },
@@ -61,8 +64,9 @@ function fixture() {
         return true
       }
     }
-    constructor() {
+    constructor(options) {
       view = this
+      this.webContents.session = options.webPreferences.session
     }
     getVisible() {
       return this.visible
@@ -99,16 +103,29 @@ function fixture() {
         }
       if (name === './design-session')
         return {
-          acquireDesignSession: async () => ({
-            session: {
-              setPermissionRequestHandler() {},
-              setPermissionCheckHandler() {},
-              webRequest: { onBeforeRequest() {} }
-            },
-            handle() {},
-            own: (create) => create(),
-            dispose() {}
-          })
+          acquireDesignSession: async () => {
+            const lease = {
+              session: {
+                setPermissionRequestHandler() {},
+                setPermissionCheckHandler() {},
+                webRequest: { onBeforeRequest() {} }
+              },
+              disposed: false,
+              handler: undefined,
+              handle(next) {
+                lease.handler = next
+              },
+              assertActive() {
+                if (lease.disposed) throw Error('Retired canvas')
+              },
+              own: (create) => create(),
+              dispose() {
+                lease.disposed = true
+              }
+            }
+            leases.push(lease)
+            return lease
+          }
         }
       if (name === 'node:fs/promises')
         return {
@@ -129,6 +146,16 @@ function fixture() {
     apiReady,
     readyStarted,
     scripts,
+    leases,
+    postToolbar: (lease, request) => {
+      const host = new URL(loadedUrls[leases.indexOf(lease)]).host
+      return lease.handler(
+        new Request('molly-design://' + host + '/ws/artwork/toolbar', {
+          method: 'POST',
+          body: JSON.stringify(request)
+        })
+      )
+    },
     view: () => view
   }
 }
@@ -258,4 +285,27 @@ void test('a loading editor cannot reveal itself under an overlapping shell menu
   await f.attachDesign(f.owner, 'artwork', bounds)
   assert.equal(f.view(), retained)
   assert.equal(f.view().getVisible(), true)
+})
+
+const pinnedNote = [
+  { elementIds: ['photo'], prompt: 'Lighter here', pin: { elementId: 'photo', at: [0.5, 0.5] } }
+]
+
+void test('a hidden editor still publishes its edited and cleared notes', async () => {
+  const f = await openedCanvas()
+  const lease = f.leases.at(-1)
+  f.hideDesign('artwork')
+  assert.equal((await f.postToolbar(lease, { type: 'notes-sync', notes: pinnedNote })).status, 200)
+  assert.equal((await f.postToolbar(lease, { type: 'notes-sync', notes: [] })).status, 200)
+})
+
+void test('notes-sync from a destroyed or replaced canvas instance is refused', async () => {
+  const f = await openedCanvas()
+  const retired = f.leases.at(-1)
+  f.destroyDesign('artwork')
+  assert.equal((await f.postToolbar(retired, { type: 'notes-sync', notes: [] })).status, 400)
+  await f.attachDesign(f.owner, 'artwork', { x: 0, y: 0, width: 800, height: 600 })
+  const replacement = f.leases.at(-1)
+  assert.equal((await f.postToolbar(retired, { type: 'notes-sync', notes: [] })).status, 400)
+  assert.equal((await f.postToolbar(replacement, { type: 'notes-sync', notes: [] })).status, 200)
 })

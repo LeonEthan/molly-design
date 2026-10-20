@@ -242,21 +242,26 @@ export async function surface(
           if (input.type !== 'notes-sync' && text.length > DESIGN_SELECTION_BODY_LIMIT)
             throw Error('Toolbar request too large')
           const record = records.get(hostId)
-          const assertCurrent = () => {
+          const assertRetained = () => {
             lease.assertActive()
             if (
               !record ||
               records.get(hostId) !== record ||
-              record.view.webContents.session !== isolated ||
-              hosts.get(hostId) !== id
+              record.artworkId !== id ||
+              record.view.webContents.session !== isolated
             )
-              throw Error('Current artwork is not visible')
+              throw Error('Canvas instance was retired')
           }
-          assertCurrent()
+          const assertCurrent = () => {
+            assertRetained()
+            if (hosts.get(hostId) !== id) throw Error('Current artwork is not visible')
+          }
           if (input.type === 'notes-sync') {
+            assertRetained()
             retainedUnsentNotes.publish(noteScope(id, hostId), input.notes)
             return Response.json({ ok: true }, { headers })
           }
+          assertCurrent()
           if (input.type === 'notes') {
             const notes = await getDesignNotes(id, hostId, input.notesEpoch, assertCurrent)
             const region = notes.find((note) => note.region)

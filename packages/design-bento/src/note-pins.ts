@@ -634,7 +634,6 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
       return { elementId, mimeType, data: url.slice(url.indexOf(',') + 1) };
     },
     snapshot(): DesignNote[] {
-      if (busy) return [];
       return sentNotes().map(toNote);
     },
     restore(notes: readonly DesignNote[]) {

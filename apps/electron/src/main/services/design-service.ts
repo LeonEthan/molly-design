@@ -461,7 +461,7 @@ export async function attachDesign(
           view.webContents.on('will-prevent-unload', (event) => event.preventDefault())
           await view.webContents.loadURL(source.url)
           await waitForDesignCanvasReady(view.webContents)
-          await restoreRetainedNotesBestEffort(view.webContents, hostId)
+          await restoreRetainedNotes(view.webContents, hostId)
           await designCanvasAccess.register(access)
           if (!reconcile) await access.setReadonly(designCanvasAccess.isReadonly(id), 'locked')
           try {
@@ -472,7 +472,8 @@ export async function attachDesign(
           installCloseGuard(owner)
           return entry
         } catch (error) {
-          destroyDesignInstance(hostId)
+          // A failed attach keeps its unsent notes for the next attempt.
+          destroyDesignInstance(hostId, { retainNotes: true })
           source.dispose()
           throw error
         }
@@ -524,13 +525,13 @@ export function hideDesign(id: string, hostId?: string) {
     record.view.setVisible(false)
   }
 }
-function destroyDesignInstance(key: string) {
+function destroyDesignInstance(key: string, { retainNotes = false } = {}) {
   const record = records.get(key)
   if (!record) return
   records.delete(key)
   hosts.delete(key)
   lastSelectionSummaries.delete(key)
-  retainedUnsentNotes.forget(key)
+  if (!retainNotes) retainedUnsentNotes.forget(key)
   designCanvasAccess.unregister(record.access)
   if (!record.owner.isDestroyed()) record.owner.contentView.removeChildView(record.view)
   record.dispose()
@@ -909,27 +910,30 @@ async function reloadDesignCanvas(id: string, hostId?: string) {
   for (const [key, record] of entries) {
     const visible = hosts.has(key)
     const bounds = record.view.getBounds()
-    const notes = await readUnsentNotes(record.view.webContents)
-    destroyDesignInstance(key)
-    retainedUnsentNotes.retain(key, notes)
+    // Snapshot before the page is destroyed; an unreadable canvas keeps the last good snapshot.
+    retainedUnsentNotes.retain(key, await readUnsentNotes(record.view.webContents))
+    destroyDesignInstance(key, { retainNotes: true })
     if (visible) await attachDesign(record.owner, id, bounds, key, false)
   }
   return Array.isArray(before?.elements) ? (before as { elements: { id: string }[] }) : null
 }
 
-async function readUnsentNotes(webContents: Electron.WebContents): Promise<DesignNotes> {
-  const raw = await webContents
-    .executeJavaScript('window.molly?.notesSnapshot?.() ?? []')
-    .catch(() => [])
+/** Null when the canvas cannot be read; an empty array means it holds no unsent notes. */
+async function readUnsentNotes(webContents: Electron.WebContents): Promise<DesignNotes | null> {
+  const raw: unknown = await webContents
+    .executeJavaScript('window.molly?.notesSnapshot?.() ?? null')
+    .catch(() => null)
+  if (!Array.isArray(raw)) return null
+  if (raw.length === 0) return []
   const parsed = DesignNotesSchema.safeParse(raw)
-  return parsed.success ? parsed.data : []
+  return parsed.success ? parsed.data : null
 }
-async function restoreRetainedNotesBestEffort(webContents: Electron.WebContents, hostId: string) {
-  const notes = retainedUnsentNotes.take(hostId)
+async function restoreRetainedNotes(webContents: Electron.WebContents, hostId: string) {
+  const notes = retainedUnsentNotes.peek(hostId)
   if (!notes.length) return
-  await webContents
-    .executeJavaScript('window.molly?.restoreNotes?.(' + JSON.stringify(notes) + ')')
-    .catch(() => {})
+  // Throws on failure: the attach is then retried and the snapshot is still held.
+  await webContents.executeJavaScript('window.molly.restoreNotes(' + JSON.stringify(notes) + ')')
+  retainedUnsentNotes.release(hostId)
 }
 export async function leaveDesign(id: string, hostId?: string): Promise<boolean> {
   // An attach that is still loading already owns a record whose webContents

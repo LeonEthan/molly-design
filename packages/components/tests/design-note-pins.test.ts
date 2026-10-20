@@ -459,10 +459,10 @@ it('restores a snapshot into a fresh canvas and drops targets that are gone', ()
   fresh.dispose();
 });
 
-it('keeps notes out of a snapshot while they are being sent', () => {
+it('keeps notes in a snapshot while they are being sent, so a reload cannot drop them', () => {
   pins.add(['title'], 'Warmer');
   button('Send').click();
-  expect(pins.snapshot()).toEqual([]);
+  expect(pins.snapshot()).toEqual([{ elementIds: ['title'], prompt: 'Warmer' }]);
 });
 
 function regionShading() {

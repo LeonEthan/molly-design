@@ -275,7 +275,7 @@ it('draws a freehand stroke on an image in brush mode and reads it as that note'
   expect(pins.snapshot()).toEqual(pins.read().notes);
 });
 
-it('caps a dense stroke to the schema point limit', () => {
+it('caps a dense stroke to the schema point limit and ends it within one thinning step of release', () => {
   pins.setTool('brush');
   const dense = Array.from({ length: 1000 }, (_, index) => [100 + (400 * index) / 999, 300]);
   stroke(element('photo'), dense);
@@ -286,7 +286,6 @@ it('caps a dense stroke to the schema point limit', () => {
   const points = note?.region?.kind === 'stroke' ? note.region.points : [];
   expect(points).toHaveLength(DESIGN_STROKE_POINTS_MAX);
   expect(points[0]).toEqual([0, 0.5]);
-  // The release point may fall within one 0.4% step of the last kept point, so the tail is allowed that much slack.
   expect(points.at(-1)?.[0]).toBeCloseTo(1, 2);
 });
 

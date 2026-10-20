@@ -534,6 +534,10 @@ export function createProductSession(options: {
     },
     true
   );
+  const consumeShortcut = (event: KeyboardEvent) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
   document.addEventListener(
     'keydown',
     (event) => {
@@ -545,9 +549,7 @@ export function createProductSession(options: {
       else if (key === 'b') setTool('brush');
       else if ((key === 'v' || key === 'escape') && pins.tool() !== 'select') setTool('select');
       else return;
-      // Bento's own bubble-phase `c` binding would arm its legacy comment mode; `b` is consumed the same way.
-      event.preventDefault();
-      event.stopImmediatePropagation();
+      consumeShortcut(event);
     },
     { capture: true, signal: keys.signal }
   );

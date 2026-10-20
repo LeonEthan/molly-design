@@ -91,11 +91,10 @@ it('toggles the comment tool from the dock and C, V and Escape, and never while 
 
 it('keeps Bento legacy comment mode off when C, repeated C, V or Escape reach the canvas', async () => {
   let legacyOn = false;
-  // Stand-in for Bento's Editor.wireKeyboard: a bubble-phase document listener that toggles its legacy mode on C.
-  const bento = (event: KeyboardEvent) => {
+  const bentoCommentToggle = (event: KeyboardEvent) => {
     if (!event.metaKey && !event.ctrlKey && event.key.toLowerCase() === 'c') legacyOn = !legacyOn;
   };
-  document.addEventListener('keydown', bento);
+  document.addEventListener('keydown', bentoCommentToggle);
   const press = (key: string) =>
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
   press('c');
@@ -141,14 +140,14 @@ it('keeps Bento legacy comment mode off when C, repeated C, V or Escape reach th
   expect(commenting()).toBe(false);
   expect(legacyOn).toBe(false);
 
-  document.removeEventListener('keydown', bento);
+  document.removeEventListener('keydown', bentoCommentToggle);
   window.dispatchEvent(new Event('pagehide'));
 });
 
 it('toggles the brush from the dock and B, keeps Bento from seeing B, and never while readonly', async () => {
   const seen: string[] = [];
-  const bento = (event: KeyboardEvent) => seen.push(event.key.toLowerCase());
-  document.addEventListener('keydown', bento);
+  const bentoLegacyKeys = (event: KeyboardEvent) => seen.push(event.key.toLowerCase());
+  document.addEventListener('keydown', bentoLegacyKeys);
   Object.defineProperty(document, 'fonts', {
     configurable: true,
     value: { ready: Promise.resolve() },
@@ -220,7 +219,7 @@ it('toggles the brush from the dock and B, keeps Bento from seeing B, and never 
   expect(document.body.dataset.brushing).toBe('false');
 
   api.setReadonly(false);
-  document.removeEventListener('keydown', bento);
+  document.removeEventListener('keydown', bentoLegacyKeys);
   window.dispatchEvent(new Event('pagehide'));
 });
 

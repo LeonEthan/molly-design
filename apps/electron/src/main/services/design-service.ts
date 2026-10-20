@@ -130,9 +130,7 @@ export async function captureDesignFrame(owner: BrowserWindow, artworkId: string
 // every path that recreates the document (attach/restore/reload/disconnect)
 // goes through record creation or destroyDesignInstance.
 const lastSelectionSummaries = new Map<string, DesignSelectionSummary>()
-// Unsent notes read from a frame that is about to be destroyed; restored into the
-// next frame for the same host. Memory only, and forgotten with the record.
-const retainedNotes = createRetainedNotes<DesignNotes[number]>()
+const retainedUnsentNotes = createRetainedNotes<DesignNotes[number]>()
 const recordsFor = (id: string) => [...records.values()].filter((record) => record.artworkId === id)
 const loading = new Map<string, Promise<RecordEntry>>()
 const syncing = new Map<string, Promise<DesignElementChanges | null>>()
@@ -463,7 +461,7 @@ export async function attachDesign(
           view.webContents.on('will-prevent-unload', (event) => event.preventDefault())
           await view.webContents.loadURL(source.url)
           await waitForDesignCanvasReady(view.webContents)
-          await restoreRetainedNotes(view.webContents, hostId)
+          await restoreRetainedNotesBestEffort(view.webContents, hostId)
           await designCanvasAccess.register(access)
           if (!reconcile) await access.setReadonly(designCanvasAccess.isReadonly(id), 'locked')
           try {
@@ -532,7 +530,7 @@ function destroyDesignInstance(key: string) {
   records.delete(key)
   hosts.delete(key)
   lastSelectionSummaries.delete(key)
-  retainedNotes.forget(key)
+  retainedUnsentNotes.forget(key)
   designCanvasAccess.unregister(record.access)
   if (!record.owner.isDestroyed()) record.owner.contentView.removeChildView(record.view)
   record.dispose()
@@ -913,7 +911,7 @@ async function reloadDesignCanvas(id: string, hostId?: string) {
     const bounds = record.view.getBounds()
     const notes = await readUnsentNotes(record.view.webContents)
     destroyDesignInstance(key)
-    retainedNotes.retain(key, notes)
+    retainedUnsentNotes.retain(key, notes)
     if (visible) await attachDesign(record.owner, id, bounds, key, false)
   }
   return Array.isArray(before?.elements) ? (before as { elements: { id: string }[] }) : null
@@ -926,10 +924,9 @@ async function readUnsentNotes(webContents: Electron.WebContents): Promise<Desig
   const parsed = DesignNotesSchema.safeParse(raw)
   return parsed.success ? parsed.data : []
 }
-async function restoreRetainedNotes(webContents: Electron.WebContents, hostId: string) {
-  const notes = retainedNotes.take(hostId)
+async function restoreRetainedNotesBestEffort(webContents: Electron.WebContents, hostId: string) {
+  const notes = retainedUnsentNotes.take(hostId)
   if (!notes.length) return
-  // Pins are a convenience: a failed restore must not fail the canvas attach.
   await webContents
     .executeJavaScript('window.molly?.restoreNotes?.(' + JSON.stringify(notes) + ')')
     .catch(() => {})

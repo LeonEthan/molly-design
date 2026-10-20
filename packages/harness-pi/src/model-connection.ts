@@ -1,3 +1,4 @@
+import type { StreamOptions, ProviderStreams } from '@earendil-works/pi-ai';
 import type { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import {
   ModelConnectionSchema,
@@ -7,10 +8,45 @@ import {
   getModelConnectionConfigurationIssue,
   isProviderPresetDefaultEndpoint,
   normalizeCompatibleConnectionApi,
+  compatibleConnectionApiRequiresKey,
+  normalizeCompatibleConnectionBaseUrl,
   type CompatibleConnectionApi,
   type ModelConnection,
   type ModelSelection,
 } from '@molly/shared/embedded-harness';
+
+const fetchWithoutRedirects: NonNullable<StreamOptions['fetch']> = (input, init) =>
+  globalThis.fetch(input, { ...init, redirect: 'error' });
+
+function redirectSafeOptions<T extends StreamOptions>(api: CompatibleConnectionApi, options: T): T {
+  if (api === 'openai-responses') return { ...options, fetch: fetchWithoutRedirects };
+  if (api !== 'google-generative-ai') return options;
+  return {
+    ...options,
+    onPayload: async (payload, model) => {
+      const replacement = await options.onPayload?.(payload, model);
+      const next = replacement === undefined ? payload : replacement;
+      if (next === null || typeof next !== 'object' || Array.isArray(next))
+        throw new Error('harness_model_payload_invalid');
+      const config = 'config' in next ? next.config : undefined;
+      if (
+        config !== undefined &&
+        (config === null || typeof config !== 'object' || Array.isArray(config))
+      )
+        throw new Error('harness_model_payload_invalid');
+      const httpOptions = config && 'httpOptions' in config ? config.httpOptions : undefined;
+      if (
+        httpOptions !== undefined &&
+        (httpOptions === null || typeof httpOptions !== 'object' || Array.isArray(httpOptions))
+      )
+        throw new Error('harness_model_payload_invalid');
+      return {
+        ...next,
+        config: { ...config, httpOptions: { ...httpOptions, fetch: fetchWithoutRedirects } },
+      };
+    },
+  };
+}
 
 export function configureModelConnection(
   runtime: ModelRuntime,
@@ -36,9 +72,9 @@ export function configureModelConnection(
       connection.compatibleApi
     );
     runtime.registerProvider(providerId, {
-      baseUrl: connection.baseUrl,
+      baseUrl: normalizeCompatibleConnectionBaseUrl(connection.baseUrl, wireApi),
       api: wireApi,
-      authHeader: wireApi !== 'anthropic-messages',
+      authHeader: wireApi === 'openai-completions' || wireApi === 'openai-responses',
       models: (connection.customModels ?? []).map((model) => ({
         id: model.modelId,
         name: model.name,
@@ -70,14 +106,20 @@ export function configureModelConnection(
     });
     const provider = runtime.getProvider(providerId);
     if (!provider) throw new Error('harness_connection_unavailable');
+    const streams: ProviderStreams = provider;
     runtime.registerNativeProvider({
       ...provider,
+      stream: (model, context, options) =>
+        streams.stream(model, context, redirectSafeOptions(wireApi, options ?? {})),
+      streamSimple: (model, context, options) =>
+        streams.streamSimple(model, context, redirectSafeOptions(wireApi, options ?? {})),
       auth: {
         apiKey: {
           name: 'Connection credential',
           async resolve({ credential }) {
             if (credential?.key === undefined) return undefined;
             if (credential.key) return { auth: { apiKey: credential.key } };
+            if (compatibleConnectionApiRequiresKey(wireApi)) return undefined;
             const headers: Record<string, string | null> =
               wireApi === 'anthropic-messages'
                 ? { 'x-api-key': null, Authorization: null }

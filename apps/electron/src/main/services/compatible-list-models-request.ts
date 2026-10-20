@@ -1,5 +1,6 @@
 import {
   normalizeCompatibleConnectionApi,
+  normalizeCompatibleConnectionBaseUrl,
   type CompatibleConnectionApi
 } from '@molly/shared/embedded-harness'
 
@@ -14,8 +15,8 @@ export function buildCompatibleListModelsRequest(
   apiKey?: string,
   options?: { listLimit?: number }
 ): CompatibleListModelsRequest {
-  const base = baseUrl.trim().replace(/\/+$/, '')
   const api = normalizeCompatibleConnectionApi(compatibleApi)
+  const base = normalizeCompatibleConnectionBaseUrl(baseUrl, api)
   const headers: Record<string, string> = { accept: 'application/json' }
   if (api === 'anthropic-messages') {
     const limit = options?.listLimit
@@ -25,14 +26,21 @@ export function buildCompatibleListModelsRequest(
     return { url, headers }
   }
   const url = `${base}/models`
+  if (api === 'google-generative-ai') {
+    if (apiKey) headers['x-goog-api-key'] = apiKey
+    return { url: `${url}?pageSize=1000`, headers }
+  }
   if (apiKey) headers.authorization = `Bearer ${apiKey}`
   return { url, headers }
 }
 
 export function compatibleListModelsParseStyle(
   compatibleApi: CompatibleConnectionApi | undefined
-): 'anthropic' | 'openai' {
-  return normalizeCompatibleConnectionApi(compatibleApi) === 'anthropic-messages'
+): 'anthropic' | 'openai' | 'google' {
+  const api = normalizeCompatibleConnectionApi(compatibleApi)
+  return api === 'anthropic-messages'
     ? 'anthropic'
-    : 'openai'
+    : api === 'google-generative-ai'
+      ? 'google'
+      : 'openai'
 }

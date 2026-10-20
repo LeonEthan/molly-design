@@ -218,3 +218,319 @@ void test('discoverModelConnection: maps 404 to unsupported, other statuses to h
   )
   assert.deepEqual(denied, { ok: false, reason: 'http_error', status: 401 })
 })
+
+void test('Gemini discovery reads native metadata and filters models without generateContent', async () => {
+  const data = {
+    models: [
+      {
+        name: 'models/gemini-synthetic',
+        displayName: 'Synthetic Gemini',
+        inputTokenLimit: 1048576,
+        outputTokenLimit: 8192,
+        supportedGenerationMethods: ['generateContent', 'countTokens']
+      },
+      { name: 'models/embedding', supportedGenerationMethods: ['embedContent'] },
+      { name: 'models/gemini-synthetic', supportedGenerationMethods: ['generateContent'] }
+    ]
+  }
+  const parsed = parseDiscoveredModels(data, 'google-generative-ai')
+  assert.deepEqual(parsed, {
+    models: [
+      {
+        modelId: 'gemini-synthetic',
+        name: 'Synthetic Gemini',
+        contextWindow: 1048576,
+        maxTokens: 8192
+      }
+    ],
+    filteredNonChat: 1
+  })
+  let request
+  const result = await discoverModelConnection(
+    {},
+    {
+      providerPresetId: 'openai-compatible',
+      compatibleApi: 'google-generative-ai',
+      baseUrl: 'https://gateway.invalid/v1beta/v1beta/',
+      apiKey: 'synthetic-key'
+    },
+    async (url, init) => {
+      request = { url, ...init }
+      return Response.json(data)
+    }
+  )
+  assert.deepEqual(result, { ok: true, ...parsed })
+  assert.equal(request.url, 'https://gateway.invalid/v1beta/models?pageSize=1000')
+  assert.equal(request.headers['x-goog-api-key'], 'synthetic-key')
+  assert.equal(request.headers.authorization, undefined)
+})
+
+void test('Responses discovery uses /models and protocol-specific endpoint declarations', async () => {
+  const data = {
+    data: [
+      { id: 'responses-model', supported_endpoint_types: ['responses'] },
+      { id: 'chat-only', supported_endpoint_types: ['chat.completions'] }
+    ]
+  }
+  let destination
+  const result = await discoverModelConnection(
+    {},
+    {
+      providerPresetId: 'openai-compatible',
+      compatibleApi: 'openai-responses',
+      baseUrl: 'https://gateway.invalid/v1/responses/responses/',
+      apiKey: 'synthetic-key'
+    },
+    async (url) => {
+      destination = url
+      return Response.json(data)
+    }
+  )
+  assert.equal(destination, 'https://gateway.invalid/v1/models')
+  assert.deepEqual(result, {
+    ok: true,
+    models: [{ modelId: 'responses-model' }],
+    filteredNonChat: 1
+  })
+})
+
+for (const compatibleApi of ['openai-responses', 'google-generative-ai']) {
+  void test(`${compatibleApi} discovery refuses missing keys before transport`, async () => {
+    const outbound = []
+    const result = await discoverModelConnection(
+      {},
+      {
+        providerPresetId: 'openai-compatible',
+        compatibleApi,
+        baseUrl: 'https://synthetic.invalid/v1'
+      },
+      async (url) => {
+        outbound.push(url)
+        return Response.json({ data: [] })
+      }
+    )
+    assert.deepEqual(result, { ok: false, reason: 'needs_key' })
+    assert.deepEqual(outbound, [])
+  })
+}
+
+const geminiDiscovery = {
+  providerPresetId: 'openai-compatible',
+  compatibleApi: 'google-generative-ai',
+  baseUrl: 'https://selected.invalid/gateway/v1beta/models/',
+  apiKey: 'SYNTHETIC_KEY'
+}
+
+void test('Gemini discovery aggregates and dedupes pages on the selected destination with one abort signal', async () => {
+  const token = 'https://unselected.invalid/collect?key=other&next=#fragment'
+  const requests = []
+  const result = await discoverModelConnection({}, geminiDiscovery, async (url, init) => {
+    requests.push({ url, ...init })
+    const page = new URL(url).searchParams.get('pageToken')
+    return Response.json(
+      page === null
+        ? {
+            models: [
+              {
+                name: 'models/first',
+                displayName: 'First',
+                supportedGenerationMethods: ['generateContent']
+              },
+              { name: 'models/embedding-first', supportedGenerationMethods: ['embedContent'] }
+            ],
+            nextPageToken: token
+          }
+        : {
+            models: [
+              { name: 'models/first', displayName: 'Duplicate' },
+              { name: 'models/later', inputTokenLimit: 32768, outputTokenLimit: 2048 },
+              { name: 'models/embedding-later', supportedGenerationMethods: ['embedContent'] }
+            ]
+          }
+    )
+  })
+  assert.deepEqual(result, {
+    ok: true,
+    models: [
+      { modelId: 'first', name: 'First' },
+      { modelId: 'later', name: 'models/later', contextWindow: 32768, maxTokens: 2048 }
+    ],
+    filteredNonChat: 2
+  })
+  assert.deepEqual(
+    requests.map(({ url }) => {
+      const destination = new URL(url)
+      return {
+        origin: destination.origin,
+        path: destination.pathname,
+        size: destination.searchParams.get('pageSize'),
+        token: destination.searchParams.get('pageToken')
+      }
+    }),
+    [
+      {
+        origin: 'https://selected.invalid',
+        path: '/gateway/v1beta/models',
+        size: '1000',
+        token: null
+      },
+      { origin: 'https://selected.invalid', path: '/gateway/v1beta/models', size: '1000', token }
+    ]
+  )
+  for (const request of requests) {
+    assert.equal(request.headers['x-goog-api-key'], geminiDiscovery.apiKey)
+    assert.equal(request.headers.authorization, undefined)
+    assert.equal(request.redirect, 'error')
+    assert.equal(request.signal, requests[0].signal)
+  }
+})
+
+for (const [name, response, expected] of [
+  [
+    'http failure',
+    () => new Response('SYNTHETIC_SECRET', { status: 502 }),
+    { ok: false, reason: 'http_error', status: 502 }
+  ],
+  [
+    'unsupported page',
+    () => new Response('SYNTHETIC_SECRET', { status: 404 }),
+    { ok: false, reason: 'unsupported', status: 404 }
+  ],
+  [
+    'invalid JSON',
+    () => new Response('SYNTHETIC_SECRET'),
+    { ok: false, reason: 'invalid_response' }
+  ],
+  [
+    'invalid model list',
+    () => Response.json({ models: {} }),
+    { ok: false, reason: 'invalid_response' }
+  ],
+  [
+    'transport failure',
+    () => {
+      throw new TypeError('fetch failed SYNTHETIC_SECRET')
+    },
+    { ok: false, reason: 'unreachable' }
+  ]
+]) {
+  void test(`Gemini discovery fails without partial results after second-page ${name}`, async () => {
+    const pages = []
+    const result = await discoverModelConnection({}, geminiDiscovery, async (url) => {
+      const page = new URL(url).searchParams.get('pageToken')
+      pages.push(page)
+      return page === null
+        ? Response.json({ models: [{ name: 'models/first' }], nextPageToken: 'second' })
+        : response()
+    })
+    assert.deepEqual(result, expected)
+    assert.deepEqual(pages, [null, 'second'])
+    assert.ok(!JSON.stringify(result).includes('SYNTHETIC_SECRET'))
+  })
+}
+
+void test('Gemini discovery rejects repeated and malformed continuation tokens', async () => {
+  for (const token of ['same', 42, { url: 'https://unselected.invalid' }, 'x'.repeat(4097)]) {
+    const pages = []
+    const result = await discoverModelConnection({}, geminiDiscovery, async (url) => {
+      pages.push(new URL(url).searchParams.get('pageToken'))
+      return Response.json({ models: [], nextPageToken: token })
+    })
+    assert.deepEqual(result, { ok: false, reason: 'invalid_response' })
+    assert.deepEqual(
+      pages,
+      typeof token === 'string' && token.length <= 4096 ? [null, token] : [null]
+    )
+  }
+})
+
+void test('Gemini discovery bounds the entire response budget across pages', async () => {
+  const pages = []
+  const result = await discoverModelConnection({}, geminiDiscovery, async (url) => {
+    pages.push(new URL(url).searchParams.get('pageToken'))
+    return Response.json({ models: [], padding: 'x'.repeat(1024 * 1024), nextPageToken: 'second' })
+  })
+  assert.deepEqual(result, { ok: false, reason: 'invalid_response' })
+  assert.deepEqual(pages, [null, 'second'])
+})
+
+void test('Gemini discovery stops at the existing model limit across pages', async () => {
+  const pages = []
+  const result = await discoverModelConnection({}, geminiDiscovery, async (url) => {
+    const token = new URL(url).searchParams.get('pageToken')
+    pages.push(token)
+    const start = token === null ? 0 : 1000
+    return Response.json({
+      models: Array.from({ length: 1000 }, (_, index) => ({ name: `models/m-${start + index}` })),
+      nextPageToken: token === null ? 'second' : 'third'
+    })
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.models.length, 2000)
+  assert.equal(result.models.at(-1).modelId, 'm-1999')
+  assert.deepEqual(pages, [null, 'second'])
+})
+
+void test('Gemini discovery bounds pages even when every continuation token is unique', async () => {
+  let page = 0
+  const result = await discoverModelConnection({}, geminiDiscovery, async () => {
+    page += 1
+    assert.ok(page <= 100)
+    return Response.json({ models: [], nextPageToken: `next-${page}` })
+  })
+  assert.deepEqual(result, { ok: false, reason: 'invalid_response' })
+})
+
+void test('Gemini discovery stops pagination when its shared abort signal expires', async (context) => {
+  const controller = new AbortController()
+  context.mock.method(AbortSignal, 'timeout', () => controller.signal)
+  const pages = []
+  const result = await discoverModelConnection({}, geminiDiscovery, async (url, init) => {
+    pages.push(new URL(url).searchParams.get('pageToken'))
+    assert.equal(init.signal, controller.signal)
+    controller.abort(new DOMException('SYNTHETIC_SECRET', 'TimeoutError'))
+    return Response.json({ models: [{ name: 'models/first' }], nextPageToken: 'second' })
+  })
+  assert.deepEqual(result, { ok: false, reason: 'unreachable' })
+  assert.deepEqual(pages, [null])
+})
+
+for (const compatibleApi of ['anthropic-messages', 'openai-completions', 'openai-responses']) {
+  void test(`${compatibleApi} discovery retains one GET and ignores continuation metadata`, async () => {
+    const requests = []
+    const result = await discoverModelConnection(
+      {},
+      { ...geminiDiscovery, compatibleApi, baseUrl: 'https://selected.invalid/gateway' },
+      async (url) => {
+        requests.push(url)
+        return Response.json({ data: [{ id: 'first' }], nextPageToken: 'must-not-follow' })
+      }
+    )
+    assert.deepEqual(result, { ok: true, models: [{ modelId: 'first' }], filteredNonChat: 0 })
+    assert.deepEqual(requests, [
+      compatibleApi === 'anthropic-messages'
+        ? 'https://selected.invalid/gateway/v1/models'
+        : 'https://selected.invalid/gateway/models'
+    ])
+  })
+
+  void test(`${compatibleApi} retains its body-read failure mapping on timeout`, async (context) => {
+    const controller = new AbortController()
+    context.mock.method(AbortSignal, 'timeout', () => controller.signal)
+    const result = await discoverModelConnection(
+      {},
+      { ...geminiDiscovery, compatibleApi, baseUrl: 'https://selected.invalid/gateway' },
+      async () => {
+        controller.abort(new DOMException('Synthetic timeout', 'TimeoutError'))
+        return new Response(
+          new ReadableStream({
+            start(body) {
+              body.error(controller.signal.reason)
+            }
+          })
+        )
+      }
+    )
+    assert.deepEqual(result, { ok: false, reason: 'invalid_response' })
+  })
+}

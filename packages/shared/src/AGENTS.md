@@ -13,6 +13,14 @@ metadata is main-owned. References stay separate from selection: no empty-model 
 snapshot secrets or dispatched-work replay. Native `models` only narrows the picker;
 dispatch, not schemas, owns availability.
 
+Compatible connections preserve their protocol across saves, reloads and run grants;
+missing protocol means OpenAI Chat Completions. Responses/Gemini base normalization
+is shared by discovery, response checks and runtime. Final model diagnostics expose
+static failure categories only, including endpoint-not-found and unreachable.
+
+Compatible Responses/Gemini require nonempty keys; legacy Anthropic Messages and
+Chat Completions retain explicit keyless connections.
+
 ## Title input provenance
 
 The optional Turn `titlePrompt` is captured before internal prompt construction and

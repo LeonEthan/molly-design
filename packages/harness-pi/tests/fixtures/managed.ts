@@ -35,6 +35,7 @@ export async function managed(
     providerError?: string | ((call: number) => string | undefined);
     providerToolCall?: (call: number) => ToolCall | undefined;
     productionProfile?: boolean;
+    nativeTransport?: boolean;
     memoryResponse?: string;
     config?: Partial<WorkerConfig>;
     initialize?: boolean;
@@ -107,76 +108,77 @@ export async function managed(
   vi.spyOn(ModelRuntime, 'create').mockImplementation(async (args) => {
     const runtime = await create(args);
     selectedRuntime = runtime;
-    runtime.registerProvider(providerId, {
-      baseUrl: config.connection.baseUrl,
-      api: 'openai-completions',
-      streamSimple: (model, context, opts) => {
-        const stream = createAssistantMessageEventStream();
-        void (async () => {
-          try {
-            await opts?.onPayload?.({ synthetic: true }, model);
-            observed.push(JSON.stringify(context));
-            const providerError =
-              typeof options.providerError === 'function'
-                ? options.providerError(observed.length)
-                : options.providerError;
-            const toolCall = options.providerToolCall?.(observed.length);
-            const extraction = JSON.stringify(context).includes('Extract only explicitly stated');
-            const message = {
-              ...fauxAssistantMessage(
-                toolCall ??
-                  (extraction
-                    ? (options.memoryResponse ?? '{"changes":[{"text":"Prefers serif type"}]}')
-                    : 'Synthetic answer.'),
-                {
-                  stopReason: providerError
-                    ? 'error'
-                    : toolCall
-                      ? 'toolUse'
-                      : options.length
-                        ? 'length'
-                        : 'stop',
-                  ...(providerError ? { errorMessage: providerError } : {}),
-                }
-              ),
-              provider: model.provider,
-              model: model.id,
-              api: model.api,
-              usage: {
-                input: extraction ? 3 : 23,
-                output: extraction ? 1 : 5,
-                cacheRead: 0,
-                cacheWrite: 0,
-                totalTokens: extraction ? 4 : 28,
-                cost: {
-                  input: extraction ? 0.015 : 0,
-                  output: 0,
+    if (!options.nativeTransport)
+      runtime.registerProvider(providerId, {
+        baseUrl: config.connection.baseUrl,
+        api: 'openai-completions',
+        streamSimple: (model, context, opts) => {
+          const stream = createAssistantMessageEventStream();
+          void (async () => {
+            try {
+              await opts?.onPayload?.({ synthetic: true }, model);
+              observed.push(JSON.stringify(context));
+              const providerError =
+                typeof options.providerError === 'function'
+                  ? options.providerError(observed.length)
+                  : options.providerError;
+              const toolCall = options.providerToolCall?.(observed.length);
+              const extraction = JSON.stringify(context).includes('Extract only explicitly stated');
+              const message = {
+                ...fauxAssistantMessage(
+                  toolCall ??
+                    (extraction
+                      ? (options.memoryResponse ?? '{"changes":[{"text":"Prefers serif type"}]}')
+                      : 'Synthetic answer.'),
+                  {
+                    stopReason: providerError
+                      ? 'error'
+                      : toolCall
+                        ? 'toolUse'
+                        : options.length
+                          ? 'length'
+                          : 'stop',
+                    ...(providerError ? { errorMessage: providerError } : {}),
+                  }
+                ),
+                provider: model.provider,
+                model: model.id,
+                api: model.api,
+                usage: {
+                  input: extraction ? 3 : 23,
+                  output: extraction ? 1 : 5,
                   cacheRead: 0,
                   cacheWrite: 0,
-                  total: extraction ? 0.015 : 0,
+                  totalTokens: extraction ? 4 : 28,
+                  cost: {
+                    input: extraction ? 0.015 : 0,
+                    output: 0,
+                    cacheRead: 0,
+                    cacheWrite: 0,
+                    total: extraction ? 0.015 : 0,
+                  },
                 },
-              },
-            };
-            if (providerError) stream.push({ type: 'error', reason: 'error', error: message });
-            else
+              };
+              if (providerError) stream.push({ type: 'error', reason: 'error', error: message });
+              else
+                stream.push({
+                  type: 'done',
+                  reason: toolCall ? 'toolUse' : options.length ? 'length' : 'stop',
+                  message,
+                });
+              stream.end();
+            } catch {
               stream.push({
-                type: 'done',
-                reason: toolCall ? 'toolUse' : options.length ? 'length' : 'stop',
-                message,
+                type: 'error',
+                reason: 'error',
+                error: fauxAssistantMessage('', { stopReason: 'error' }),
               });
-            stream.end();
-          } catch {
-            stream.push({
-              type: 'error',
-              reason: 'error',
-              error: fauxAssistantMessage('', { stopReason: 'error' }),
-            });
-            stream.end();
-          }
-        })();
-        return stream;
-      },
-    });
+              stream.end();
+            }
+          })();
+          return stream;
+        },
+      });
     return runtime;
   });
   const agent = new PiAcpAgent(peer, {

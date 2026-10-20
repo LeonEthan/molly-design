@@ -345,6 +345,168 @@ describe('owned ACP host integration', () => {
     }
   });
 
+  it.each([
+    ['openai-responses', 'https://synthetic.invalid/v1/', 'https://synthetic.invalid/v1'],
+    [
+      'openai-responses',
+      'https://synthetic.invalid/v1/v1/responses/',
+      'https://synthetic.invalid/v1',
+    ],
+    [
+      'google-generative-ai',
+      'https://synthetic.invalid/v1beta/',
+      'https://synthetic.invalid/v1beta',
+    ],
+    [
+      'google-generative-ai',
+      'https://synthetic.invalid/v1beta/v1beta/models/models/',
+      'https://synthetic.invalid/v1beta',
+    ],
+  ] as const)(
+    'admits a managed %s run with saved URL %s',
+    async (compatibleApi, baseUrl, resolvedBaseUrl) => {
+      const f = await managed({
+        config: {
+          connection: {
+            schemaVersion: 1,
+            id: 'connection',
+            revision: 1,
+            providerPresetId: 'openai-compatible',
+            displayName: 'Synthetic',
+            baseUrl,
+            credentialRef: 'protected-reference',
+            enabled: true,
+            compatibleApi,
+            customModels: [
+              {
+                modelId: 'model',
+                name: 'Synthetic',
+                input: ['text'],
+                contextWindow: 8192,
+                maxTokens: 1024,
+                thinking: ['off'],
+                toolCalls: true,
+                maxTokensField: 'max_tokens',
+              },
+            ],
+          },
+        },
+      });
+      const session = await f.open();
+      f.grant(session.snapshot);
+      const result = await session.prompt('Normalized endpoint admission.');
+      expect(result.stopReason).toBe('end_turn');
+      expect(f.runtime().getModel(providerId, 'model')).toMatchObject({
+        api: compatibleApi,
+        baseUrl: resolvedBaseUrl,
+      });
+      expect(f.observed.some((context) => context.includes('Normalized endpoint admission.'))).toBe(
+        true
+      );
+      expect(result._meta?.mollyNativeOutcome).toMatchObject({ status: 'completed' });
+    }
+  );
+
+  it.each([
+    ['openai-responses', 'https://alternate.invalid/v1'],
+    ['openai-responses', 'https://synthetic.invalid/alternate/v1'],
+    ['google-generative-ai', 'https://alternate.invalid/v1beta'],
+    ['google-generative-ai', 'https://synthetic.invalid/alternate/v1beta'],
+  ] as const)(
+    'refuses an alternate endpoint before inference in a normalized %s run: %s',
+    async (compatibleApi, alternateEndpoint) => {
+      const f = await managed({
+        config: {
+          connection: {
+            schemaVersion: 1,
+            id: 'connection',
+            revision: 1,
+            providerPresetId: 'openai-compatible',
+            displayName: 'Synthetic',
+            baseUrl:
+              compatibleApi === 'openai-responses'
+                ? 'https://synthetic.invalid/v1/v1/responses/'
+                : 'https://synthetic.invalid/v1beta/v1beta/models/',
+            credentialRef: 'protected-reference',
+            enabled: true,
+            compatibleApi,
+            customModels: [
+              {
+                modelId: 'model',
+                name: 'Synthetic',
+                input: ['text'],
+                contextWindow: 8192,
+                maxTokens: 1024,
+                thinking: ['off'],
+                toolCalls: true,
+                maxTokensField: 'max_tokens',
+              },
+            ],
+          },
+        },
+        extensions: [
+          (pi) => {
+            pi.on('before_agent_start', () => {
+              pi.registerProvider(providerId, { baseUrl: alternateEndpoint });
+            });
+          },
+        ],
+      });
+      const session = await f.open();
+      f.grant(session.snapshot);
+      await expect(session.prompt()).rejects.toThrow('pi_acp_host_execution_failed');
+      expect(f.observed).toEqual([]);
+      expect(f.pipe.destroyed).toBe(true);
+    }
+  );
+
+  it.each([
+    'anthropic-messages',
+    'openai-completions',
+    'openai-responses',
+    'google-generative-ai',
+  ] as const)(
+    'admits an empty compatible grant only for legacy protocols: %s',
+    async (compatibleApi) => {
+      const f = await managed({
+        config: {
+          connection: {
+            schemaVersion: 1,
+            id: 'connection',
+            revision: 1,
+            providerPresetId: 'openai-compatible',
+            displayName: 'Synthetic',
+            baseUrl: 'https://synthetic.invalid/v1',
+            credentialRef: 'protected-reference',
+            enabled: true,
+            compatibleApi,
+            customModels: [
+              {
+                modelId: 'model',
+                name: 'Synthetic',
+                input: ['text'],
+                contextWindow: 8192,
+                maxTokens: 1024,
+                thinking: ['off'],
+                toolCalls: true,
+                maxTokensField: 'max_tokens',
+              },
+            ],
+          },
+        },
+      });
+      const session = await f.open();
+      f.grant(session.snapshot, '');
+      if (compatibleApi === 'openai-responses' || compatibleApi === 'google-generative-ai') {
+        await expect(session.prompt()).rejects.toThrow('pi_acp_host_execution_failed');
+        expect(f.observed).toEqual([]);
+        expect(f.pipe.destroyed).toBe(true);
+      } else {
+        expect((await session.prompt()).stopReason).toBe('end_turn');
+      }
+    }
+  );
+
   it('dispatches a default-endpoint model only to its own SDK endpoint', async () => {
     const probe = await ModelRuntime.create({
       modelsPath: null,

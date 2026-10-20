@@ -13,6 +13,8 @@ const cases = {
   quota: 'model_quota_exceeded',
   content_policy: 'model_content_blocked',
   invalid_request: 'model_request_rejected',
+  not_found: 'model_endpoint_not_found',
+  unreachable: 'model_server_unreachable',
   transient: 'model_temporarily_unavailable',
   unknown: 'model_request_failed',
 } satisfies Record<ModelErrorCategory, ModelRequestFailureCode>;

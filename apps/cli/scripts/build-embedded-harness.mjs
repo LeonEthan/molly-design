@@ -145,6 +145,14 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
     JSON.stringify({ private: true, type: 'module' })
   );
   const packages = stageClosure(directory, external);
+  const piRequire = createRequire(
+    path.join(directory, 'node_modules/@earendil-works/pi-ai/package.json')
+  );
+  const googleEntry = piRequire.resolve('@google/genai');
+  const google = JSON.parse(
+    fs.readFileSync(path.resolve(path.dirname(googleEntry), '../../package.json'), 'utf8')
+  );
+  if (google.version !== '2.23.0') throw new Error('Unreviewed Pi Google SDK transport dependency');
   fs.copyFileSync(
     path.join(harnessRoot, 'src/LICENSE.pi-acp'),
     path.join(directory, 'LICENSE.pi-acp')

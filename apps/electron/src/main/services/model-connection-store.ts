@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import {
   ModelConnectionSchema,
+  compatibleConnectionApiRequiresKey,
   SaveModelConnectionSchema,
   DeleteModelConnectionSchema,
   DeleteImageConnectionSchema,
@@ -549,6 +550,12 @@ export class ModelConnectionStore {
         if (providerChanged && effectiveAuthType === 'openai_oauth')
           throw new Error('model_connection_oauth_requires_reauth')
         const apiKey = data.apiKey ?? (providerChanged ? undefined : previous?.apiKey)
+        if (
+          data.providerPresetId === 'openai-compatible' &&
+          compatibleConnectionApiRequiresKey(data.compatibleApi) &&
+          (apiKey === undefined || apiKey.length === 0)
+        )
+          throw new Error('model_connection_credential_required')
         if (effectiveAuthType !== 'openai_oauth' && apiKey === undefined)
           throw new Error('model_connection_credential_required')
         // A changed destination must receive explicit renewed credential consent.

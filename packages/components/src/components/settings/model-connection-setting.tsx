@@ -20,6 +20,7 @@ import {
   type BeginOpenAiAuth,
   type ConnectionCheckResult,
   normalizeCompatibleConnectionApi,
+  compatibleConnectionApiRequiresKey,
   type CompatibleConnectionApi,
   type CompatibleConnectionPreset,
   type DiscoverModelConnection,
@@ -41,7 +42,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
-import { ChevronDown, Ellipsis, Plus } from '@/ui/icons';
+import { ChevronDown, CircleCheck, Ellipsis, LoaderCircle, Plus } from '@/ui/icons';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
@@ -55,7 +56,8 @@ import {
 import {
   ConnectionCheckBadge,
   ConnectionCheckError,
-  useConnectionCheck,
+  isModelResponseCheckApi,
+  useConnectionCheckController,
   type ConnectionCheckState,
 } from './connection-check';
 import { ModelChecklist, type CatalogModel } from './model-checklist';
@@ -135,6 +137,11 @@ const withoutTrailingSlash = (url: string) => url.trim().replace(/\/+$/, '');
 
 const isDefaultEndpoint = (endpoint: string, preset: ProviderPresetId | ''): boolean =>
   preset !== '' && isProviderPresetDefaultEndpoint(preset, endpoint);
+
+const firstCheckableModelId = (
+  models: readonly { modelId: string }[] | undefined
+): string | undefined =>
+  models?.find((model) => model.modelId.trim().length > 0)?.modelId.trim();
 
 export type ConnectionIdentityDraft = {
   provider: ProviderPresetId | '';
@@ -420,12 +427,22 @@ export function ModelConnectionForm({
     return catalog?.filter((model) => model.providerPresetId === provider);
   }, [catalog, native, provider]);
   const typedKey = apiKey.trim();
-  const keylessInput = provider === 'openai-compatible' && (!stored || useNoKey);
+  const modelResponseCheck =
+    provider === 'openai-compatible' && isModelResponseCheckApi(compatibleApi);
+  const protocolRequiresKey =
+    provider === 'openai-compatible' && compatibleConnectionApiRequiresKey(compatibleApi);
+  const keylessInput =
+    provider === 'openai-compatible' && !protocolRequiresKey && (!stored || useNoKey);
   const missingRequiredKey = requiresKey && !typedKey && !keylessInput;
+  const checkModelId = modelResponseCheck ? firstCheckableModelId(customModels) : undefined;
   const checkRequest = useMemo<CheckModelConnection | null>(() => {
     if (provider === '' || configurationIssue || !ModelEndpointSchema.safeParse(endpoint).success)
       return null;
-    const compatible = provider === 'openai-compatible' ? { compatibleApi } : {};
+    if (modelResponseCheck && !checkModelId) return null;
+    const compatible =
+      provider === 'openai-compatible'
+        ? { compatibleApi, ...(checkModelId ? { modelId: checkModelId } : {}) }
+        : {};
     if (typedKey)
       return { providerPresetId: provider, baseUrl: endpoint, apiKey: typedKey, ...compatible };
     if (stored && !requiresKey && !useNoKey)
@@ -437,20 +454,29 @@ export function ModelConnectionForm({
       };
     return null;
   }, [
+    checkModelId,
     compatibleApi,
     configurationIssue,
     endpoint,
+    modelResponseCheck,
     provider,
     requiresKey,
     stored,
     typedKey,
     useNoKey,
   ]);
-  const check = useConnectionCheck(checkRequest, onCheck);
+  const { state: check, runNow: runCheckNow } = useConnectionCheckController(
+    checkRequest,
+    onCheck,
+    {
+      auto: !modelResponseCheck,
+    }
+  );
   // Keyless endpoints (Ollama, LM Studio) can be discovered without a key or stored row.
   const discoverable =
     provider === 'openai-compatible' &&
     !configurationIssue &&
+    (!protocolRequiresKey || Boolean(typedKey) || Boolean(stored && !requiresKey && !useNoKey)) &&
     ModelEndpointSchema.safeParse(endpoint).success;
   const discoveryKey = JSON.stringify([
     provider,
@@ -814,6 +840,7 @@ export function ModelConnectionForm({
                   busy={busy}
                   onApiChange={(api) => {
                     setCompatibleApi(api);
+                    if (compatibleConnectionApiRequiresKey(api)) setUseNoKey(false);
                     setDiscovery({ phase: 'idle' });
                   }}
                   onApplyPreset={applyPreset}
@@ -845,8 +872,38 @@ export function ModelConnectionForm({
                   onChange={(event) => setApiKey(event.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">{t('settings.models.keyLocalHint')}</p>
-                <ConnectionCheckError state={check} baseUrl={endpoint} />
-                {provider === 'openai-compatible' && stored ? (
+                <ConnectionCheckError
+                  state={check}
+                  baseUrl={endpoint}
+                  modelResponse={modelResponseCheck}
+                />
+                {modelResponseCheck ? (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      disabled={busy || checkRequest === null || check.phase === 'checking'}
+                      onClick={runCheckNow}
+                    >
+                      {t('settings.check.run')}
+                    </Button>
+                    {check.phase === 'checking' ? (
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <LoaderCircle aria-hidden className="h-3.5 w-3.5 animate-spin" />
+                        {t('settings.check.checking')}
+                      </span>
+                    ) : null}
+                    {check.phase === 'done' && check.result.ok ? (
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <CircleCheck aria-hidden className="h-3.5 w-3.5" />
+                        {t('settings.check.badge.responded')}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {provider === 'openai-compatible' && stored && !protocolRequiresKey ? (
                   <label className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Switch
                       checked={useNoKey}
@@ -1149,12 +1206,17 @@ export function ModelConnectionSetting({
     }));
   const checkRow = (connection: ModelConnection) => {
     recordCheck(connection, { phase: 'checking' });
+    const modelResponse =
+      connection.providerPresetId === 'openai-compatible' &&
+      isModelResponseCheckApi(connection.compatibleApi);
+    const modelId = modelResponse ? firstCheckableModelId(connection.customModels) : undefined;
     void onCheck({
       providerPresetId: connection.providerPresetId,
       baseUrl: connection.baseUrl,
       ...(connection.providerPresetId === 'openai-compatible'
         ? { compatibleApi: connection.compatibleApi }
         : {}),
+      ...(modelId ? { modelId } : {}),
       stored: { id: connection.id, revision: connection.revision },
     }).then(
       (result) => recordCheck(connection, { phase: 'done', result }),
@@ -1423,7 +1485,13 @@ export function ModelConnectionRow({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <p className="truncate text-sm">{connection.displayName}</p>
-          <ConnectionCheckBadge state={connection.oauth?.signedOut ? undefined : check} />
+          <ConnectionCheckBadge
+            state={connection.oauth?.signedOut ? undefined : check}
+            modelResponse={
+              connection.providerPresetId === 'openai-compatible' &&
+              isModelResponseCheckApi(connection.compatibleApi)
+            }
+          />
         </div>
         <p className="truncate text-xs text-muted-foreground">
           {where} · {connection.oauth?.signedOut ? t('settings.models.oauth.signedOut') : summary}

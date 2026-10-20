@@ -11,6 +11,8 @@ import {
 import type {
   CheckModelConnection,
   BeginOpenAiAuth,
+  CompatibleConnectionApi,
+  ConnectionCheckResult,
   DiscoverModelConnection,
   DiscoverModelConnectionResult,
   HarnessModelCatalog,
@@ -27,6 +29,7 @@ const { connectionIpc } = vi.hoisted(() => ({
     getSnapshot: vi.fn(),
     save: vi.fn(),
     delete: vi.fn(),
+    check: vi.fn(),
     signOutOpenAiAuth: vi.fn(),
     beginOpenAiAuth: vi.fn(),
     completeOpenAiAuth: vi.fn(),
@@ -1749,5 +1752,442 @@ describe('connection management', () => {
         (button) => button.textContent === en['settings.models.addCustomModel']
       )
     ).toBe(true);
+  });
+});
+
+const COMPATIBLE_TYPE_LABELS: Record<CompatibleConnectionApi, string> = {
+  'anthropic-messages': 'Anthropic Messages',
+  'openai-completions': 'OpenAI Chat Completions',
+  'openai-responses': 'OpenAI Responses API',
+  'google-generative-ai': 'Gemini Native generateContent',
+};
+
+function compatibleConnection(
+  compatibleApi: CompatibleConnectionApi | undefined,
+  overrides: Partial<ModelConnection> = {}
+): ModelConnection {
+  return {
+    schemaVersion: 1,
+    id: '00000000-0000-4000-8000-0000000000c1',
+    revision: 2,
+    providerPresetId: 'openai-compatible',
+    displayName: 'Custom',
+    baseUrl: 'https://gateway.invalid/v1',
+    enabled: true,
+    credentialRef: 'PRIVATE_REFERENCE_NOT_A_SECRET',
+    customModels: [
+      {
+        modelId: 'vendor/custom',
+        name: 'Custom',
+        input: ['text'],
+        contextWindow: 32768,
+        maxTokens: 4096,
+        thinking: ['off'],
+        toolCalls: true,
+        maxTokensField: 'max_tokens',
+      },
+    ],
+    ...overrides,
+    ...(compatibleApi === undefined ? {} : { compatibleApi }),
+  };
+}
+
+const connectionModel = (
+  modelId: string
+): NonNullable<ModelConnection['customModels']>[number] => ({
+  modelId,
+  name: 'Synthetic',
+  input: ['text'],
+  contextWindow: 32768,
+  maxTokens: 4096,
+  thinking: ['off'],
+  toolCalls: true,
+  maxTokensField: 'max_tokens',
+});
+
+const CHECK_MODEL_ID = 'vendor/selected';
+const FORM_CHECK_MODELS = [connectionModel('   '), connectionModel(`  ${CHECK_MODEL_ID}  `)];
+const CHECK_MODELS = [connectionModel(`  ${CHECK_MODEL_ID}  `), connectionModel('vendor/other')];
+
+const typeRadio = (label: string) =>
+  [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+    (node) => node.textContent === label
+  )!;
+
+const clickButton = async (text: string) => {
+  const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (node) => node.textContent === text
+  )!;
+  await act(async () => button.click());
+};
+
+describe('compatible connection types (#181)', () => {
+  it('offers all four types enabled with exact labels and no coming-soon state', async () => {
+    await render(async () => undefined, compatibleConnection('openai-completions'));
+    const group = [...host.querySelectorAll<HTMLDivElement>('[role="radiogroup"]')].find(
+      (node) => node.getAttribute('aria-label') === en['settings.models.compatibleApi.label']
+    )!;
+    const options = [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(options.map((option) => option.textContent)).toEqual([
+      'Anthropic Messages',
+      'OpenAI Chat Completions',
+      'OpenAI Responses API',
+      'Gemini Native generateContent',
+    ]);
+    expect(options.every((option) => !option.disabled)).toBe(true);
+    expect(host.textContent).not.toContain('coming soon');
+  });
+
+  it('applies the OpenAI Responses and Google Gemini presets; a changed destination clears the key', async () => {
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+        })
+      )
+    );
+    const endpoint = () => host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!;
+    const key = () => host.querySelector<HTMLInputElement>('input[type=password]')!;
+    await change(key(), 'sk-synthetic');
+    await clickButton(en['settings.models.compatiblePresets.openaiResponses']);
+    expect(endpoint().value).toBe('https://api.openai.com/v1');
+    expect(typeRadio('OpenAI Responses API').getAttribute('aria-checked')).toBe('true');
+    expect(key().value).toBe('');
+    await clickButton(en['settings.models.compatiblePresets.googleGemini']);
+    expect(endpoint().value).toBe('https://generativelanguage.googleapis.com/v1beta');
+    expect(typeRadio('Gemini Native generateContent').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('keeps the typed key when switching the connection type', async () => {
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+        })
+      )
+    );
+    const key = () => host.querySelector<HTMLInputElement>('input[type=password]')!;
+    await change(key(), 'sk-synthetic');
+    const checkButton = () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent === en['settings.check.run']
+      );
+    expect(checkButton()).toBeUndefined();
+    await act(async () => typeRadio('OpenAI Responses API').click());
+    expect(key().value).toBe('sk-synthetic');
+    expect(checkButton()).toBeDefined();
+    await act(async () => typeRadio('Gemini Native generateContent').click());
+    expect(key().value).toBe('sk-synthetic');
+    await act(async () => typeRadio('Anthropic Messages').click());
+    expect(key().value).toBe('sk-synthetic');
+    expect(checkButton()).toBeUndefined();
+  });
+
+  it('requires a key for the new protocols, unlike the keyless-capable chat types', async () => {
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+        })
+      )
+    );
+    const keyLabel = () => host.querySelector('label[for$="-key"]')!.textContent ?? '';
+    const submit = () => host.querySelector<HTMLButtonElement>('button[type=submit]')!;
+    await act(async () => typeRadio('OpenAI Responses API').click());
+    expect(keyLabel()).not.toContain(en['settings.models.optional']);
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://gateway.invalid/v1'
+    );
+    await pickDiscovered(en['settings.models.addCustomModel']);
+    for (const [field, value] of [
+      ['modelId', 'model-synthetic'],
+      ['name', 'Synthetic'],
+      ['contextWindow', '32768'],
+      ['maxTokens', '4096'],
+    ]) {
+      await change(host.querySelector<HTMLInputElement>(`fieldset input[id$="-${field}"]`)!, value);
+    }
+    expect(submit().disabled).toBe(true);
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'sk-synthetic');
+    expect(submit().disabled).toBe(false);
+    await act(async () => typeRadio('OpenAI Chat Completions').click());
+    expect(keyLabel()).toContain(en['settings.models.optional']);
+    await act(async () => typeRadio('Gemini Native generateContent').click());
+    expect(keyLabel()).not.toContain(en['settings.models.optional']);
+  });
+
+  it('re-enables the key field when switching a keyless draft to a model-response type', async () => {
+    await render(async () => undefined, compatibleConnection('openai-completions'));
+    const key = () => host.querySelector<HTMLInputElement>('input[type=password]')!;
+    const noKeySwitch = () =>
+      [...host.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find(
+        (node) => node.closest('label')?.textContent === en['settings.models.useNoKey']
+      )!;
+    await act(async () => noKeySwitch().click());
+    expect(key().disabled).toBe(true);
+    await act(async () => typeRadio('OpenAI Responses API').click());
+    expect(key().disabled).toBe(false);
+    expect(
+      [...host.querySelectorAll<HTMLButtonElement>('[role="switch"]')].some(
+        (node) => node.closest('label')?.textContent === en['settings.models.useNoKey']
+      )
+    ).toBe(false);
+  });
+
+  it('shows the exact masked-key helper in both languages', async () => {
+    await render(async () => undefined, compatibleConnection('openai-responses'));
+    expect(host.querySelector('input[type=password]')).not.toBeNull();
+    expect(host.textContent).toContain(en['settings.models.keyLocalHint']);
+    await initI18n('zh_CN');
+    await act(async () => root.unmount());
+    host.remove();
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await render(async () => undefined, compatibleConnection('google-generative-ai'));
+    expect(host.textContent).toContain(zh['settings.models.keyLocalHint']);
+    expect(host.textContent).not.toContain('Mac');
+  });
+});
+
+describe('saved connection type round trip (#190)', () => {
+  beforeEach(() => {
+    connectionIpc.check.mockResolvedValue({ ok: true });
+  });
+
+  it.each(Object.entries(COMPATIBLE_TYPE_LABELS))(
+    'reopens with the saved %s type and keeps it on an unchanged save',
+    async (api, label) => {
+      const connection = compatibleConnection(api as CompatibleConnectionApi);
+      connectionIpc.getSnapshot.mockResolvedValue({ connections: [connection] });
+      connectionIpc.save.mockImplementation(async () => ({
+        ...connection,
+        revision: connection.revision + 1,
+      }));
+      await act(async () => root.render(createElement(ModelConnectionSetting)));
+      await pickDiscovered(en['common.edit']);
+      expect(typeRadio(label).getAttribute('aria-checked')).toBe('true');
+      const savesBefore = connectionIpc.save.mock.calls.length;
+      await act(async () => {
+        host
+          .querySelector('form')!
+          .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      expect(connectionIpc.save.mock.calls.length).toBe(savesBefore + 1);
+      const saved = connectionIpc.save.mock.calls.at(-1)![0] as SaveModelConnection;
+      expect(saved.compatibleApi).toBe(api);
+      await act(async () => root.unmount());
+      host.remove();
+      host = document.createElement('div');
+      document.body.append(host);
+      root = createRoot(host);
+      connectionIpc.getSnapshot.mockResolvedValue({
+        connections: [{ ...connection, revision: connection.revision + 1 }],
+      });
+      await act(async () => root.render(createElement(ModelConnectionSetting)));
+      await pickDiscovered(en['common.edit']);
+      expect(typeRadio(label).getAttribute('aria-checked')).toBe('true');
+    }
+  );
+
+  it('falls back to OpenAI Chat Completions when a stored connection has no saved type', async () => {
+    const legacy = compatibleConnection(undefined);
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [legacy] });
+    connectionIpc.save.mockImplementation(async () => ({
+      ...legacy,
+      revision: legacy.revision + 1,
+    }));
+    await act(async () => root.render(createElement(ModelConnectionSetting)));
+    await pickDiscovered(en['common.edit']);
+    expect(typeRadio('OpenAI Chat Completions').getAttribute('aria-checked')).toBe('true');
+    await act(async () => {
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    const saved = connectionIpc.save.mock.calls.at(-1)![0] as SaveModelConnection;
+    expect(saved.compatibleApi).toBe('openai-completions');
+  });
+});
+
+describe('model-response connection check (#181)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+  const settle = () =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(CONNECTION_CHECK_DELAY_MS);
+    });
+
+  async function renderNewTypeForm(
+    label: string,
+    result: ConnectionCheckResult | ((input: CheckModelConnection) => ConnectionCheckResult)
+  ) {
+    const requests: CheckModelConnection[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onCheck: async (input) => {
+            requests.push(input);
+            return typeof result === 'function' ? result(input) : result;
+          },
+        })
+      )
+    );
+    await act(async () => typeRadio(label).click());
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://gateway.invalid/v1'
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'sk-synthetic');
+    await pickDiscovered(en['settings.models.addCustomModel']);
+    await change(
+      host.querySelector<HTMLInputElement>('fieldset input[id$="-modelId"]')!,
+      'model-synthetic'
+    );
+    return requests;
+  }
+
+  const clickCheck = async () => {
+    const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (node) => node.textContent === en['settings.check.run']
+    )!;
+    expect(button.disabled).toBe(false);
+    await act(async () => button.click());
+  };
+
+  it.each([
+    ['OpenAI Responses API', 'openai-responses'],
+    ['Gemini Native generateContent', 'google-generative-ai'],
+  ] as const)(
+    'checks %s only on explicit click, sending the declared model ID',
+    async (label, api) => {
+      const requests = await renderNewTypeForm(label, { ok: true });
+      await settle();
+      expect(requests).toEqual([]);
+      await clickCheck();
+      expect(requests).toEqual([
+        {
+          providerPresetId: 'openai-compatible',
+          baseUrl: 'https://gateway.invalid/v1',
+          compatibleApi: api,
+          modelId: 'model-synthetic',
+          apiKey: 'sk-synthetic',
+        },
+      ]);
+      expect(host.textContent).toContain('Connected. Model responded.');
+    }
+  );
+
+  it.each([
+    [
+      { ok: false, reason: 'key_rejected', status: 401 },
+      'The key was rejected. Check the key and try again.',
+    ],
+    [
+      { ok: false, reason: 'unsupported', status: 404 },
+      'Endpoint or model not found. Check the base URL and model ID.',
+    ],
+    [
+      { ok: false, reason: 'unreachable' },
+      "Can't reach the server from your computer. Check the URL and your network.",
+    ],
+  ] as const)('shows the exact plain-language copy for %j', async (result, copy) => {
+    const requests = await renderNewTypeForm('OpenAI Responses API', result);
+    await clickCheck();
+    expect(requests).toHaveLength(1);
+    expect(host.querySelector('[role=alert]')?.textContent).toBe(copy);
+  });
+
+  it('keeps the free automatic check for OpenAI Chat Completions, without a model ID', async () => {
+    const requests = await renderNewTypeForm('OpenAI Chat Completions', { ok: true, models: [] });
+    await settle();
+    expect(requests).toEqual([
+      {
+        providerPresetId: 'openai-compatible',
+        baseUrl: 'https://gateway.invalid/v1',
+        compatibleApi: 'openai-completions',
+        apiKey: 'sk-synthetic',
+      },
+    ]);
+    expect(requests[0]).not.toHaveProperty('modelId');
+    expect(
+      [...host.querySelectorAll<HTMLButtonElement>('button')].some(
+        (node) => node.textContent === en['settings.check.run']
+      )
+    ).toBe(false);
+  });
+
+  it('selects the first non-empty trimmed model ID for the explicit form check', async () => {
+    const connection = compatibleConnection('openai-responses', {
+      customModels: FORM_CHECK_MODELS,
+    });
+    const requests: CheckModelConnection[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          stored: connection,
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onCheck: async (input) => {
+            requests.push(input);
+            return { ok: true };
+          },
+        })
+      )
+    );
+    await clickCheck();
+    expect(requests).toEqual([
+      {
+        providerPresetId: 'openai-compatible',
+        baseUrl: connection.baseUrl,
+        compatibleApi: 'openai-responses',
+        modelId: CHECK_MODEL_ID,
+        stored: { id: connection.id, revision: connection.revision },
+      },
+    ]);
+  });
+
+  it('selects the same first non-empty trimmed model ID for a saved row check', async () => {
+    const connection = compatibleConnection('google-generative-ai', {
+      customModels: CHECK_MODELS,
+    });
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [connection] });
+    connectionIpc.check.mockReset();
+    connectionIpc.check.mockResolvedValueOnce({ ok: false, reason: 'unsupported', status: 404 });
+    connectionIpc.check.mockResolvedValueOnce({ ok: true });
+    await act(async () => root.render(createElement(ModelConnectionSetting)));
+    const openMenu = async () => {
+      const trigger = host.querySelector<HTMLButtonElement>(
+        `button[aria-label="${en['settings.models.moreActions'].replace('{{name}}', 'Custom')}"]`
+      )!;
+      await act(async () =>
+        trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+      );
+      const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (node) => node.textContent === en['settings.check.run']
+      )!;
+      await act(async () => item.click());
+    };
+    await openMenu();
+    expect(connectionIpc.check).toHaveBeenCalledWith({
+      providerPresetId: 'openai-compatible',
+      baseUrl: connection.baseUrl,
+      compatibleApi: 'google-generative-ai',
+      modelId: CHECK_MODEL_ID,
+      stored: { id: connection.id, revision: connection.revision },
+    });
+    expect(host.textContent).toContain(en['settings.check.badge.not_found']);
+    await openMenu();
+    expect(host.textContent).toContain('Connected. Model responded.');
   });
 });

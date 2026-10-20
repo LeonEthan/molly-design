@@ -1,13 +1,19 @@
 import { z } from 'zod';
 import type { McpConnectionSpec } from './workspace-mcp';
 import { ImageConnectionEndpointSchema, ImageConnectionProtocolSchema } from '#image-connection';
-import { CompatibleConnectionApiSchema, normalizeCompatibleConnectionApi } from '#compatible-connection-api';
+import {
+  CompatibleConnectionApiSchema,
+  normalizeCompatibleConnectionApi,
+  compatibleConnectionApiRequiresKey,
+} from '#compatible-connection-api';
 export {
   CompatibleConnectionApiSchema,
   COMPATIBLE_CONNECTION_PRESETS,
   SHIPPED_COMPATIBLE_CONNECTION_APIS,
   isCompatibleConnectionApiShipped,
+  compatibleConnectionApiRequiresKey,
   normalizeCompatibleConnectionApi,
+  normalizeCompatibleConnectionBaseUrl,
   type CompatibleConnectionApi,
   type CompatibleConnectionPreset,
   type ShippedCompatibleConnectionApi,
@@ -628,6 +634,7 @@ export const CheckModelConnectionSchema = z
     providerPresetId: ProviderPresetIdSchema,
     baseUrl: ModelEndpointSchema,
     compatibleApi: CompatibleConnectionApiSchema.optional(),
+    modelId: z.string().trim().min(1).max(200).optional(),
     apiKey: z.string().trim().min(1).max(16_384).optional(),
     stored: z.object({ id: identifier, revision }).strict().optional(),
   })
@@ -793,8 +800,11 @@ export const SaveModelConnectionSchema = ModelConnectionFieldsSchema.omit({
   })
   .strict()
   .refine(
-    (value) => value.apiKey !== '' || value.providerPresetId === 'openai-compatible',
-    'Only compatible connections support an empty key'
+    (value) =>
+      value.apiKey !== '' ||
+      (value.providerPresetId === 'openai-compatible' &&
+        !compatibleConnectionApiRequiresKey(value.compatibleApi)),
+    'Only compatible Anthropic Messages and OpenAI Chat Completions support an empty key'
   )
   .refine(
     (value) =>

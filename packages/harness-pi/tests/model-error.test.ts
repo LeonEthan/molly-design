@@ -12,6 +12,7 @@ describe('static model failure categories', () => {
     ['403 authentication failed', 'auth'],
     ['403 invalid api key', 'auth'],
     ['Authentication failed', 'auth'],
+    ['400 API_KEY_INVALID: API key not valid. Please pass a valid API key.', 'auth'],
     ['{"type":"authentication_error"}', 'auth'],
     ['Provider returned error: 401 invalid api key', 'auth'],
     ['429 insufficient_quota', 'quota'],
@@ -40,18 +41,44 @@ describe('static model failure categories', () => {
     ['403 Your request violates the provider policy', 'content_policy'],
     ['403 forbidden', 'auth'],
     ['400 invalid_request', 'invalid_request'],
-    ['Provider returned error: 404 model not found', 'invalid_request'],
+    ['Provider returned error: 404 model not found', 'not_found'],
     ['422 request rejected', 'invalid_request'],
     ['529 overloaded', 'transient'],
     ['500 internal_server_error', 'transient'],
     ['429 too many requests', 'transient'],
-    ['Connection error. ECONNRESET', 'transient'],
+    ['Connection error. ECONNRESET', 'unreachable'],
+    ['fetch failed', 'unreachable'],
+    ['TypeError: fetch failed', 'unreachable'],
+    ['Failed to fetch', 'unreachable'],
+    ['Connection error.', 'unreachable'],
+    ['Request timed out.', 'unreachable'],
+    ['ETIMEDOUT', 'unreachable'],
+    ['ENOTFOUND', 'unreachable'],
+    ['UND_ERR_CONNECT_TIMEOUT', 'unreachable'],
+    ['502 upstream network error', 'transient'],
+    ['504 upstream request timed out', 'transient'],
+    ['504 gateway timeout', 'transient'],
+    ['Provider returned error: 502 upstream connection error', 'transient'],
+    ['network topology unsupported', 'unknown'],
+    ['timeout configuration unsupported', 'transient'],
     ['opaque response failure', 'unknown'],
     ['529', 'unknown'],
-    ['ECONNRESET', 'unknown'],
+    ['ECONNRESET', 'unreachable'],
   ])('classifies %s as %s', (errorMessage, category) => {
     const message = fauxAssistantMessage('', { stopReason: 'error', errorMessage });
     expect(classifyModelError(message, 200000)).toBe(category);
+  });
+
+  it('preserves the baseline authentication diagnostic without provider details', () => {
+    const message = fauxAssistantMessage('', {
+      stopReason: 'error',
+      errorMessage: '401 SYNTHETIC_SECRET',
+    });
+    expect(modelErrorDiagnostic(message)).toEqual({
+      category: 'auth',
+      details:
+        'The model service rejected the credentials. Your conversation and draft files are preserved.',
+    });
   });
 
   it('uses unknown when the assistant failure is missing', () => {

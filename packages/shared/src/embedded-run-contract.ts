@@ -213,6 +213,8 @@ export const MODEL_ERROR_CATEGORIES = [
   'quota',
   'content_policy',
   'invalid_request',
+  'not_found',
+  'unreachable',
   'transient',
   'unknown',
 ] as const;
@@ -224,6 +226,8 @@ const FAILURE_CODE_BY_CATEGORY = {
   quota: 'model_quota_exceeded',
   content_policy: 'model_content_blocked',
   invalid_request: 'model_request_rejected',
+  not_found: 'model_endpoint_not_found',
+  unreachable: 'model_server_unreachable',
   transient: 'model_temporarily_unavailable',
   unknown: 'model_request_failed',
 } as const satisfies Record<ModelErrorCategory, import('./ai').ModelRequestFailureCode>;

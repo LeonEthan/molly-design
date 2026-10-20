@@ -18,6 +18,18 @@ const MODEL_REQUEST_FAILURE_COPY = {
     actionKey: 'sessions.systemNotices.chatFailed.modelAuthRejectedAction',
     action: 'Check the connection in Settings.',
   },
+  model_endpoint_not_found: {
+    titleKey: 'sessions.systemNotices.chatFailed.modelEndpointNotFound',
+    title: 'Endpoint or model not found. Check the base URL and model ID.',
+    actionKey: 'sessions.systemNotices.chatFailed.modelEndpointNotFoundAction',
+    action: 'Check the connection in Settings.',
+  },
+  model_server_unreachable: {
+    titleKey: 'sessions.systemNotices.chatFailed.modelServerUnreachable',
+    title: "Can't reach the server from your computer. Check the URL and your network.",
+    actionKey: 'sessions.systemNotices.chatFailed.modelServerUnreachableAction',
+    action: 'Check the connection in Settings.',
+  },
   model_quota_exceeded: {
     titleKey: 'sessions.systemNotices.chatFailed.modelQuotaExceeded',
     title: 'Model quota or billing limit reached',

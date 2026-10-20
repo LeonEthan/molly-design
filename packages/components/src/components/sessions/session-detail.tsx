@@ -578,8 +578,10 @@ const SessionDetail = ({
   useEffect(() => {
     if (!designElementFocus || designElementFocus === seenDesignElementFocus.current) return;
     seenDesignElementFocus.current = designElementFocus;
-    if (activeSession?.design) activateSidebarTab('design');
-  }, [activateSidebarTab, activeSession?.design, designElementFocus]);
+    if (!activeSession?.design) return;
+    revealRightSidebar();
+    activateSidebarTab('design');
+  }, [activateSidebarTab, activeSession?.design, designElementFocus, revealRightSidebar]);
   const activeSessionLiveStatus = useAtomValue(
     sessionLiveStatusAtomFamily((activeSession?.id ?? '__no_session__') as SessionId)
   );

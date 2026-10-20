@@ -8,6 +8,10 @@ run(`pause ${lang || 'auto'} ${width}`, async () => {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   if (lang) await page.addInitScript((language) => localStorage.setItem('molly-lang', language), lang);
   await page.goto(BASE, { waitUntil: 'load' });
+  if ((await page.locator('.hs').count()) === 0) {
+    await browser.close();
+    throw new Error('pause: hero loop missing');
+  }
   const stage = page.locator('.hs');
   const time = () => page.evaluate(() => document.querySelector('.hs').dataset.time);
   const setHidden = (hidden) =>

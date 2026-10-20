@@ -7,7 +7,7 @@ import {
 import {
   buildCompatibleListModelsRequest,
   compatibleListModelsParseStyle
-} from './compatible-list-models-request'
+} from './compatible-list-models-request.ts'
 import type { ModelConnectionStore } from './model-connection-store'
 
 type CheckStyle = (typeof PROVIDER_PRESET_CHECKS)[keyof typeof PROVIDER_PRESET_CHECKS]

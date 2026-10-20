@@ -617,6 +617,34 @@ describe('connection row', () => {
     expect(rowSwitch().getAttribute('aria-checked')).toBe('false');
   });
 
+  it('keeps anthropic-messages when a compatible row is switched off', async () => {
+    const toggles: SaveModelConnection[] = [];
+    const customModels: NonNullable<ModelConnection['customModels']> = [
+      {
+        modelId: 'deepseek-flash',
+        name: 'DeepSeek Flash',
+        input: ['text'],
+        contextWindow: 65536,
+        maxTokens: 8192,
+        thinking: ['off'],
+        toolCalls: true,
+        maxTokensField: 'max_tokens',
+      },
+    ];
+    await renderRow(
+      {
+        ...stored,
+        providerPresetId: 'openai-compatible',
+        compatibleApi: 'anthropic-messages',
+        customModels,
+      },
+      (input: SaveModelConnection) => void toggles.push(input)
+    );
+    await act(async () => rowSwitch().click());
+    expect(toggles[0]?.compatibleApi).toBe('anthropic-messages');
+    expect(toggles[0]?.enabled).toBe(false);
+  });
+
   it('turns a connection off without asking for its key again', async () => {
     const toggles: SaveModelConnection[] = [];
     await renderRow(stored, (input: SaveModelConnection) => void toggles.push(input));

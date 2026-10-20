@@ -81,7 +81,7 @@ export async function readLanguageModelOAuthSendBlock(
     return connection ? getModelConnectionOAuthSendBlock(connection) : null;
   } catch (error) {
     console.error('Failed to read model connection OAuth state', error);
-    return 'denied';
+    return null;
   }
 }
 

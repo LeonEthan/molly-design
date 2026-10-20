@@ -77,11 +77,12 @@ export function configureModelConnection(
           name: 'Connection credential',
           async resolve({ credential }) {
             if (credential?.key === undefined) return undefined;
-            return {
-              auth: credential.key
-                ? { apiKey: credential.key }
-                : { apiKey: 'unused', headers: { Authorization: null } },
-            };
+            if (credential.key) return { auth: { apiKey: credential.key } };
+            const headers: Record<string, string | null> =
+              wireApi === 'anthropic-messages'
+                ? { 'x-api-key': null, Authorization: null }
+                : { Authorization: null };
+            return { auth: { apiKey: 'unused', headers } };
           },
         },
       },

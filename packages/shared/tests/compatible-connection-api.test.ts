@@ -54,6 +54,7 @@ describe('compatible connection api', () => {
   it('ships presets with base URLs and starter metadata', () => {
     const deepseek = COMPATIBLE_CONNECTION_PRESETS.find((preset) => preset.id === 'deepseek-chat');
     expect(deepseek?.api).toBe('openai-completions');
+    expect(deepseek?.starterModel?.modelId).toBe('deepseek-flash');
     expect(deepseek?.starterModel?.toolCalls).toBe(true);
     expect(deepseek?.starterModel?.contextWindow).toBeGreaterThan(0);
   });

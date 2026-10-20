@@ -20,10 +20,8 @@ export function buildCompatibleListModelsRequest(
   if (api === 'anthropic-messages') {
     const limit = options?.listLimit
     const url = limit !== undefined ? `${base}/v1/models?limit=${limit}` : `${base}/v1/models`
-    if (apiKey) {
-      headers['x-api-key'] = apiKey
-      headers['anthropic-version'] = ANTHROPIC_API_VERSION
-    }
+    headers['anthropic-version'] = ANTHROPIC_API_VERSION
+    if (apiKey) headers['x-api-key'] = apiKey
     return { url, headers }
   }
   const url = `${base}/models`

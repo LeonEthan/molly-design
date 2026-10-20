@@ -227,6 +227,79 @@ it.each(['', 'SYNTHETIC_KEY'])('uses only the granted compatible credential: %s'
   expect(JSON.stringify(requests)).not.toContain('SYNTHETIC_AMBIENT_SECRET');
 });
 
+it('omits x-api-key when an anthropic-messages connection has no key', async () => {
+  const credentials = new InMemoryCredentialStore();
+  const runtime = await ModelRuntime.create({
+    credentials,
+    modelsStore: new InMemoryModelsStore(),
+    modelsPath: null,
+    allowModelNetwork: false,
+    refreshOnCreate: false,
+  });
+  const configured = configureModelConnection(
+    runtime,
+    {
+      ...connection('openai-compatible', 'https://api.deepseek.com/anthropic'),
+      compatibleApi: 'anthropic-messages',
+      customModels: [
+        {
+          modelId: 'deepseek-flash',
+          name: 'DeepSeek Flash',
+          input: ['text'],
+          contextWindow: 65536,
+          maxTokens: 8192,
+          thinking: ['off'],
+          toolCalls: true,
+          maxTokensField: 'max_tokens',
+        },
+      ],
+    },
+    selecting('deepseek-flash')
+  );
+  await credentials.modify(configured.providerId, async () => ({ type: 'api_key', key: '' }));
+  const headers: { apiKey: string | null }[] = [];
+  const model = runtime.getModel(configured.providerId, 'deepseek-flash')!;
+  const result = await runtime
+    .streamSimple(
+      model,
+      { messages: [{ role: 'user', content: 'synthetic prompt', timestamp: 1 }] },
+      {
+        fetch: async (_url, init) => {
+          headers.push({ apiKey: new Headers(init?.headers).get('x-api-key') });
+          return new Response(
+            `event: message_start\ndata: ${JSON.stringify({
+              type: 'message_start',
+              message: {
+                id: 'synthetic',
+                type: 'message',
+                role: 'assistant',
+                content: [],
+                model: 'deepseek-flash',
+                usage: { input_tokens: 1, output_tokens: 1 },
+              },
+            })}\n\nevent: content_block_start\ndata: ${JSON.stringify({
+              type: 'content_block_start',
+              index: 0,
+              content_block: { type: 'text', text: '' },
+            })}\n\nevent: content_block_delta\ndata: ${JSON.stringify({
+              type: 'content_block_delta',
+              index: 0,
+              delta: { type: 'text_delta', text: 'ok' },
+            })}\n\nevent: message_delta\ndata: ${JSON.stringify({
+              type: 'message_delta',
+              delta: { stop_reason: 'end_turn' },
+              usage: { output_tokens: 1 },
+            })}\n\nevent: message_stop\ndata: ${JSON.stringify({ type: 'message_stop' })}\n\n`,
+            { headers: { 'content-type': 'text/event-stream' } }
+          );
+        },
+      }
+    )
+    .result();
+  expect(result.stopReason).toBe('stop');
+  expect(headers[0]?.apiKey).toBeNull();
+});
+
 it.each([undefined, false, true])(
   'requests streaming usage only for an explicit compatible-model capability: %s',
   async (usageInStreaming) => {

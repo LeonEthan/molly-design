@@ -57,8 +57,8 @@ export const COMPATIBLE_CONNECTION_PRESETS: readonly CompatibleConnectionPreset[
     api: 'openai-completions',
     baseUrl: 'https://api.deepseek.com/v1',
     starterModel: {
-      modelId: 'deepseek-chat',
-      name: 'DeepSeek Chat',
+      modelId: 'deepseek-flash',
+      name: 'DeepSeek Flash',
       input: ['text'],
       contextWindow: 65536,
       maxTokens: 8192,
@@ -73,8 +73,8 @@ export const COMPATIBLE_CONNECTION_PRESETS: readonly CompatibleConnectionPreset[
     api: 'anthropic-messages',
     baseUrl: 'https://api.deepseek.com/anthropic',
     starterModel: {
-      modelId: 'deepseek-chat',
-      name: 'DeepSeek Chat',
+      modelId: 'deepseek-flash',
+      name: 'DeepSeek Flash',
       input: ['text'],
       contextWindow: 65536,
       maxTokens: 8192,

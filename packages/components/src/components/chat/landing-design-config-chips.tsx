@@ -7,16 +7,20 @@ function ConfigBadge({
   icon,
   label,
   value,
+  disabled,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
+  disabled?: boolean;
 }) {
   return (
     <span
       title={value}
+      aria-disabled={disabled || undefined}
       className={cn(
-        'inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-border/50 bg-foreground/[0.03] px-2.5 py-1 text-xs text-foreground'
+        'inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-border/50 bg-foreground/[0.03] px-2.5 py-1 text-xs text-foreground',
+        disabled && 'opacity-70'
       )}
     >
       <span className="text-muted-foreground">{icon}</span>
@@ -30,9 +34,11 @@ function ConfigBadge({
 export function LandingDesignConfigChips({
   agentLabel,
   imageModelId,
+  disabled,
 }: {
   agentLabel: string | null;
   imageModelId: string | null;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
   if (!agentLabel && !imageModelId) return null;
@@ -43,6 +49,7 @@ export function LandingDesignConfigChips({
           icon={<Bot className="h-3.5 w-3.5" aria-hidden />}
           label={t('chat.landingChips.agent', 'Agent')}
           value={agentLabel}
+          disabled={disabled}
         />
       ) : null}
       {imageModelId ? (
@@ -50,6 +57,7 @@ export function LandingDesignConfigChips({
           icon={<ImageIcon className="h-3.5 w-3.5" aria-hidden />}
           label={t('chat.landingChips.imageModel', 'Image model')}
           value={imageModelId}
+          disabled={disabled}
         />
       ) : null}
     </div>

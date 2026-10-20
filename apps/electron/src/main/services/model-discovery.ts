@@ -4,7 +4,7 @@ import {
   type DiscoverModelConnection,
   type DiscoverModelConnectionResult
 } from '@molly/shared/embedded-harness'
-import { buildCompatibleListModelsRequest } from './compatible-list-models-request'
+import { buildCompatibleListModelsRequest } from './compatible-list-models-request.ts'
 import type { ModelConnectionStore } from './model-connection-store'
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024

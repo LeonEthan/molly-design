@@ -59,10 +59,7 @@ import {
   type ConnectionCheckState,
 } from './connection-check';
 import { ModelChecklist, type CatalogModel } from './model-checklist';
-import {
-  CompatibleConnectionSetup,
-  presetToCustomModels,
-} from './compatible-connection-setup';
+import { CompatibleConnectionSetup, presetToCustomModels } from './compatible-connection-setup';
 
 const providerLabelKeys: Record<ProviderPresetId, string> = {
   openai: 'settings.models.providers.openai',
@@ -423,9 +420,9 @@ export function ModelConnectionForm({
   const checkRequest = useMemo<CheckModelConnection | null>(() => {
     if (provider === '' || configurationIssue || !ModelEndpointSchema.safeParse(endpoint).success)
       return null;
-    const compatible =
-      provider === 'openai-compatible' ? { compatibleApi } : {};
-    if (typedKey) return { providerPresetId: provider, baseUrl: endpoint, apiKey: typedKey, ...compatible };
+    const compatible = provider === 'openai-compatible' ? { compatibleApi } : {};
+    if (typedKey)
+      return { providerPresetId: provider, baseUrl: endpoint, apiKey: typedKey, ...compatible };
     if (stored && !requiresKey && !useNoKey)
       return {
         providerPresetId: provider,
@@ -434,7 +431,16 @@ export function ModelConnectionForm({
         ...compatible,
       };
     return null;
-  }, [compatibleApi, configurationIssue, endpoint, provider, requiresKey, stored, typedKey, useNoKey]);
+  }, [
+    compatibleApi,
+    configurationIssue,
+    endpoint,
+    provider,
+    requiresKey,
+    stored,
+    typedKey,
+    useNoKey,
+  ]);
   const check = useConnectionCheck(checkRequest, onCheck);
   // Keyless endpoints (Ollama, LM Studio) can be discovered without a key or stored row.
   const discoverable =
@@ -562,9 +568,7 @@ export function ModelConnectionForm({
     baseUrl: endpoint,
     enabled,
     apiKey: typedKey || (keylessInput ? '' : undefined),
-    ...(provider === 'openai-compatible'
-      ? { compatibleApi }
-      : {}),
+    ...(provider === 'openai-compatible' ? { compatibleApi } : {}),
     ...(provider === 'openai-compatible' && customModels.length > 0
       ? {
           customModels: customModels.map((model) => {
@@ -1100,6 +1104,9 @@ export function ModelConnectionSetting({
     void onCheck({
       providerPresetId: connection.providerPresetId,
       baseUrl: connection.baseUrl,
+      ...(connection.providerPresetId === 'openai-compatible'
+        ? { compatibleApi: connection.compatibleApi }
+        : {}),
       stored: { id: connection.id, revision: connection.revision },
     }).then(
       (result) => recordCheck(connection, { phase: 'done', result }),
@@ -1282,6 +1289,9 @@ const toggledConnection = (connection: ModelConnection) =>
     enabled: !connection.enabled,
     ...(connection.customModels ? { customModels: connection.customModels } : {}),
     ...(connection.models ? { models: connection.models } : {}),
+    ...(connection.providerPresetId === 'openai-compatible'
+      ? { compatibleApi: connection.compatibleApi }
+      : {}),
   });
 
 export function ModelConnectionRow({

@@ -1714,6 +1714,7 @@ function WorkspaceChatLanding({
           <LandingDesignConfigChips
             agentLabel={selectedConfig?.name ?? null}
             imageModelId={landingImageModelId}
+            disabled={submitting}
           />
         ) : null}
         {isElectron ? (

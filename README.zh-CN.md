@@ -1,4 +1,7 @@
-![Molly Design](website/assets/brand/molly-wordmark.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="website/assets/brand/molly-wordmark.svg">
+  <img alt="Molly Design" src="packages/components/src/assets/molly-wordmark.svg" width="360">
+</picture>
 
 **面向平面设计师的 AI 设计。每一层都可编辑。**
 

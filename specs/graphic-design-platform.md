@@ -44,6 +44,8 @@ New independent sessions accept local projects or ordinary chat. GitHub reposito
 
 2026-10-14 profile-first import revision: the owner decided, after a first import silently read the default Chrome profile while the account lived in another, that Import lists real profiles before any read, shows per-website discovered/imported/skipped/failed counts, verifies the chosen profile before reading, keeps development sign-ins in a persisted partition and removes explanatory copy from both surfaces ([issue #138](https://github.com/LeonEthan/molly-design/issues/138)). This revision remains draft pending a linked approval record.
 
+2026-10-20 session-title revision: a new design is still created as "Untitled design". When its first turn is dispatched, that draft may be replaced by the first sentence of the user's text, with no title worker and no model request. A failed generation keeps "Untitled design" and does not fail the turn. A committed `design.yaml` `title` may still rename a draft or generated session name. A name the user set is never overwritten. This replaces the batch 3 rule that the draft title is never taken from the prompt ([issue #198](https://github.com/LeonEthan/molly-design/issues/198)). This revision remains draft pending a linked approval record.
+
 ## Usage scenario
 
 The user starts a design session, enters requirements and adds reference images, and uses a local Agent to generate an editable graphic design; they then refine it through element-targeted conversation or manual edits, and save, reopen and export images. The user finds past output through session history rather than managing a separate artwork directory. Normal creation requires no knowledge of Git repositories, branches, terminal commands or code review.

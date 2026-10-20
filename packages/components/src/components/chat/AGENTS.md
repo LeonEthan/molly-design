@@ -43,8 +43,10 @@ Index and rationale: [README.md](README.md).
 
 - Custom canvas dimensions enter both artwork creation and the durable first-turn
   text from one submission snapshot. Auto adds no fixed-size instruction; retries
-  rebuild from the untouched draft. A new design's draft title is "Untitled design",
-  never the prompt; the committed artwork `title` renames it.
+  rebuild from the untouched draft. Create as "Untitled design". Dispatch may
+  replace that draft with the first user sentence and no title model; failure
+  leaves it. A committed artwork `title` renames draft or generated. A user
+  rename stays.
   Presets use the same custom dimensions; custom popover edits apply only on confirmation.
 
 - The chat-route URL declares selection, never one-shot event nonces. Once it names

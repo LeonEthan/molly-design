@@ -24,6 +24,10 @@ Reuse the existing generator and the existing `setTitleIfSourceIn` guard.
 A second model request was rejected when Molly titles were first made local,
 and it stays rejected. Spawn no title worker.
 
+The design-platform Spec and the chat invariant now say the same thing.
+Creation stays "Untitled design". The Spec revision remains draft until a
+linked approval record exists.
+
 ## Verification
 
 Unit tests cover the Molly dispatch call, the first sentence of a text prompt

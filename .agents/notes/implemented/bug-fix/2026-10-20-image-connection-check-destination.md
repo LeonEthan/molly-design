@@ -13,7 +13,7 @@ The image connection form was sending a saved key to a different protocol when t
 
 The address field used to clear `apiKey` on every edit. It stays under More options, after the key. A key entered while the address is empty follows the characters of that first address and is committed on blur, so `https://i` is not a destination. A key entered for an address already in the field is cleared when that address changes. Connect does not persist a new row with no key.
 
-`runModelListHttpCheck` reports 404/405/501 as `unsupported` because `GET /models` is optional. Those results no longer use the not-found line. A non-unsupported 404, a rejected key, and an unreachable host still use the plain image-check copy.
+`runModelListHttpCheck` reports 404/405/501 as `unsupported` because `GET /models` is optional. The shared check line stays silent for that reason. The form does not add a separate image failure line.
 
 ## Verification and limits
 

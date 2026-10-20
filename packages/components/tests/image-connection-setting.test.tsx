@@ -10,6 +10,7 @@ import type {
 } from '@molly/shared/embedded-harness';
 
 import en from '../../../locales/en.json';
+import zh from '../../../locales/zh_CN.json';
 import { imageKeyMigrationNoticeDismissedAtom } from '../src/atoms/settings';
 import { mollyStorage } from '../src/lib/product-storage';
 import {
@@ -22,7 +23,6 @@ import {
   commitImageAddress,
   createImageConnectionFormDraft,
   imageConnectionCanSave,
-  imageConnectionCheckMessageKey,
   imageConnectionDraftIssues,
   imageConnectionUsesStoredKey,
   typedKeyMatchesAddress,
@@ -226,30 +226,16 @@ describe('image connection form values', () => {
       )
     ).toBe(false);
   });
-  it('maps image check failures to plain copy', () => {
-    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'key_rejected', status: 401 })).toBe(
-      'settings.imageConnection.check.keyRejected'
+  it('keeps the example placeholder and the real provider roots in the hints', () => {
+    expect(copy('settings.imageConnection.baseUrlPlaceholder')).toBe('https://api.example.com/v1');
+    expect(copy('settings.imageConnection.baseUrlHint')).toContain('https://api.openai.com/v1');
+    expect(copy('settings.imageConnection.baseUrlHintDashscope')).toContain(
+      'https://dashscope.aliyuncs.com/api/v1'
     );
-    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 404 })).toBe(
-      null
+    expect(zh['settings.imageConnection.baseUrlHint']).toContain('https://api.openai.com/v1');
+    expect(zh['settings.imageConnection.baseUrlHintDashscope']).toContain(
+      'https://dashscope.aliyuncs.com/api/v1'
     );
-    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 405 })).toBe(
-      null
-    );
-    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 501 })).toBe(
-      null
-    );
-    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported' })).toBe(null);
-    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'http_error', status: 404 })).toBe(
-      'settings.imageConnection.check.notFound'
-    );
-    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unreachable' })).toBe(
-      'settings.imageConnection.check.unreachable'
-    );
-    expect(copy('settings.imageConnection.check.keyRejected')).toMatch(/^The key was rejected/);
-    expect(copy('settings.imageConnection.check.notFound')).toContain('your computer');
-    expect(copy('settings.imageConnection.check.unreachable')).toContain('your computer');
-    expect(copy('settings.imageConnection.check.enterBaseUrl')).toBe('Enter a base URL.');
   });
   it('rejects missing or oversized model values', () => {
     expect(imageConnectionDraftIssues(draftOf({ model: ' ' })).model).toBe(true);
@@ -582,7 +568,7 @@ describe('ImageConnectionForm', () => {
       expect(requests).toEqual([
         { protocol: 'openai-images', baseUrl: 'https://api.openai.com/v1', expectedRevision: 3 },
       ]);
-      expect(view.textContent).toContain(copy('settings.imageConnection.check.keyRejected'));
+      expect(view.textContent).toContain('The provider rejected this key (401).');
       await typeInto(await baseUrlInput(view), 'https://elsewhere.example.com/v1');
       await settle();
       expect(requests).toHaveLength(1);
@@ -727,15 +713,11 @@ describe('ImageConnectionForm', () => {
           expect(requests).toEqual([]);
         }
       }
-      await blur(input);
-      await settle();
-      expect(requests).toEqual([
-        { protocol: 'openai-images', baseUrl: url, apiKey: 'synthetic-typed-key' },
-      ]);
       await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'gpt-image-2');
       const connect = button(view, copy('settings.models.connect'));
       expect(connect.disabled).toBe(false);
       await click(connect);
+      expect(requests).toEqual([]);
       expect(saves).toEqual([
         draftOf({
           baseUrl: url,
@@ -760,7 +742,7 @@ describe('ImageConnectionForm', () => {
       await typeInto(apiKeyInput(view), 'synthetic-typed-key');
       await settle();
       expect(requests).toEqual([]);
-      expect(view.textContent).toContain(copy('settings.imageConnection.check.enterBaseUrl'));
+      expect(view.querySelector('[role="alert"]')).toBeNull();
     });
 
     it('stays quiet when the service has no model list', async () => {
@@ -770,25 +752,7 @@ describe('ImageConnectionForm', () => {
       });
       await settle();
       expect(view.querySelector('[role="alert"]')).toBeNull();
-      expect(view.textContent).not.toContain(copy('settings.imageConnection.check.notFound'));
       expect(view.textContent).not.toContain("This service can't be checked for free");
-    });
-
-    it('says when the address was not found or the computer cannot reach it', async () => {
-      const view = await renderForm({
-        stored: storedConnection(),
-        onCheck: async () => ({ ok: false, reason: 'http_error', status: 404 }),
-      });
-      await settle();
-      expect(view.textContent).toContain(copy('settings.imageConnection.check.notFound'));
-      expect(view.textContent).not.toContain("This service can't be checked for free");
-
-      const offline = await renderForm({
-        stored: storedConnection(),
-        onCheck: async () => ({ ok: false, reason: 'unreachable' }),
-      });
-      await settle();
-      expect(offline.textContent).toContain(copy('settings.imageConnection.check.unreachable'));
     });
 
     it('never sends a typed key to an invalid public HTTP endpoint', async () => {

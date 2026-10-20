@@ -34,7 +34,6 @@ import {
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
 import {
-  CircleAlert,
   CircleCheck,
   ChevronDown,
   Ellipsis,
@@ -77,11 +76,6 @@ const PROTOCOL_COPY: Record<ImageConnectionProtocol, { label: string; baseUrlHin
 export const imageProtocolLabelKey = (connection: Pick<ImageConnectionView, 'protocol'>) =>
   PROTOCOL_COPY[imageConnectionProtocol(connection)].label;
 
-/**
- * Switching the connection type keeps the address already in the field.
- * An empty address stays empty — the field has no vendor default to swap in.
- * A typed key does not follow: the new protocol is a different destination.
- */
 export function applyImageProtocolChoice(
   draft: ImageConnectionFormDraft,
   protocol: ImageConnectionProtocol
@@ -90,12 +84,6 @@ export function applyImageProtocolChoice(
   return { ...draft, protocol, apiKey: '' };
 }
 
-/**
- * A key typed before any address stays while that address is typed, including a
- * short prefix that already parses (`https://i`). A key typed for an address
- * already in the field does not follow a different one. The first address is
- * committed on blur, so the check does not run against an unfinished prefix.
- */
 export function applyImageAddressEdit(
   addressWhenKeyTyped: string | null,
   nextUrl: string
@@ -114,7 +102,6 @@ export function commitImageAddress(addressWhenKeyTyped: string | null, url: stri
   return url.trim();
 }
 
-/** Bind a key to an address already in the field. An empty binding means the first address is still being typed. */
 export function addressForTypedKey(addressWhenKeyTyped: string | null, currentUrl: string): string {
   if (addressWhenKeyTyped !== null && addressWhenKeyTyped.trim() === '') return '';
   return currentUrl.trim();
@@ -128,7 +115,6 @@ export function typedKeyMatchesAddress(
   return bound !== '' && bound === currentUrl.trim();
 }
 
-/** A saved credential belongs to one protocol and one address. */
 export function imageConnectionUsesStoredKey(
   draft: Pick<ImageConnectionFormDraft, 'protocol' | 'baseUrl' | 'apiKey' | 'clearApiKey'>,
   stored: Pick<ImageConnectionView, 'protocol' | 'baseUrl' | 'hasApiKey'> | undefined
@@ -186,29 +172,6 @@ export function buildImageConnectionSave(
     clearApiKey: draft.clearApiKey,
   });
   return parsed.success ? parsed.data : undefined;
-}
-
-const IMAGE_NOT_FOUND_STATUSES = new Set([404, 405, 501]);
-
-/**
- * Copy for image-check failures that must stay in plain language.
- * A missing optional model list (`unsupported`, including 404/405/501) is not a failure.
- * Other reasons use the shared check line.
- */
-export function imageConnectionCheckMessageKey(
-  result: Extract<ConnectionCheckResult, { ok: false }>
-):
-  | 'settings.imageConnection.check.keyRejected'
-  | 'settings.imageConnection.check.notFound'
-  | 'settings.imageConnection.check.unreachable'
-  | null {
-  if (result.reason === 'unsupported') return null;
-  if (result.reason === 'key_rejected') return 'settings.imageConnection.check.keyRejected';
-  if (result.status !== undefined && IMAGE_NOT_FOUND_STATUSES.has(result.status)) {
-    return 'settings.imageConnection.check.notFound';
-  }
-  if (result.reason === 'unreachable') return 'settings.imageConnection.check.unreachable';
-  return null;
 }
 
 export function imageConnectionCanSave(
@@ -377,12 +340,6 @@ export function ImageConnectionForm({
     return null;
   }, [addressWhenKeyTyped, baseUrl, draft, stored, typedKey]);
   const check = useConnectionCheck(checkRequest, onCheck);
-  const checkMessageKey =
-    check.phase === 'done' && !check.result.ok
-      ? imageConnectionCheckMessageKey(check.result)
-      : null;
-  const blockEmptyBaseUrl =
-    baseUrl.length === 0 && (typedKey.length > 0 || (hasStoredKey && !draft.clearApiKey));
   const canSave = imageConnectionCanSave(draft, stored);
   const listed = check.phase === 'done' && check.result.ok ? (check.result.models ?? []) : [];
 
@@ -462,13 +419,7 @@ export function ImageConnectionForm({
               ) : null}
             </div>
             <p className="text-xs text-muted-foreground">{t('settings.models.keyLocalHint')}</p>
-            {blockEmptyBaseUrl ? (
-              <ImageCheckLine>{t('settings.imageConnection.check.enterBaseUrl')}</ImageCheckLine>
-            ) : checkMessageKey ? (
-              <ImageCheckLine>{t(checkMessageKey)}</ImageCheckLine>
-            ) : (
-              <ConnectionCheckError state={check} baseUrl={baseUrl} />
-            )}
+            <ConnectionCheckError state={check} baseUrl={baseUrl} />
           </div>
         </Field>
 
@@ -613,15 +564,6 @@ export function ImageConnectionForm({
         </div>
       </div>
     </form>
-  );
-}
-
-function ImageCheckLine({ children }: { children: ReactNode }) {
-  return (
-    <p role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
-      <CircleAlert aria-hidden className="h-3.5 w-3.5 shrink-0" />
-      {children}
-    </p>
   );
 }
 

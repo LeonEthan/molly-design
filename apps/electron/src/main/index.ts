@@ -1,6 +1,7 @@
 import './user-data-migration'
 import { verifyDesign } from './services/design-verification'
 import {
+  flushOpenDesigns,
   prepareDesignQuit,
   prepareDesignUpdate,
   shutdownDesignWorker
@@ -221,19 +222,16 @@ if (hasSingleInstanceLock) {
       requireSparkle: isLocalPlatform(),
       prepareInstall: isLocalPlatform() ? prepareDesignUpdate : undefined,
       prepareToRelaunch: async () => {
-        const ready = await prepareDesignQuit()
+        const ready = await flushOpenDesigns()
         if (!ready) throw new Error('Could not save your designs before updating')
-        await Promise.allSettled([
-          cliService.shutdownForQuit(),
-          publicBrowserService.shutdownForQuit()
-        ])
-        publicBrowserService.destroyAll()
+        await cliService.shutdownForQuit()
         designShutdownComplete = true
         cliShutdownComplete = true
       },
       abortRelaunch: () => {
         designShutdownComplete = false
         cliShutdownComplete = false
+        cliService.autoStart(getMainWindow()?.webContents)
       }
     })
     bindWindowBadgeToBrowserWindows(windowBadgeService)

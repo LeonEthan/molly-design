@@ -1,6 +1,21 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createCheckingWatchdog, shouldResetPhaseForManualCheck } from './app-updater-check.ts'
+import {
+  createCheckingWatchdog,
+  releaseUpdaterCheckLock,
+  shouldResetPhaseForManualCheck
+} from './app-updater-check.ts'
+
+void test('releasing a hung updater check lets the next check start', () => {
+  let settled = false
+  const hung = new Promise(() => undefined).then(() => {
+    settled = true
+  })
+  const updater = { checkForUpdatesPromise: hung }
+  releaseUpdaterCheckLock(updater)
+  assert.equal(updater.checkForUpdatesPromise, null)
+  assert.equal(settled, false)
+})
 
 void test('a manual check keeps an in-progress or ready download', () => {
   assert.equal(shouldResetPhaseForManualCheck('downloading'), false)

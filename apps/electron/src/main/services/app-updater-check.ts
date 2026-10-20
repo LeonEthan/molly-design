@@ -8,6 +8,13 @@ export function shouldResetPhaseForManualCheck(phase: ElectronUpdaterPhase): boo
 
 export type TimeoutHandle = { cancel(): void }
 
+/** electron-updater keeps a hung check on this field and returns the same promise. */
+export function releaseUpdaterCheckLock(updater: {
+  checkForUpdatesPromise?: Promise<unknown> | null
+}): void {
+  updater.checkForUpdatesPromise = null
+}
+
 /**
  * A check that never leaves `checking` must become an error the user can retry.
  * `schedule` must not run the callback before returning the handle.

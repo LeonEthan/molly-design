@@ -19,6 +19,7 @@ import { UPDATE_CHECK_UNANSWERED } from '@molly/shared/electron-ipc'
 import {
   UPDATE_CHECK_UNANSWERED_MS,
   createCheckingWatchdog,
+  releaseUpdaterCheckLock,
   shouldResetPhaseForManualCheck,
   type TimeoutHandle
 } from './app-updater-check'
@@ -90,6 +91,7 @@ export class AppUpdaterService {
   private started = false
   private listenersAttached = false
   private checkInFlight = false
+  private checkTicket = 0
   private intervalRef: NodeJS.Timeout | null = null
   private sparkleBridge: SparkleBridge | null = null
   /** Package electron-updater has on disk, cleared when a newer one supersedes it. */
@@ -224,6 +226,7 @@ export class AppUpdaterService {
       return { started: false }
     }
 
+    const ticket = ++this.checkTicket
     this.checkInFlight = true
     this.setState({
       phase: 'checking',
@@ -246,7 +249,7 @@ export class AppUpdaterService {
         error: message
       }
     } finally {
-      this.checkInFlight = false
+      if (this.checkTicket === ticket) this.checkInFlight = false
     }
   }
 
@@ -570,6 +573,9 @@ export class AppUpdaterService {
         schedule,
         isChecking: () => this.state.phase === 'checking',
         onUnanswered: () => {
+          this.checkTicket += 1
+          this.checkInFlight = false
+          releaseUpdaterCheckLock(autoUpdater)
           this.setState({
             phase: 'error',
             error: UPDATE_CHECK_UNANSWERED,

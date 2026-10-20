@@ -906,6 +906,35 @@ describe('free key check and model choice', () => {
 });
 
 describe('connection management', () => {
+  it('keeps an edited or added panel form in a bounded slot', async () => {
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [stored] });
+    await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
+    const button = (label: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (node) => node.textContent === label
+      )!;
+    const slotOf = () => {
+      const form = host.querySelector('[data-drawer-footer]')?.closest('form');
+      expect(form).not.toBeNull();
+      return form?.parentElement;
+    };
+    await act(async () => button(en['common.edit']).click());
+    const edited = slotOf();
+    expect(edited?.className).toContain('min-h-0');
+    expect(edited?.className).toContain('flex-1');
+    expect(edited?.className).toContain('flex-col');
+    expect(edited?.className).toContain('overflow-hidden');
+    expect(edited?.parentElement?.className).toContain('overflow-hidden');
+    expect(edited?.parentElement?.className).toContain('flex-col');
+    await act(async () => button(en['common.cancel']).click());
+    await act(async () => button(en['settings.models.add']).click());
+    const added = slotOf();
+    expect(added?.className).toContain('min-h-0');
+    expect(added?.className).toContain('flex-1');
+    expect(added?.className).toContain('overflow-hidden');
+    expect(added?.parentElement?.className).toContain('flex-col');
+  });
+
   it('deletes a connection only after confirmation and removes its row', async () => {
     const deleted: unknown[] = [];
     connectionIpc.getSnapshot.mockResolvedValue({ connections: [stored] });

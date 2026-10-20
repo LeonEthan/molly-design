@@ -1015,6 +1015,22 @@ type Editing = ModelConnection | { kind: 'new'; provider?: ProviderPresetId } | 
 const isNew = (editing: Editing): editing is { kind: 'new'; provider?: ProviderPresetId } =>
   editing !== null && 'kind' in editing;
 
+const PANEL_LIST = 'divide-y divide-border/40 border-t border-border/40 empty:border-t-0';
+
+const panelListClass = (variant: 'section' | 'panel', editing: Editing): string => {
+  if (variant !== 'panel') return PANEL_LIST;
+  if (editing !== null && !isNew(editing))
+    return `flex min-h-0 flex-1 flex-col overflow-hidden ${PANEL_LIST}`;
+  if (isNew(editing)) return `min-h-0 shrink overflow-y-auto ${PANEL_LIST}`;
+  return `min-h-0 flex-1 overflow-y-auto ${PANEL_LIST}`;
+};
+
+const panelFormSlotClass = (variant: 'section' | 'panel', extra = ''): string => {
+  const tone = extra ? `${extra} bg-foreground/[0.015]` : 'bg-foreground/[0.015]';
+  if (variant !== 'panel') return tone;
+  return `flex min-h-0 flex-1 flex-col overflow-hidden ${tone}`;
+};
+
 export function ModelConnectionSetting({
   onConnectionsChange,
   variant = 'section',
@@ -1205,10 +1221,10 @@ export function ModelConnectionSetting({
               {t('settings.models.loading')}
             </p>
           )}
-          <div className="divide-y divide-border/40 border-t border-border/40 empty:border-t-0">
+          <div className={panelListClass(variant, editing)}>
             {connections.map((connection) =>
               !isNew(editing) && editing?.id === connection.id ? (
-                <div key={connection.id} className="bg-foreground/[0.015]">
+                <div key={connection.id} className={panelFormSlotClass(variant)}>
                   <ModelConnectionForm
                     key={`${editing.id}:${editing.revision}`}
                     pinActions={variant === 'panel'}
@@ -1246,7 +1262,7 @@ export function ModelConnectionSetting({
             )}
           </div>
           {isNew(editing) ? (
-            <div className="border-t border-border/40 bg-foreground/[0.015]">
+            <div className={panelFormSlotClass(variant, 'border-t border-border/40')}>
               <ModelConnectionForm
                 key={`new:${editing.provider ?? ''}`}
                 pinActions={variant === 'panel'}

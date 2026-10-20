@@ -213,7 +213,7 @@
     var W = hs.clientWidth, H = hs.clientHeight;
     if (!W || !H) return;
     var move = ease(seg(time, 1.5, 2.25)),
-      grown = ease(seg(time, 2.8, 3.55)),
+      grown = seg(time, 2.6, 3.55),
       reset = ease(seg(time, 7.8, 9.25)),
       hold = 1 - reset,
       dx = -0.018 * move * hold,
@@ -221,12 +221,12 @@
       k = 1 + 0.06 * grown * hold,
       rw = REST_W * W,
       rh = rw * IMG,
-      cx = REST_X * W + rw / 2 + dx * W,
-      cy = REST_Y * H + rh / 2 + dy * H,
+      ax = REST_X * W + rw / 2 + dx * W,
+      ay = REST_Y * H + rh + dy * H,
       bw = rw * k,
       bh = rh * k,
-      x = cx - bw / 2,
-      y = cy - bh / 2,
+      x = ax - bw / 2,
+      y = ay - bh,
       pad = Math.max(6, W * 14 / 1536),
       box = { x: x - pad, y: y - pad, w: bw + pad * 2, h: bh + pad * 2 },
       magic = fade(time, 4, 4.65, 5.6, 6.3),
@@ -273,13 +273,13 @@
     press = Math.min(press, 1 - 0.12 * Math.min(ease(seg(time, 3.98, 4.06)), 1 - ease(seg(time, 4.06, 4.14))));
     cur.style.transform = 'translate(' + tipX.toFixed(2) + 'px,' + tipY.toFixed(2) + 'px) scale(' + press.toFixed(3) + ')';
     alpha(cur, reduce ? 0 : fade(time, 0.1, 0.35, 6.8, 7.2));
-    cur.classList.toggle('rsz', time > 2.6 && time < 3.6);
+    cur.classList.toggle('rsz', time > 2.8 && time < 3.6);
     pill.style.transform = 'translate(' + pillX.toFixed(2) + 'px,' + pillY.toFixed(2) + 'px) translate(-50%,-50%)';
     alpha(pill, reduce ? 0 : fade(time, 3.5, 3.75, 6.4, 6.7));
     pill.classList.toggle('busy', time > 4 && time < 5.95);
     size.dataset.pct = Math.round(k * 100) + '%';
     size.style.transform = 'translate(' + (box.x + box.w - size.offsetWidth - 6).toFixed(2) + 'px,' + Math.max(6, box.y - size.offsetHeight - 6).toFixed(2) + 'px)';
-    alpha(size, reduce ? 0 : fade(time, 2.7, 2.85, 3.55, 3.8));
+    alpha(size, reduce ? 0 : fade(time, 2.6, 2.72, 3.55, 3.8));
     hs.dataset.time = time.toFixed(3);
     hs.dataset.iteration = String(it);
   }

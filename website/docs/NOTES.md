@@ -58,7 +58,7 @@ Every shipped image and video was checked by eye. Raw masters (app captures and 
 ## Hero animation
 
 - The hero demo rest frame is a 1536×864 landscape. A warm stone photograph fills the stage edge to edge, with the counter across the bottom. The left column is vertically centered: a header rule, the two-line poster headline, the spec rows, and the tagline. The speckled kettle is a separate transparent layer, large on the right, and “Object study · 2026” sits beside it (#184).
-- The loop selects that kettle layer, drags it, scales it, then Regenerate crossfades it to a second sage stoneware kettle in the same frame. The return eases back to the original cream kettle and the rest frame. The second image loads after the plate has painted. `prefers-reduced-motion` keeps the rest frame and does not run the loop.
+- The loop selects that kettle layer, drags it, and scales it from the kettle’s bottom center so the base stays on the counter. The size readout counts from 100% to the final scale while that handle is dragged. Regenerate then crossfades it to a second sage stoneware kettle in the same frame. The return eases back to the original cream kettle and the rest frame. The second image loads after the plate has painted. `prefers-reduced-motion` keeps the rest frame and does not run the loop.
 - The hero headline is one sentence per line in both languages. The second sentence keeps the highlight. The subheadline under it is gone (#184).
 - The plate photograph is the LCP element. The labelled image role describes the still; it does not change which element Lighthouse paints first.
 

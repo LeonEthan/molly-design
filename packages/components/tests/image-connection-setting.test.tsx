@@ -10,14 +10,23 @@ import type {
 } from '@molly/shared/embedded-harness';
 
 import en from '../../../locales/en.json';
+import zh from '../../../locales/zh_CN.json';
 import { imageKeyMigrationNoticeDismissedAtom } from '../src/atoms/settings';
 import { mollyStorage } from '../src/lib/product-storage';
 import {
   ImageConnectionForm,
   ImageConnectionSetting,
+  applyImageProtocolChoice,
   buildImageConnectionSave,
+  addressForTypedKey,
+  applyImageAddressEdit,
+  commitImageAddress,
   createImageConnectionFormDraft,
+  imageConnectionCanSave,
+  imageConnectionCheckMessageKey,
   imageConnectionDraftIssues,
+  imageConnectionUsesStoredKey,
+  typedKeyMatchesAddress,
   type ImageConnectionFormDraft,
 } from '../src/components/settings/image-connection-setting';
 import { CONNECTION_CHECK_DELAY_MS } from '../src/components/settings/connection-check';
@@ -75,11 +84,14 @@ describe('image connection form values', () => {
     expect(createImageConnectionFormDraft(undefined)).toEqual({
       enabled: true,
       protocol: 'openai-images',
-      baseUrl: 'https://api.openai.com/v1',
+      baseUrl: '',
       apiKey: '',
       clearApiKey: false,
       model: '',
     });
+    expect(createImageConnectionFormDraft(storedConnection()).baseUrl).toBe(
+      'https://api.openai.com/v1'
+    );
     expect(createImageConnectionFormDraft(storedConnection()).apiKey).toBe('');
     expect(buildImageConnectionSave(draftOf({ model: '' }))).toBeUndefined();
   });
@@ -145,6 +157,125 @@ describe('image connection form values', () => {
         storedConnection()
       )?.protocol
     ).toBe('dashscope');
+  });
+  it('keeps a saved address and never fills a vendor address when the protocol changes', () => {
+    expect(
+      applyImageProtocolChoice(createImageConnectionFormDraft(undefined), 'dashscope')
+    ).toEqual({
+      enabled: true,
+      protocol: 'dashscope',
+      baseUrl: '',
+      apiKey: '',
+      clearApiKey: false,
+      model: '',
+    });
+    expect(
+      applyImageProtocolChoice(
+        draftOf({ baseUrl: 'https://images.example/v1', apiKey: 'synthetic' }),
+        'dashscope'
+      )
+    ).toMatchObject({
+      protocol: 'dashscope',
+      baseUrl: 'https://images.example/v1',
+      apiKey: '',
+    });
+    expect(
+      applyImageProtocolChoice(draftOf({ protocol: 'dashscope', apiKey: 'synthetic' }), 'dashscope')
+        .apiKey
+    ).toBe('synthetic');
+    const url = 'https://images.example.com/v1';
+    let bound = addressForTypedKey(null, '');
+    expect(bound).toBe('');
+    for (let index = 1; index <= url.length; index += 1) {
+      const edited = applyImageAddressEdit(bound, url.slice(0, index));
+      expect(edited.clearTypedKey).toBe(false);
+      bound = edited.addressWhenKeyTyped ?? '';
+    }
+    expect(typedKeyMatchesAddress(bound, 'https://i')).toBe(false);
+    expect(typedKeyMatchesAddress(bound, url)).toBe(false);
+    bound = commitImageAddress(bound, url) ?? '';
+    expect(typedKeyMatchesAddress(bound, url)).toBe(true);
+    expect(applyImageAddressEdit(bound, 'https://elsewhere.example.com/v1').clearTypedKey).toBe(
+      true
+    );
+    expect(addressForTypedKey(null, url)).toBe(url);
+    expect(imageConnectionCanSave(draftOf({ apiKey: 'synthetic' }), undefined)).toBe(true);
+    expect(imageConnectionCanSave(draftOf({ apiKey: '' }), undefined)).toBe(false);
+    expect(imageConnectionCanSave(draftOf({ apiKey: '' }), storedConnection())).toBe(true);
+    expect(
+      imageConnectionCanSave(
+        draftOf({ apiKey: '', baseUrl: 'https://elsewhere.example/v1' }),
+        storedConnection()
+      )
+    ).toBe(false);
+    expect(imageConnectionCanSave(draftOf({ clearApiKey: true }), storedConnection())).toBe(true);
+    expect(imageConnectionCanSave(draftOf({ clearApiKey: true }), undefined)).toBe(false);
+    expect(createImageConnectionFormDraft(storedConnection()).baseUrl).toBe(
+      storedConnection().baseUrl
+    );
+    const dashscope = storedConnection({
+      protocol: 'dashscope',
+      baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+    });
+    expect(imageConnectionUsesStoredKey(createImageConnectionFormDraft(dashscope), dashscope)).toBe(
+      true
+    );
+    expect(
+      imageConnectionUsesStoredKey(
+        applyImageProtocolChoice(createImageConnectionFormDraft(dashscope), 'openai-images'),
+        dashscope
+      )
+    ).toBe(false);
+  });
+  it('maps image check failures to the #188 sentences', () => {
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'key_rejected', status: 401 })).toBe(
+      'settings.imageConnection.check.keyRejected'
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 404 })).toBe(
+      null
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 405 })).toBe(
+      null
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 501 })).toBe(
+      null
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported' })).toBe(null);
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'http_error', status: 404 })).toBe(
+      'settings.imageConnection.check.notFound'
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unreachable' })).toBe(
+      'settings.imageConnection.check.unreachable'
+    );
+    expect(copy('settings.imageConnection.check.enterBaseUrl')).toBe('Enter a base URL.');
+    expect(copy('settings.imageConnection.check.keyRejected')).toBe(
+      'The key was rejected. Check the key and try again.'
+    );
+    expect(copy('settings.imageConnection.check.notFound')).toBe(
+      'That address was not found from your computer. Check the base URL.'
+    );
+    expect(copy('settings.imageConnection.check.unreachable')).toBe(
+      "Can't reach the server from your computer. Check the URL and your network."
+    );
+    expect(zh['settings.imageConnection.check.enterBaseUrl']).toBe('请输入服务地址。');
+    expect(zh['settings.imageConnection.check.keyRejected']).toBe('密钥被拒绝。请检查密钥后再试。');
+    expect(zh['settings.imageConnection.check.notFound']).toBe(
+      '从你的电脑找不到这个地址。请检查服务地址。'
+    );
+    expect(zh['settings.imageConnection.check.unreachable']).toBe(
+      '你的电脑连不上这台服务器。请检查地址和网络。'
+    );
+  });
+  it('keeps the example placeholder and the real provider roots in the hints', () => {
+    expect(copy('settings.imageConnection.baseUrlPlaceholder')).toBe('https://api.example.com/v1');
+    expect(copy('settings.imageConnection.baseUrlHint')).toContain('https://api.openai.com/v1');
+    expect(copy('settings.imageConnection.baseUrlHintDashscope')).toContain(
+      'https://dashscope.aliyuncs.com/api/v1'
+    );
+    expect(zh['settings.imageConnection.baseUrlHint']).toContain('https://api.openai.com/v1');
+    expect(zh['settings.imageConnection.baseUrlHintDashscope']).toContain(
+      'https://dashscope.aliyuncs.com/api/v1'
+    );
   });
   it('rejects missing or oversized model values', () => {
     expect(imageConnectionDraftIssues(draftOf({ model: ' ' })).model).toBe(true);
@@ -235,12 +366,19 @@ describe('ImageConnectionForm', () => {
     });
   };
 
-  /** The address lives under Advanced while it is the protocol's default. */
+  const blur = async (input: HTMLInputElement) => {
+    await act(async () => {
+      input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    });
+  };
+
   const baseUrlInput = async (view: HTMLElement): Promise<HTMLInputElement> => {
     const existing = view.querySelector<HTMLInputElement>('input[id$="-base-url"]');
     if (existing) return existing;
     await click(button(view, copy('settings.models.moreOptions')));
-    return await baseUrlInput(view);
+    const opened = view.querySelector<HTMLInputElement>('input[id$="-base-url"]');
+    expect(opened).not.toBeNull();
+    return opened as HTMLInputElement;
   };
 
   it('keeps an unsaved draft on rerender and saves only a public CAS update', async () => {
@@ -372,6 +510,22 @@ describe('ImageConnectionForm', () => {
     });
   });
 
+  it('does not save a new image connection that has no key', async () => {
+    const saves: ImageConnectionFormDraft[] = [];
+    const view = await renderForm({ onSave: (draft) => void saves.push(draft) });
+    await typeInto(await baseUrlInput(view), 'https://images.example.com/v1');
+    await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'gpt-image-2');
+    const connect = button(view, copy('settings.models.connect'));
+    expect(connect.disabled).toBe(true);
+    await click(connect);
+    await act(async () => {
+      view
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(saves).toEqual([]);
+  });
+
   it.each([
     'http://images.example.invalid/v1',
     'http://image-gateway.local/v1',
@@ -470,11 +624,31 @@ describe('ImageConnectionForm', () => {
       expect(requests).toEqual([
         { protocol: 'openai-images', baseUrl: 'https://api.openai.com/v1', expectedRevision: 3 },
       ]);
-      expect(view.textContent).toContain('The provider rejected this key (401).');
+      expect(view.textContent).toContain(copy('settings.imageConnection.check.keyRejected'));
+      expect(view.textContent).not.toContain('The provider rejected this key (401).');
       await typeInto(await baseUrlInput(view), 'https://elsewhere.example.com/v1');
       await settle();
       expect(requests).toHaveLength(1);
       expect(view.textContent).not.toContain('rejected');
+    });
+
+    it.each([
+      [
+        { ok: false, reason: 'http_error', status: 404 } as const,
+        'settings.imageConnection.check.notFound' as const,
+      ],
+      [
+        { ok: false, reason: 'unreachable' } as const,
+        'settings.imageConnection.check.unreachable' as const,
+      ],
+    ])('shows the plain image failure %j', async (result, key) => {
+      const view = await renderForm({
+        stored: storedConnection(),
+        onCheck: async () => result,
+      });
+      await settle();
+      expect(view.querySelector('[role="alert"]')?.textContent).toBe(copy(key));
+      expect(view.querySelector('[role="alert"]')?.textContent).toContain('your computer');
     });
 
     it.each(['http://192.168.0.1:8080/v1', 'http://172.16.0.1:8080/v1'])(
@@ -501,6 +675,245 @@ describe('ImageConnectionForm', () => {
         );
       }
     );
+
+    it('keeps a key typed before the address and does not reuse one after the protocol changes', async () => {
+      const requests: CheckImageConnection[] = [];
+      const fresh = await renderForm({
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true, models: [] };
+        },
+      });
+      await typeInto(apiKeyInput(fresh), 'synthetic-typed-key');
+      const freshUrl = await baseUrlInput(fresh);
+      await typeInto(freshUrl, 'https://images.example.com/v1');
+      expect(apiKeyInput(fresh).value).toBe('synthetic-typed-key');
+      await settle();
+      expect(requests).toEqual([]);
+      await blur(freshUrl);
+      await settle();
+      expect(requests).toEqual([
+        {
+          protocol: 'openai-images',
+          baseUrl: 'https://images.example.com/v1',
+          apiKey: 'synthetic-typed-key',
+        },
+      ]);
+
+      const stored = storedConnection({
+        protocol: 'dashscope',
+        baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+      });
+      const switched = await renderForm({
+        stored,
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true };
+        },
+      });
+      await settle();
+      await click(button(switched, copy('settings.imageConnection.protocols.openaiImages')));
+      await settle();
+      expect(requests).toHaveLength(1);
+      expect(
+        button(switched, copy('settings.models.moreOptions')).getAttribute('aria-expanded')
+      ).toBe('true');
+      expect(switched.querySelector<HTMLInputElement>('input[id$="-base-url"]')?.value).toBe(
+        'https://dashscope.aliyuncs.com/api/v1'
+      );
+      expect(switched.textContent).toContain(copy('settings.models.keyRequired'));
+      expect(button(switched, copy('common.save')).disabled).toBe(true);
+      await typeInto(apiKeyInput(switched), 'synthetic-typed-key');
+      await settle();
+      expect(requests[1]).toEqual({
+        protocol: 'openai-images',
+        baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+        apiKey: 'synthetic-typed-key',
+      });
+    });
+
+    it('drops a key once the first address changes', async () => {
+      const requests: CheckImageConnection[] = [];
+      const view = await renderForm({
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true };
+        },
+      });
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      const firstAddress = await baseUrlInput(view);
+      await typeInto(firstAddress, 'https://images.example.com/v1');
+      expect(apiKeyInput(view).value).toBe('synthetic-typed-key');
+      await blur(firstAddress);
+      await typeInto(firstAddress, 'https://elsewhere.example.com/v1');
+      expect(apiKeyInput(view).value).toBe('');
+      await settle();
+      expect(requests).toEqual([]);
+      await click(button(view, copy('settings.imageConnection.protocols.dashscope')));
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      await click(button(view, copy('settings.imageConnection.protocols.openaiImages')));
+      expect(apiKeyInput(view).value).toBe('');
+      await settle();
+      expect(requests).toEqual([]);
+    });
+
+    it('drops a key that was typed for a different address', async () => {
+      const requests: CheckImageConnection[] = [];
+      const view = await renderForm({
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true };
+        },
+      });
+      await typeInto(await baseUrlInput(view), 'https://images.example.com/v1');
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      await typeInto(await baseUrlInput(view), 'https://elsewhere.example.com/v1');
+      expect(apiKeyInput(view).value).toBe('');
+      await settle();
+      expect(requests).toEqual([]);
+    });
+
+    it('keeps a key through each character of the first address and saves it', async () => {
+      const requests: CheckImageConnection[] = [];
+      const saves: ImageConnectionFormDraft[] = [];
+      const view = await renderForm({
+        onSave: (draft) => void saves.push(draft),
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true, models: [] };
+        },
+      });
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      const url = 'https://images.example.com/v1';
+      const input = await baseUrlInput(view);
+      for (let index = 1; index <= url.length; index += 1) {
+        const slice = url.slice(0, index);
+        await typeInto(input, slice);
+        expect(apiKeyInput(view).value).toBe('synthetic-typed-key');
+        if (slice === 'https://i' || slice === url) {
+          await settle();
+          expect(requests).toEqual([]);
+        }
+      }
+      await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'gpt-image-2');
+      const connect = button(view, copy('settings.models.connect'));
+      expect(connect.disabled).toBe(false);
+      await click(connect);
+      expect(requests).toEqual([]);
+      expect(saves).toEqual([
+        draftOf({
+          baseUrl: url,
+          apiKey: 'synthetic-typed-key',
+          model: 'gpt-image-2',
+        }),
+      ]);
+    });
+
+    it('collapses More options for an empty or provider-root address', async () => {
+      const moreOptions = (view: HTMLElement) => button(view, copy('settings.models.moreOptions'));
+      const mount = async (props: Partial<FormProps> = {}) => {
+        await act(async () => {
+          root?.unmount();
+        });
+        root = createRoot(container as HTMLDivElement);
+        return renderForm(props);
+      };
+      const saved = await mount({ stored: storedConnection() });
+      expect(moreOptions(saved).getAttribute('aria-expanded')).toBe('false');
+      expect(saved.querySelector('input[id$="-base-url"]')).toBeNull();
+      const slash = await mount({
+        stored: storedConnection({ baseUrl: 'https://api.openai.com/v1/' }),
+      });
+      expect(moreOptions(slash).getAttribute('aria-expanded')).toBe('false');
+      const dashscope = await mount({
+        stored: storedConnection({
+          protocol: 'dashscope',
+          baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+        }),
+      });
+      expect(moreOptions(dashscope).getAttribute('aria-expanded')).toBe('false');
+      const custom = await mount({
+        stored: storedConnection({ baseUrl: 'https://images.example.com/v1' }),
+      });
+      expect(moreOptions(custom).getAttribute('aria-expanded')).toBe('true');
+      expect(custom.querySelector<HTMLInputElement>('input[id$="-base-url"]')?.value).toBe(
+        'https://images.example.com/v1'
+      );
+      const fresh = await mount();
+      expect(moreOptions(fresh).getAttribute('aria-expanded')).toBe('false');
+      expect(fresh.querySelector('input[id$="-base-url"]')).toBeNull();
+      await click(moreOptions(fresh));
+      expect(moreOptions(fresh).getAttribute('aria-expanded')).toBe('true');
+      expect(fresh.querySelector<HTMLInputElement>('input[id$="-base-url"]')?.placeholder).toBe(
+        'https://api.example.com/v1'
+      );
+      const keyFirst = await mount();
+      await typeInto(apiKeyInput(keyFirst), 'synthetic-typed-key');
+      expect(moreOptions(keyFirst).getAttribute('aria-expanded')).toBe('true');
+      const keyFirstUrl = keyFirst.querySelector<HTMLInputElement>('input[id$="-base-url"]')!;
+      await typeInto(keyFirstUrl, 'https://images.example.com/v1');
+      expect(moreOptions(keyFirst).getAttribute('aria-expanded')).toBe('true');
+      expect(keyFirstUrl.isConnected).toBe(true);
+    });
+
+    it('shows an example placeholder and blocks an empty address before any check', async () => {
+      const requests: CheckImageConnection[] = [];
+      const view = await renderForm({
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true };
+        },
+      });
+      const urlInput = await baseUrlInput(view);
+      expect(urlInput.value).toBe('');
+      expect(urlInput.placeholder).toBe(copy('settings.imageConnection.baseUrlPlaceholder'));
+      expect(urlInput.placeholder).toBe('https://api.example.com/v1');
+      expect(view.querySelector('[role="alert"]')).toBeNull();
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      await settle();
+      expect(requests).toEqual([]);
+      expect(view.querySelector('[role="alert"]')?.textContent).toBe(
+        copy('settings.imageConnection.check.enterBaseUrl')
+      );
+    });
+
+    it.each([
+      [
+        { ok: false, reason: 'rate_limited', status: 429 } as const,
+        'settings.check.failures.rate_limited' as const,
+        '429',
+      ],
+      [
+        { ok: false, reason: 'http_error', status: 500 } as const,
+        'settings.check.failures.http_error' as const,
+        '500',
+      ],
+      [
+        { ok: false, reason: 'invalid_response' } as const,
+        'settings.check.failures.invalid_response' as const,
+        '',
+      ],
+    ])('keeps the shared failure line for %j', async (result, key, status) => {
+      const view = await renderForm({
+        stored: storedConnection(),
+        onCheck: async () => result,
+      });
+      await settle();
+      const host = 'api.openai.com';
+      expect(view.querySelector('[role="alert"]')?.textContent).toBe(
+        copy(key).replaceAll('{{status}}', status).replaceAll('{{host}}', host)
+      );
+    });
+
+    it('stays quiet when the service has no model list', async () => {
+      const view = await renderForm({
+        stored: storedConnection(),
+        onCheck: async () => ({ ok: false, reason: 'unsupported', status: 404 }),
+      });
+      await settle();
+      expect(view.querySelector('[role="alert"]')).toBeNull();
+      expect(view.textContent).not.toContain("This service can't be checked for free");
+    });
 
     it('never sends a typed key to an invalid public HTTP endpoint', async () => {
       const requests: CheckImageConnection[] = [];

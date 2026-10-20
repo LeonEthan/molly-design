@@ -256,7 +256,13 @@ export async function checkImageConnection(
   if (!apiKey) {
     const saved = await store.imageCredentialForCheck(input.expectedRevision)
     if (!saved) return { ok: false, reason: 'changed' }
-    if (saved.connection.baseUrl !== input.baseUrl || !saved.apiKey)
+    const savedProtocol = saved.connection.protocol ?? 'openai-images'
+    const requestedProtocol = input.protocol ?? 'openai-images'
+    if (
+      saved.connection.baseUrl !== input.baseUrl ||
+      savedProtocol !== requestedProtocol ||
+      !saved.apiKey
+    )
       return { ok: false, reason: 'needs_key' }
     apiKey = saved.apiKey
   }

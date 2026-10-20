@@ -535,13 +535,11 @@ function OnboardingShellSurface({
       {isLocal && aside ? (
         <div
           hidden={!asideOpen}
-          className={`absolute z-20 ${COMPACT_ASIDE}`}
+          className={`absolute z-20 flex min-h-0 flex-col overflow-hidden ${COMPACT_ASIDE}`}
           style={LOCAL_ASIDE_STYLE}
           data-onboarding-aside={stepKey}
         >
-          <div className="scrollbar-pro flex h-full flex-col overflow-y-auto">
-            <div className="my-auto py-2">{aside}</div>
-          </div>
+          {aside}
         </div>
       ) : null}
 

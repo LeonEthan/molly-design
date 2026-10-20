@@ -906,6 +906,222 @@ describe('free key check and model choice', () => {
 });
 
 describe('connection management', () => {
+  it('scrolls only the body of a tall compatible form in edit and add', async () => {
+    const customModels: NonNullable<ModelConnection['customModels']> = Array.from(
+      { length: 4 },
+      (_, index) => ({
+        modelId: `vendor/model-${index}`,
+        name: `Model ${index}`,
+        input: ['text'],
+        contextWindow: 32768,
+        maxTokens: 4096,
+        thinking: ['off'],
+        toolCalls: true,
+        maxTokensField: 'max_tokens',
+      })
+    );
+    connectionIpc.getSnapshot.mockResolvedValue({
+      connections: [
+        {
+          ...stored,
+          providerPresetId: 'openai-compatible',
+          displayName: 'Synthetic compatible',
+          baseUrl: 'https://compatible.example.invalid/v1',
+          customModels,
+        },
+      ],
+    });
+    await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
+    const button = (label: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (node) => node.textContent?.trim() === label || node.textContent?.includes(label)
+      )!;
+    const scrollingAncestor = (node: Element) => {
+      let current = node.parentElement;
+      while (current && current !== host) {
+        if (/\boverflow-y-auto\b/.test(current.className)) return current;
+        current = current.parentElement;
+      }
+      return null;
+    };
+    const assertPinned = (action: string, modelFieldCount: number) => {
+      const footer = host.querySelector('[data-drawer-footer]');
+      const body = host.querySelector('[data-drawer-body]');
+      expect(footer).not.toBeNull();
+      expect(body).not.toBeNull();
+      expect(body!.contains(footer)).toBe(false);
+      expect(footer!.textContent).toContain(action);
+      expect(body!.textContent).toContain(en['settings.models.compatibleLead']);
+      const modelFields = [...body!.querySelectorAll('input')].filter((input) =>
+        input.id.endsWith('-modelId')
+      );
+      expect(modelFields).toHaveLength(modelFieldCount);
+      expect(body!.className).toContain('overflow-y-auto');
+      expect(body!.className).toContain('min-h-0');
+      expect(body!.className).toContain('flex-1');
+      expect(scrollingAncestor(footer!)).toBeNull();
+      expect(scrollingAncestor(body!)).toBeNull();
+      const form = footer!.closest('form');
+      expect(form?.className).toContain('min-h-0');
+      expect(form?.className).toContain('flex-1');
+      expect(form?.className).toContain('flex-col');
+      const slot = form?.parentElement;
+      expect(slot?.className).toContain('min-h-48');
+      expect(slot?.className).not.toContain('min-h-0');
+      expect(slot?.className).toContain('grow');
+      expect(slot?.className).toContain('shrink-0');
+      expect(slot?.className).toContain('basis-0');
+      expect(slot?.className).not.toContain('basis-48');
+      expect(slot?.className).toContain('flex-col');
+      expect(slot?.className).toContain('overflow-hidden');
+      expect(slot?.className).not.toContain('overflow-y-auto');
+    };
+    await act(async () => button(en['common.edit']).click());
+    assertPinned(en['common.save'], 4);
+    await act(async () => button(en['common.cancel']).click());
+    await act(async () => button(en['settings.models.add']).click());
+    const addList = host.querySelector('[data-connection-list]');
+    const addListClasses = addList?.className.split(/\s+/) ?? [];
+    expect(addListClasses).toContain('max-h-16');
+    expect(addListClasses).toContain('shrink-0');
+    expect(addListClasses).not.toContain('flex-1');
+    expect(addListClasses).not.toContain('grow');
+    await act(async () => button(en['settings.models.compatible']).click());
+    await act(async () => button(en['settings.models.addCustomModel']).click());
+    await act(async () => button(en['settings.models.addCustomModel']).click());
+    await act(async () => button(en['settings.models.addCustomModel']).click());
+    assertPinned(en['settings.models.connect'], 3);
+  });
+
+  it('scrolls saved rows beside an edited connection instead of clipping its actions', async () => {
+    const connections = Array.from({ length: 6 }, (_, index) => ({
+      ...stored,
+      id: `00000000-0000-4000-8000-00000000000${index + 1}`,
+      displayName: `Saved ${index + 1}`,
+    }));
+    connectionIpc.getSnapshot.mockResolvedValue({ connections });
+    await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
+    const editSaved = (name: string) => {
+      const label = [...host.querySelectorAll('p')].find((node) => node.textContent === name);
+      let row = label?.parentElement ?? null;
+      while (
+        row &&
+        ![...row.querySelectorAll('button')].some(
+          (button) => button.textContent?.trim() === en['common.edit']
+        )
+      ) {
+        row = row.parentElement;
+      }
+      const edit = [...(row?.querySelectorAll('button') ?? [])].find(
+        (button) => button.textContent?.trim() === en['common.edit']
+      );
+      expect(edit).toBeDefined();
+      edit?.click();
+    };
+    await act(async () => editSaved('Saved 4'));
+    const lists = [...host.querySelectorAll('[data-saved-connection-list]')];
+    expect(lists).toHaveLength(2);
+    for (const list of lists) {
+      const classes = list.className.split(/\s+/);
+      expect(classes).toContain('overflow-y-auto');
+      expect(classes).toContain('min-h-0');
+      expect(classes).toContain('max-h-16');
+      expect(classes).toContain('shrink-0');
+      expect(classes).not.toContain('flex-1');
+      expect(classes).not.toContain('grow');
+    }
+    const stack = host.querySelector('[data-connection-list]');
+    expect(stack?.className).toContain('flex-1');
+    expect(lists[0]?.textContent).toContain('Saved 1');
+    expect(lists[0]?.textContent).toContain('Saved 3');
+    expect(lists[1]?.textContent).toContain('Saved 5');
+    expect(lists[1]?.textContent).toContain('Saved 6');
+    const footer = host.querySelector('[data-drawer-footer]');
+    expect(footer?.textContent).toContain(en['common.cancel']);
+    expect(footer?.textContent).toContain(en['common.save']);
+    expect(footer?.textContent).toContain(en['settings.models.delete']);
+    expect(lists.some((list) => list.contains(footer))).toBe(false);
+    const slot = footer?.closest('form')?.parentElement;
+    expect(slot?.className).toContain('min-h-48');
+    expect(slot?.className).not.toContain('min-h-0');
+    expect(slot?.className).toContain('shrink-0');
+    expect(slot?.className).toContain('basis-0');
+    expect(slot?.className).toContain('grow');
+    expect(slot?.className).not.toContain('basis-48');
+    expect(lists.some((list) => list.contains(slot ?? null))).toBe(false);
+    await openMoreOptions();
+    expect(host.querySelector<HTMLInputElement>('[id$="-name"]')?.value).toBe('Saved 4');
+  });
+
+  it('keeps the first form content-sized without empty list space or stretched footer spacing', async () => {
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [] });
+    await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
+    const list = host.querySelector('[data-connection-list]');
+    expect(list).not.toBeNull();
+    expect(list?.textContent).toBe('');
+    const classes = list?.className.split(/\s+/) ?? [];
+    expect(classes).toContain('min-h-0');
+    expect(classes).toContain('max-h-full');
+    expect(classes).toContain('shrink');
+    expect(classes).toContain('overflow-y-auto');
+    expect(classes).not.toContain('flex-1');
+    expect(classes).not.toContain('grow');
+    const form = host.querySelector('form');
+    const formClasses = () => host.querySelector('form')?.className.split(/\s+/) ?? [];
+    expect(formClasses()).not.toContain('flex-1');
+    expect(formClasses()).not.toContain('h-full');
+    expect(formClasses()).not.toContain('grow');
+    expect(formClasses()).toContain('min-h-0');
+    expect(list?.nextElementSibling).toBe(form);
+    const footer = () => host.querySelector('[data-drawer-footer]');
+    expect(footer()?.textContent).toContain(en['settings.models.connect']);
+    const body = () => host.querySelector('[data-drawer-body]');
+    const tile = (label: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((node) =>
+        node.textContent?.endsWith(label)
+      )!;
+    for (const provider of [
+      en['settings.models.providers.deepseek'],
+      en['settings.models.compatible'],
+    ]) {
+      await act(async () => tile(provider).click());
+      expect(footer()?.textContent).toContain(en['settings.models.connect']);
+      expect(body()?.contains(footer() ?? null)).toBe(false);
+      expect(formClasses()).not.toContain('flex-1');
+      expect(formClasses()).not.toContain('h-full');
+      expect(formClasses()).not.toContain('grow');
+      expect(body()?.className).toContain('min-h-0');
+      expect(body()?.className).toContain('overflow-y-auto');
+      expect(host.querySelector('[data-connection-list]')?.className).not.toContain('flex-1');
+      await act(async () =>
+        [...host.querySelectorAll<HTMLButtonElement>('button')]
+          .find((button) => button.textContent === en['settings.models.allProviders'])!
+          .click()
+      );
+    }
+  });
+
+  it('does not grow an idle saved-connection list into the card', async () => {
+    const second: ModelConnection = {
+      ...stored,
+      id: '00000000-0000-4000-8000-000000000002',
+      displayName: 'Second',
+    };
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [stored, second] });
+    await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
+    const list = host.querySelector('[data-connection-list]');
+    expect(list?.textContent).toContain('Synthetic');
+    expect(list?.textContent).toContain('Second');
+    const classes = list?.className.split(/\s+/) ?? [];
+    expect(classes).toContain('min-h-0');
+    expect(classes).toContain('max-h-full');
+    expect(classes).toContain('shrink');
+    expect(classes).toContain('overflow-y-auto');
+    expect(classes).not.toContain('flex-1');
+    expect(classes).not.toContain('grow');
+    expect(host.querySelector('[data-drawer-footer]')).toBeNull();
+  });
+
   it('deletes a connection only after confirmation and removes its row', async () => {
     const deleted: unknown[] = [];
     connectionIpc.getSnapshot.mockResolvedValue({ connections: [stored] });

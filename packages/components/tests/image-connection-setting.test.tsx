@@ -291,6 +291,19 @@ describe('ImageConnectionForm', () => {
     expect(removeKeyButton(view)).not.toBeNull();
   });
 
+  it('keeps Connect outside the scrolling drawer body', async () => {
+    const view = await renderForm({ pinActions: true });
+    const body = view.querySelector('[data-drawer-body]');
+    const footer = view.querySelector('[data-drawer-footer]');
+    const connect = button(view, copy('settings.models.connect'));
+    expect(body).not.toBeNull();
+    expect(footer).not.toBeNull();
+    expect(body?.contains(connect)).toBe(false);
+    expect(footer?.contains(connect)).toBe(true);
+    expect(footer?.className).toContain('shrink-0');
+    expect(body?.className).toContain('overflow-y-auto');
+  });
+
   it('offers no remove action when nothing is stored', async () => {
     const view = await renderForm();
     expect(apiKeyInput(view).getAttribute('placeholder')).toBe('sk-...');

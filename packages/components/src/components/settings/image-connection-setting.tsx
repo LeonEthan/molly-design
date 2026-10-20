@@ -251,6 +251,7 @@ export function ImageConnectionForm({
   onDelete,
   notice,
   className,
+  pinActions = false,
 }: {
   stored: (ImageConnectionView & { revision?: number }) | undefined;
   saving?: boolean;
@@ -263,6 +264,8 @@ export function ImageConnectionForm({
   /** Shown at the top of the editor, e.g. a key-rotation reminder. */
   notice?: ReactNode;
   className?: string;
+  /** Keep Connect/Save visible and scroll the fields above it. */
+  pinActions?: boolean;
 }) {
   const { t } = useTranslation();
   const fieldId = useId();
@@ -305,9 +308,26 @@ export function ImageConnectionForm({
     void onSave(draft, check);
   };
 
+  const saveErrorAlert = saveError ? (
+    <p
+      role="alert"
+      className={`rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-snug text-destructive ${pinActions ? 'mt-3 shrink-0' : ''}`}
+    >
+      {t('settings.imageConnection.saveFailed', { message: saveError })}
+    </p>
+  ) : null;
+
   return (
-    <form className={className} onSubmit={submit}>
-      <div className="space-y-5">
+    <form
+      className={[pinActions ? 'flex h-full min-h-0 flex-1 flex-col' : 'space-y-5', className]
+        .filter(Boolean)
+        .join(' ')}
+      onSubmit={submit}
+    >
+      <div
+        data-drawer-body={pinActions ? '' : undefined}
+        className={pinActions ? 'min-h-0 flex-1 space-y-5 overflow-y-auto' : 'space-y-5'}
+      >
         {notice}
         <Field label={t('settings.imageConnection.protocol')}>
           <SegmentedControl
@@ -452,56 +472,46 @@ export function ImageConnectionForm({
             </Field>
           </CollapsibleContent>
         </Collapsible>
+      </div>
 
-        {saveError ? (
-          <p
-            role="alert"
-            className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-snug text-destructive"
+      {saveErrorAlert}
+
+      <div
+        data-drawer-footer={pinActions ? '' : undefined}
+        className={`flex flex-wrap items-center gap-2 ${pinActions ? 'shrink-0 border-t border-border/40 pt-4' : ''}`}
+      >
+        {onDelete ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            disabled={saving}
+            onClick={onDelete}
           >
-            {t('settings.imageConnection.saveFailed', { message: saveError })}
-          </p>
+            {t('settings.imageConnection.delete')}
+          </Button>
         ) : null}
-
-        <div className="flex flex-wrap items-center gap-2">
-          {onDelete ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              disabled={saving}
-              onClick={onDelete}
-            >
-              {t('settings.imageConnection.delete')}
+        <div className="ml-auto flex gap-2">
+          {onCancel ? (
+            <Button type="button" variant="outline" size="sm" disabled={saving} onClick={onCancel}>
+              {t('common.cancel')}
             </Button>
           ) : null}
-          <div className="ml-auto flex gap-2">
-            {onCancel ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={saving}
-                onClick={onCancel}
-              >
-                {t('common.cancel')}
-              </Button>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={saving || invalid || !dirty || destinationNeedsKey}
+          >
+            {saving ? (
+              <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
             ) : null}
-            <Button
-              type="submit"
-              size="sm"
-              disabled={saving || invalid || !dirty || destinationNeedsKey}
-            >
-              {saving ? (
-                <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-              ) : null}
-              {saving
-                ? t('settings.imageConnection.saving')
-                : stored
-                  ? t('common.save')
-                  : t('settings.models.connect')}
-            </Button>
-          </div>
+            {saving
+              ? t('settings.imageConnection.saving')
+              : stored
+                ? t('common.save')
+                : t('settings.models.connect')}
+          </Button>
         </div>
       </div>
     </form>
@@ -551,7 +561,9 @@ export function ImageConnectionSummary({
           <p className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-sm">
             <span className="shrink-0">{t(PROTOCOL_COPY[protocol].label)}</span>
             <span aria-hidden>·</span>
-            <span className="min-w-0 font-mono break-all" title={stored.model}>{stored.model}</span>
+            <span className="min-w-0 font-mono break-all" title={stored.model}>
+              {stored.model}
+            </span>
           </p>
           <ConnectionCheckBadge state={check} />
         </div>
@@ -738,7 +750,11 @@ export function ImageConnectionSetting({
       </div>
     ) : undefined;
   const body = (
-    <div className={variant === 'panel' ? undefined : 'border-t border-border/40'}>
+    <div
+      className={
+        variant === 'panel' ? 'flex h-full min-h-0 flex-1 flex-col' : 'border-t border-border/40'
+      }
+    >
       {!ready ? (
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <p role="status" className="min-w-0 flex-1 text-xs text-muted-foreground">
@@ -761,6 +777,7 @@ export function ImageConnectionSetting({
       ) : formOpen ? (
         <ImageConnectionForm
           className={variant === 'panel' ? undefined : 'bg-foreground/[0.015] p-5'}
+          pinActions={variant === 'panel'}
           stored={stored}
           saving={saving}
           saveError={saveError}

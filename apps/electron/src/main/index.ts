@@ -210,6 +210,7 @@ if (hasSingleInstanceLock) {
     )
     let designShutdownComplete = false
     let cliShutdownComplete = false
+    let cliStoppedForRelaunch = false
     const appUpdaterService = new AppUpdaterService({
       enabled: shouldConstructUpdaterEnabled({
         localPlatform: isLocalPlatform(),
@@ -225,12 +226,15 @@ if (hasSingleInstanceLock) {
         const ready = await flushOpenDesigns()
         if (!ready) throw new Error('Could not save your designs before updating')
         await cliService.shutdownForQuit()
+        cliStoppedForRelaunch = true
         designShutdownComplete = true
         cliShutdownComplete = true
       },
       abortRelaunch: () => {
         designShutdownComplete = false
         cliShutdownComplete = false
+        if (!cliStoppedForRelaunch) return
+        cliStoppedForRelaunch = false
         cliService.autoStart(getMainWindow()?.webContents)
       }
     })

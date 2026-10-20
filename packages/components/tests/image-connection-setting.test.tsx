@@ -796,7 +796,7 @@ describe('ImageConnectionForm', () => {
       ]);
     });
 
-    it('collapses More options when a saved address is the provider root', async () => {
+    it('collapses More options for an empty or provider-root address', async () => {
       const moreOptions = (view: HTMLElement) => button(view, copy('settings.models.moreOptions'));
       const mount = async (props: Partial<FormProps> = {}) => {
         await act(async () => {
@@ -827,10 +827,20 @@ describe('ImageConnectionForm', () => {
         'https://images.example.com/v1'
       );
       const fresh = await mount();
+      expect(moreOptions(fresh).getAttribute('aria-expanded')).toBe('false');
+      expect(fresh.querySelector('input[id$="-base-url"]')).toBeNull();
+      await click(moreOptions(fresh));
       expect(moreOptions(fresh).getAttribute('aria-expanded')).toBe('true');
       expect(fresh.querySelector<HTMLInputElement>('input[id$="-base-url"]')?.placeholder).toBe(
         'https://api.example.com/v1'
       );
+      const keyFirst = await mount();
+      await typeInto(apiKeyInput(keyFirst), 'synthetic-typed-key');
+      expect(moreOptions(keyFirst).getAttribute('aria-expanded')).toBe('true');
+      const keyFirstUrl = keyFirst.querySelector<HTMLInputElement>('input[id$="-base-url"]')!;
+      await typeInto(keyFirstUrl, 'https://images.example.com/v1');
+      expect(moreOptions(keyFirst).getAttribute('aria-expanded')).toBe('true');
+      expect(keyFirstUrl.isConnected).toBe(true);
     });
 
     it('shows an example placeholder and blocks an empty address before any check', async () => {

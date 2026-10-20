@@ -78,8 +78,10 @@ const PROTOCOL_COPY: Record<
   },
 };
 
-const isProtocolDefaultBaseUrl = (protocol: ImageConnectionProtocol, baseUrl: string) =>
-  baseUrl.trim().replace(/\/+$/, '') === PROTOCOL_COPY[protocol].defaultBaseUrl;
+const isCustomBaseUrl = (protocol: ImageConnectionProtocol, baseUrl: string) => {
+  const address = baseUrl.trim().replace(/\/+$/, '');
+  return address !== '' && address !== PROTOCOL_COPY[protocol].defaultBaseUrl;
+};
 
 export const imageProtocolLabelKey = (connection: Pick<ImageConnectionView, 'protocol'>) =>
   PROTOCOL_COPY[imageConnectionProtocol(connection)].label;
@@ -336,8 +338,8 @@ export function ImageConnectionForm({
   const fieldId = useId();
   const [draft, setDraft] = useState(() => createImageConnectionFormDraft(stored));
   const [addressWhenKeyTyped, setAddressWhenKeyTyped] = useState<string | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(
-    () => !isProtocolDefaultBaseUrl(draft.protocol, draft.baseUrl)
+  const [advancedOpen, setAdvancedOpen] = useState(() =>
+    isCustomBaseUrl(draft.protocol, draft.baseUrl)
   );
 
   useEffect(() => {
@@ -409,7 +411,7 @@ export function ImageConnectionForm({
               const next = applyImageProtocolChoice(draft, protocol);
               setAddressWhenKeyTyped(null);
               setDraft(next);
-              if (!isProtocolDefaultBaseUrl(next.protocol, next.baseUrl)) setAdvancedOpen(true);
+              if (isCustomBaseUrl(next.protocol, next.baseUrl)) setAdvancedOpen(true);
             }}
           />
         </Field>
@@ -496,7 +498,10 @@ export function ImageConnectionForm({
           </div>
         </Field>
 
-        <Collapsible open={advancedOpen || issues.baseUrl} onOpenChange={setAdvancedOpen}>
+        <Collapsible
+          open={advancedOpen || (issues.baseUrl && (baseUrl.length > 0 || blockEmptyBaseUrl))}
+          onOpenChange={setAdvancedOpen}
+        >
           <CollapsibleTrigger asChild>
             <Button
               type="button"
@@ -542,6 +547,7 @@ export function ImageConnectionForm({
                 onChange={(event) => {
                   const next = event.target.value;
                   const edited = applyImageAddressEdit(addressWhenKeyTyped, next);
+                  setAdvancedOpen(true);
                   setAddressWhenKeyTyped(edited.addressWhenKeyTyped);
                   setDraft((current) => ({
                     ...current,

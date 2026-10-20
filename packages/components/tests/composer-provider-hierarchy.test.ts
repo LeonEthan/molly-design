@@ -112,7 +112,7 @@ describe('composer provider hierarchy', () => {
     );
   });
 
-  it('uses off when a configured model publishes no reasoning levels', () => {
+  it('uses off when a model publishes an empty reasoning ladder', () => {
     const resolved = resolveComposerProviderHierarchy({
       modelOptions: models,
       selectedModelId: studio,
@@ -121,6 +121,18 @@ describe('composer provider hierarchy', () => {
     });
     expect(resolved.reasoning).toBe('off');
     expect(resolved.reasoningLevels).toEqual(['off']);
+  });
+
+  it('uses the model default when the reasoning mapping is missing', () => {
+    const resolved = resolveComposerProviderHierarchy({
+      modelOptions: models,
+      selectedModelId: studio,
+      reasoningValue: null,
+      modelReasoningEfforts: {},
+      fallbackReasoningLevels: ['low', 'high'],
+    });
+    expect(resolved.reasoning).toBe('high');
+    expect(resolved.reasoningLevels).toEqual(['low', 'high']);
   });
 
   it('cycles connection providers and applies the next provider model', () => {

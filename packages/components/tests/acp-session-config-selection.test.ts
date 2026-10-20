@@ -174,6 +174,43 @@ describe('ACP session config derivation', () => {
     ).toEqual({ collaboration_mode: 'default', reasoning_effort: 'high' });
   });
 
+  it('does not resurrect a reasoning key omitted from a full runtime snapshot', () => {
+    const flash = encodeMollyModelOption('deepseek', 'deepseek-v4-flash');
+    const resolved = resolveAcpSessionConfigSelection(
+      {
+        edits: emptyEdits,
+        preferences: { configOptionValues: { reasoning_effort: 'max' } },
+        runtimePreferences: {
+          modelId: flash,
+          configOptionValues: { model: flash },
+        },
+      },
+      {
+        capabilityAuthority: 'authoritative',
+        modeOptions: [],
+        modelOptions: [{ value: flash, label: 'Flash', group: 'DeepSeek' }],
+        defaultModeId: null,
+        defaultModelId: flash,
+        modelReasoningEfforts: { [flash]: ['high', 'max'] },
+        configOptionSelectors: [
+          {
+            configId: 'reasoning_effort',
+            label: 'Reasoning',
+            type: 'select',
+            category: 'thought_level',
+            currentValue: 'high',
+            options: [
+              { value: 'high', label: 'High' },
+              { value: 'max', label: 'Max' },
+            ],
+          },
+        ],
+      },
+      { cliType: 'builtin', agentType: 'molly' }
+    );
+    expect(resolved.configOptionValues).not.toHaveProperty('reasoning_effort');
+  });
+
   it('removes non-user options omitted from a full runtime snapshot', () => {
     expect(
       resolveAcpSessionConfigSelection(
@@ -494,6 +531,53 @@ describe('fenceAcpSessionUserEdits', () => {
         preferences: { modelId: 'gpt-5.5', configOptionValues: { reasoning_effort: 'high' } },
       })
     ).toBe(EMPTY_ACP_SESSION_USER_CONFIG_EDITS);
+  });
+
+  it('does not backfill the model config selector when the runtime snapshot omits model', () => {
+    const first = encodeMollyModelOption('deepseek', 'deepseek-v4-flash');
+    const second = encodeMollyModelOption('deepseek', 'deepseek-v4-pro');
+    const resolved = resolveAcpSessionConfigSelection(
+      {
+        edits: emptyEdits,
+        preferences: {},
+        runtimePreferences: { configOptionValues: { reasoning_effort: 'high' } },
+      },
+      {
+        capabilityAuthority: 'authoritative',
+        modeOptions: [],
+        modelOptions: [],
+        defaultModeId: null,
+        defaultModelId: null,
+        modelReasoningEfforts: {
+          [first]: ['high'],
+          [second]: ['low'],
+        },
+        configOptionSelectors: [
+          {
+            configId: 'model',
+            label: 'Model',
+            type: 'select',
+            category: 'model',
+            currentValue: first,
+            options: [
+              { value: first, label: 'Flash' },
+              { value: second, label: 'Pro' },
+            ],
+          },
+          {
+            configId: 'reasoning_effort',
+            label: 'Reasoning',
+            type: 'select',
+            category: 'thought_level',
+            currentValue: 'high',
+            options: [{ value: 'high', label: 'High' }],
+          },
+        ],
+      },
+      { cliType: 'builtin', agentType: 'molly' }
+    );
+    expect(resolved.configOptionValues).not.toHaveProperty('model');
+    expect(resolved.configOptionValues.reasoning_effort).toBe('high');
   });
 
   it('commits the derived default model into the model config selector when unset', () => {

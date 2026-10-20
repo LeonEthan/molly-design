@@ -99,14 +99,21 @@ function providerIdOf(option: ComposerModelOption): string {
   return connectionOf(option)?.id ?? COMPOSER_UNGROUPED_PROVIDER_ID;
 }
 
+type ResolvedModelReasoningLevels =
+  | { kind: 'published-empty' }
+  | { kind: 'levels'; levels: readonly string[] };
+
 function levelsForModel(
   modelId: string | null,
   originalModelId: string | null,
   efforts: Record<string, readonly string[] | undefined> | undefined,
   fallback: readonly string[] | undefined
-): string[] {
-  const mapped = modelId ? efforts?.[modelId] : undefined;
-  if (mapped && mapped.length > 0) return [...mapped];
+): ResolvedModelReasoningLevels {
+  if (modelId && efforts != null && Object.prototype.hasOwnProperty.call(efforts, modelId)) {
+    const mapped = efforts[modelId];
+    if (!mapped || mapped.length === 0) return { kind: 'published-empty' };
+    return { kind: 'levels', levels: mapped };
+  }
   const originalIsUnset =
     originalModelId === null || originalModelId === MOLLY_UNSELECTED_MODEL;
   if (
@@ -114,19 +121,21 @@ function levelsForModel(
     fallback.length > 0 &&
     (modelId === originalModelId || originalIsUnset)
   ) {
-    return [...fallback];
+    return { kind: 'levels', levels: fallback };
   }
-  return [];
+  return { kind: 'levels', levels: [] };
 }
 
 function chooseReasoning(
-  levels: readonly string[],
+  resolved: ResolvedModelReasoningLevels,
   current: string | null | undefined,
   hasProvider: boolean
 ): string {
   if (!hasProvider) return 'off';
+  if (resolved.kind === 'published-empty') return 'off';
+  const levels = resolved.levels;
   if (levels.length === 0) {
-    return 'off';
+    return defaultComposerReasoning(undefined, true);
   }
   const offered = levels.filter((level) => level !== 'off');
   if (current && current !== 'off' && levels.includes(current)) return current;
@@ -134,9 +143,15 @@ function chooseReasoning(
   return defaultComposerReasoning(levels, true);
 }
 
-function visibleReasoningLevels(levels: readonly string[], hasProvider: boolean): string[] {
+function visibleReasoningLevels(
+  resolved: ResolvedModelReasoningLevels,
+  hasProvider: boolean,
+  dispatchedReasoning: string
+): string[] {
   if (!hasProvider) return ['off'];
-  if (levels.length === 0) return ['off'];
+  if (resolved.kind === 'published-empty') return ['off'];
+  const levels = resolved.levels;
+  if (levels.length === 0) return [dispatchedReasoning];
   const offered = levels.filter((level) => level !== 'off');
   if (offered.length > 0) return offered;
   return [...levels];
@@ -204,13 +219,13 @@ export function resolveComposerProviderHierarchy(input: {
     input.selectedModelId && scoped.some((option) => option.value === input.selectedModelId)
       ? input.selectedModelId
       : (scoped[0]?.value ?? null);
-  const levels = levelsForModel(
+  const resolvedLevels = levelsForModel(
     modelId,
     input.selectedModelId,
     input.modelReasoningEfforts,
     input.fallbackReasoningLevels
   );
-  const reasoning = chooseReasoning(levels, input.reasoningValue, true);
+  const reasoning = chooseReasoning(resolvedLevels, input.reasoningValue, true);
   return {
     mode,
     providers,
@@ -219,7 +234,7 @@ export function resolveComposerProviderHierarchy(input: {
     modelId,
     models: scoped,
     reasoning,
-    reasoningLevels: visibleReasoningLevels(levels, true),
+    reasoningLevels: visibleReasoningLevels(resolvedLevels, true, reasoning),
   };
 }
 

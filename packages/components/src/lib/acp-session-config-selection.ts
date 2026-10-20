@@ -430,13 +430,19 @@ export const resolveAcpSessionConfigSelection = (
       hierarchy.modelId
     ) {
       const modelConfigId = modelSelector.configId;
-      const storedModel = configOptionValues[modelConfigId];
-      const modelUnset =
-        storedModel === undefined ||
-        storedModel === MOLLY_UNSELECTED_MODEL ||
-        !modelSelector.options.some((option) => option.value === storedModel);
-      if (modelUnset) {
-        configOptionValues[modelConfigId] = hierarchy.modelId;
+      const runtimeOmittedModelKey =
+        runtimeTable != null &&
+        !(modelConfigId in runtimeTable) &&
+        !(modelConfigId in edits.configOptions);
+      if (!runtimeOmittedModelKey) {
+        const storedModel = configOptionValues[modelConfigId];
+        const modelUnset =
+          storedModel === undefined ||
+          storedModel === MOLLY_UNSELECTED_MODEL ||
+          !modelSelector.options.some((option) => option.value === storedModel);
+        if (modelUnset) {
+          configOptionValues[modelConfigId] = hierarchy.modelId;
+        }
       }
     }
   }

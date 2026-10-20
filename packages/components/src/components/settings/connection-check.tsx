@@ -5,9 +5,7 @@ import { CircleAlert, CircleCheck, CircleDashed, LoaderCircle } from '@/ui/icons
 import { cn } from '@/lib/utils';
 
 export type ConnectionCheckState =
-  | { phase: 'idle' }
-  | { phase: 'checking' }
-  | { phase: 'done'; result: ConnectionCheckResult };
+  { phase: 'idle' } | { phase: 'checking' } | { phase: 'done'; result: ConnectionCheckResult };
 
 export const CONNECTION_CHECK_DELAY_MS = 700;
 
@@ -66,22 +64,28 @@ const hostOf = (url: string) => {
 export function ConnectionCheckError({
   state,
   baseUrl,
+  message,
   className,
 }: {
   state: ConnectionCheckState;
   baseUrl: string;
+  message?: string;
   className?: string;
 }) {
   const { t } = useTranslation();
-  if (state.phase !== 'done' || state.result.ok || state.result.reason === 'unsupported')
-    return null;
+  const text =
+    message ??
+    (state.phase === 'done' && !state.result.ok && state.result.reason !== 'unsupported'
+      ? t(`settings.check.failures.${state.result.reason}`, {
+          status: state.result.status ?? '',
+          host: hostOf(baseUrl),
+        })
+      : undefined);
+  if (!text) return null;
   return (
     <p role="alert" className={cn('flex items-center gap-1.5 text-xs text-destructive', className)}>
       <CircleAlert aria-hidden className="h-3.5 w-3.5 shrink-0" />
-      {t(`settings.check.failures.${state.result.reason}`, {
-        status: state.result.status ?? '',
-        host: hostOf(baseUrl),
-      })}
+      {text}
     </p>
   );
 }

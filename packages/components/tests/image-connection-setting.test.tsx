@@ -23,6 +23,7 @@ import {
   commitImageAddress,
   createImageConnectionFormDraft,
   imageConnectionCanSave,
+  imageConnectionCheckMessageKey,
   imageConnectionDraftIssues,
   imageConnectionUsesStoredKey,
   typedKeyMatchesAddress,
@@ -225,6 +226,45 @@ describe('image connection form values', () => {
         dashscope
       )
     ).toBe(false);
+  });
+  it('maps image check failures to the #188 sentences', () => {
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'key_rejected', status: 401 })).toBe(
+      'settings.imageConnection.check.keyRejected'
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 404 })).toBe(
+      null
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 405 })).toBe(
+      null
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported', status: 501 })).toBe(
+      null
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unsupported' })).toBe(null);
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'http_error', status: 404 })).toBe(
+      'settings.imageConnection.check.notFound'
+    );
+    expect(imageConnectionCheckMessageKey({ ok: false, reason: 'unreachable' })).toBe(
+      'settings.imageConnection.check.unreachable'
+    );
+    expect(copy('settings.imageConnection.check.enterBaseUrl')).toBe('Enter a base URL.');
+    expect(copy('settings.imageConnection.check.keyRejected')).toBe(
+      'The key was rejected. Check the key and try again.'
+    );
+    expect(copy('settings.imageConnection.check.notFound')).toBe(
+      'That address was not found from your computer. Check the base URL.'
+    );
+    expect(copy('settings.imageConnection.check.unreachable')).toBe(
+      "Can't reach the server from your computer. Check the URL and your network."
+    );
+    expect(zh['settings.imageConnection.check.enterBaseUrl']).toBe('请输入服务地址。');
+    expect(zh['settings.imageConnection.check.keyRejected']).toBe('密钥被拒绝。请检查密钥后再试。');
+    expect(zh['settings.imageConnection.check.notFound']).toBe(
+      '从你的电脑找不到这个地址。请检查服务地址。'
+    );
+    expect(zh['settings.imageConnection.check.unreachable']).toBe(
+      '你的电脑连不上这台服务器。请检查地址和网络。'
+    );
   });
   it('keeps the example placeholder and the real provider roots in the hints', () => {
     expect(copy('settings.imageConnection.baseUrlPlaceholder')).toBe('https://api.example.com/v1');
@@ -571,11 +611,31 @@ describe('ImageConnectionForm', () => {
       expect(requests).toEqual([
         { protocol: 'openai-images', baseUrl: 'https://api.openai.com/v1', expectedRevision: 3 },
       ]);
-      expect(view.textContent).toContain('The provider rejected this key (401).');
+      expect(view.textContent).toContain(copy('settings.imageConnection.check.keyRejected'));
+      expect(view.textContent).not.toContain('The provider rejected this key (401).');
       await typeInto(await baseUrlInput(view), 'https://elsewhere.example.com/v1');
       await settle();
       expect(requests).toHaveLength(1);
       expect(view.textContent).not.toContain('rejected');
+    });
+
+    it.each([
+      [
+        { ok: false, reason: 'http_error', status: 404 } as const,
+        'settings.imageConnection.check.notFound' as const,
+      ],
+      [
+        { ok: false, reason: 'unreachable' } as const,
+        'settings.imageConnection.check.unreachable' as const,
+      ],
+    ])('shows the plain image failure %j', async (result, key) => {
+      const view = await renderForm({
+        stored: storedConnection(),
+        onCheck: async () => result,
+      });
+      await settle();
+      expect(view.querySelector('[role="alert"]')?.textContent).toBe(copy(key));
+      expect(view.querySelector('[role="alert"]')?.textContent).toContain('your computer');
     });
 
     it.each(['http://192.168.0.1:8080/v1', 'http://172.16.0.1:8080/v1'])(
@@ -779,10 +839,13 @@ describe('ImageConnectionForm', () => {
       expect(urlInput.value).toBe('');
       expect(urlInput.placeholder).toBe(copy('settings.imageConnection.baseUrlPlaceholder'));
       expect(urlInput.placeholder).toBe('https://api.example.com/v1');
+      expect(view.querySelector('[role="alert"]')).toBeNull();
       await typeInto(apiKeyInput(view), 'synthetic-typed-key');
       await settle();
       expect(requests).toEqual([]);
-      expect(view.querySelector('[role="alert"]')).toBeNull();
+      expect(view.querySelector('[role="alert"]')?.textContent).toBe(
+        copy('settings.imageConnection.check.enterBaseUrl')
+      );
     });
 
     it('stays quiet when the service has no model list', async () => {

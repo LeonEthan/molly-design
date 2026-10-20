@@ -182,6 +182,25 @@ export function buildImageConnectionSave(
   return parsed.success ? parsed.data : undefined;
 }
 
+const IMAGE_NOT_FOUND_STATUSES = new Set([404, 405, 501]);
+
+/** Plain image-check copy. A missing optional model list stays silent. */
+export function imageConnectionCheckMessageKey(
+  result: Extract<ConnectionCheckResult, { ok: false }>
+):
+  | 'settings.imageConnection.check.keyRejected'
+  | 'settings.imageConnection.check.notFound'
+  | 'settings.imageConnection.check.unreachable'
+  | null {
+  if (result.reason === 'unsupported') return null;
+  if (result.reason === 'key_rejected') return 'settings.imageConnection.check.keyRejected';
+  if (result.status !== undefined && IMAGE_NOT_FOUND_STATUSES.has(result.status)) {
+    return 'settings.imageConnection.check.notFound';
+  }
+  if (result.reason === 'unreachable') return 'settings.imageConnection.check.unreachable';
+  return null;
+}
+
 export function imageConnectionCanSave(
   draft: ImageConnectionFormDraft,
   stored: Pick<ImageConnectionView, 'protocol' | 'baseUrl' | 'hasApiKey'> | undefined
@@ -350,6 +369,17 @@ export function ImageConnectionForm({
     return null;
   }, [addressWhenKeyTyped, baseUrl, draft, stored, typedKey]);
   const check = useConnectionCheck(checkRequest, onCheck);
+  const checkMessageKey =
+    check.phase === 'done' && !check.result.ok
+      ? imageConnectionCheckMessageKey(check.result)
+      : null;
+  const blockEmptyBaseUrl =
+    baseUrl.length === 0 && (typedKey.length > 0 || (hasStoredKey && !draft.clearApiKey));
+  const checkMessage = blockEmptyBaseUrl
+    ? t('settings.imageConnection.check.enterBaseUrl')
+    : checkMessageKey
+      ? t(checkMessageKey)
+      : undefined;
   const canSave = imageConnectionCanSave(draft, stored);
   const listed = check.phase === 'done' && check.result.ok ? (check.result.models ?? []) : [];
 
@@ -429,7 +459,7 @@ export function ImageConnectionForm({
               ) : null}
             </div>
             <p className="text-xs text-muted-foreground">{t('settings.models.keyLocalHint')}</p>
-            <ConnectionCheckError state={check} baseUrl={baseUrl} />
+            <ConnectionCheckError state={check} baseUrl={baseUrl} message={checkMessage} />
           </div>
         </Field>
 

@@ -29,13 +29,17 @@ tool (`B`) sets `body[data-brushing]`. The two are mutually exclusive, `V` retur
 and neither is on while readonly. One Escape closes an open note editor (a written note stays,
 an empty one is dropped) and returns to select for either tool; Escape during IME composition
 does not exit, and `V` typed in the editor is text. Both keys are consumed in the
-capture phase so Bento's legacy `c` handler never sees them. Unsent pins survive an in-session
-frame reload: the shell snapshots them (`window.molly.notesSnapshot`) before the old frame is
-destroyed and restores them (`window.molly.restoreNotes`) into the next one. A failed snapshot
-(`null`) keeps the last good one; an empty successful snapshot clears it. Restore releases the
-snapshot only after it lands, and a failed attach keeps it for the retry. Restored pins are
-memory-only and prune missing targets. Pins are dropped on send, clear, or when their target is
-gone; only teardown forgets the snapshot. Pins stay snapshotted while a send is in flight.
+capture phase so Bento's legacy `c` handler never sees them. Unsent pins are pushed to main
+(`notes-sync` on `/ws/<id>/toolbar`) after every change, debounced by `NOTE_PUBLISH_DEBOUNCE_MS`
+through an injectable clock and flushed on dispose (`pagehide`). Main keeps the last valid push per
+artwork and host (`design-note-retention-core.ts`); an invalid push is rejected by the request
+schema and leaves that copy. Nothing is read from the page on reload, so a crashed frame loses
+nothing already published. Every attach restores the copy with `window.molly.restoreNotes`, which
+merges into the pins, prunes missing targets and never fails the attach. A failed restore keeps the
+copy for the next attach. A pending publish is never sent while a send is in flight, so a reload
+cannot put sent notes back. Sending flushes the latest state first; main then moves the copy into
+a flight, so an accepted send leaves no copy. A settle with `sent=false` merges the flight back into
+the copy and into any live canvas. Clear, delete and an emptied editor publish the new state.
 A drag on an image in comment mode draws a box region, and a drag on an image in brush mode
 draws a stroke region (ordered points thinned and resampled to `DESIGN_STROKE_POINTS_MAX`). Both use
 image-normalized coordinates (`image-regions.ts`) and set the note's `region`; a click stores a `pin`

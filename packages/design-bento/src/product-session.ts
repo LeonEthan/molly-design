@@ -88,17 +88,18 @@ export function createProductSession(options: {
     if (expected !== undefined && expected !== selectionEpoch)
       throw Error('Selection changed; select the current elements again');
   };
-  const request = async (input: unknown) => {
-    const response = await fetch(`/ws/${encodeURIComponent(options.sessionId)}/toolbar`, {
+  const post = (input: unknown, keepalive = false) =>
+    fetch(`/ws/${encodeURIComponent(options.sessionId)}/toolbar`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(input),
+      keepalive,
     });
-    return response.json();
-  };
+  const request = async (input: unknown) => (await post(input)).json();
   const highlight = createElementHighlight();
   const pins = createNotePins({
     request,
+    publish: (notes) => post({ type: 'notes-sync', notes }, true),
     selectedIds: () => selectedIds,
     elements: options.elements,
     highlight,
@@ -671,9 +672,6 @@ export function createProductSession(options: {
       },
       settleNotes(expected: number, sent: boolean) {
         return pins.settle(expected, sent);
-      },
-      notesSnapshot() {
-        return pins.snapshot();
       },
       restoreNotes(notes: Parameters<typeof pins.restore>[0]) {
         pins.restore(notes);

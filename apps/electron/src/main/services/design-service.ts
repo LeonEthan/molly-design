@@ -8,6 +8,8 @@ import {
 import {
   DESIGN_ASK_PRESETS,
   DESIGN_MARKED_IMAGE_MAX_EDGE,
+  DESIGN_NOTES_MAX,
+  DESIGN_NOTES_SYNC_BODY_LIMIT,
   DESIGN_SELECTION_BODY_LIMIT,
   decodeDesignMarkedImage,
   DesignCanvasCommandResultSchema,
@@ -130,7 +132,8 @@ export async function captureDesignFrame(owner: BrowserWindow, artworkId: string
 // every path that recreates the document (attach/restore/reload/disconnect)
 // goes through record creation or destroyDesignInstance.
 const lastSelectionSummaries = new Map<string, DesignSelectionSummary>()
-const retainedUnsentNotes = createRetainedNotes<DesignNotes[number]>()
+const retainedUnsentNotes = createRetainedNotes<DesignNotes[number]>({ max: DESIGN_NOTES_MAX })
+const noteScope = (id: string, hostId: string) => JSON.stringify([id, hostId])
 const recordsFor = (id: string) => [...records.values()].filter((record) => record.artworkId === id)
 const loading = new Map<string, Promise<RecordEntry>>()
 const syncing = new Map<string, Promise<DesignElementChanges | null>>()
@@ -234,8 +237,10 @@ export async function surface(
         try {
           const text = await request.text()
           lease.assertActive()
-          if (text.length > DESIGN_SELECTION_BODY_LIMIT) throw Error('Toolbar request too large')
+          if (text.length > DESIGN_NOTES_SYNC_BODY_LIMIT) throw Error('Toolbar request too large')
           const input = DesignToolbarRequestSchema.parse(JSON.parse(text))
+          if (input.type !== 'notes-sync' && text.length > DESIGN_SELECTION_BODY_LIMIT)
+            throw Error('Toolbar request too large')
           const record = records.get(hostId)
           const assertCurrent = () => {
             lease.assertActive()
@@ -248,6 +253,10 @@ export async function surface(
               throw Error('Current artwork is not visible')
           }
           assertCurrent()
+          if (input.type === 'notes-sync') {
+            retainedUnsentNotes.publish(noteScope(id, hostId), input.notes)
+            return Response.json({ ok: true }, { headers })
+          }
           if (input.type === 'notes') {
             const notes = await getDesignNotes(id, hostId, input.notesEpoch, assertCurrent)
             const region = notes.find((note) => note.region)
@@ -255,6 +264,7 @@ export async function surface(
               ? await readDesignNoteImage(record!, input.notesEpoch, region.reference.elementIds[0])
               : undefined
             assertCurrent()
+            retainedUnsentNotes.accept(noteScope(id, hostId), input.notesEpoch)
             record!.owner.webContents.send('design.selectionAction', {
               hostId,
               action: 'notes',
@@ -461,7 +471,7 @@ export async function attachDesign(
           view.webContents.on('will-prevent-unload', (event) => event.preventDefault())
           await view.webContents.loadURL(source.url)
           await waitForDesignCanvasReady(view.webContents)
-          await restoreRetainedNotes(view.webContents, hostId)
+          await restoreRetainedNotes(view.webContents, id, hostId)
           await designCanvasAccess.register(access)
           if (!reconcile) await access.setReadonly(designCanvasAccess.isReadonly(id), 'locked')
           try {
@@ -472,8 +482,7 @@ export async function attachDesign(
           installCloseGuard(owner)
           return entry
         } catch (error) {
-          // A failed attach keeps its unsent notes for the next attempt.
-          destroyDesignInstance(hostId, { retainNotes: true })
+          destroyDesignInstance(hostId)
           source.dispose()
           throw error
         }
@@ -525,13 +534,12 @@ export function hideDesign(id: string, hostId?: string) {
     record.view.setVisible(false)
   }
 }
-function destroyDesignInstance(key: string, { retainNotes = false } = {}) {
+function destroyDesignInstance(key: string) {
   const record = records.get(key)
   if (!record) return
   records.delete(key)
   hosts.delete(key)
   lastSelectionSummaries.delete(key)
-  if (!retainNotes) retainedUnsentNotes.forget(key)
   designCanvasAccess.unregister(record.access)
   if (!record.owner.isDestroyed()) record.owner.contentView.removeChildView(record.view)
   record.dispose()
@@ -794,13 +802,15 @@ export async function settleDesignNotes(
   notesEpoch: number,
   sent: boolean
 ) {
+  const rejected = retainedUnsentNotes.settle(noteScope(id, hostId), notesEpoch, sent)
   const record = records.get(hostId)
   if (!record || record.artworkId !== id || hosts.get(hostId) !== id) return false
-  return (
+  const settled =
     (await record.view.webContents.executeJavaScript(
       `window.molly.settleNotes ? window.molly.settleNotes(${JSON.stringify(notesEpoch)}, ${sent}) : false`
     )) === true
-  )
+  if (rejected.length) void restoreCanvasNotes(record.view.webContents, rejected).catch(() => {})
+  return settled
 }
 
 /**
@@ -910,30 +920,22 @@ async function reloadDesignCanvas(id: string, hostId?: string) {
   for (const [key, record] of entries) {
     const visible = hosts.has(key)
     const bounds = record.view.getBounds()
-    // Snapshot before the page is destroyed; an unreadable canvas keeps the last good snapshot.
-    retainedUnsentNotes.retain(key, await readUnsentNotes(record.view.webContents))
-    destroyDesignInstance(key, { retainNotes: true })
+    destroyDesignInstance(key)
     if (visible) await attachDesign(record.owner, id, bounds, key, false)
   }
   return Array.isArray(before?.elements) ? (before as { elements: { id: string }[] }) : null
 }
 
-/** Null when the canvas cannot be read; an empty array means it holds no unsent notes. */
-async function readUnsentNotes(webContents: Electron.WebContents): Promise<DesignNotes | null> {
-  const raw: unknown = await webContents
-    .executeJavaScript('window.molly?.notesSnapshot?.() ?? null')
-    .catch(() => null)
-  if (!Array.isArray(raw)) return null
-  if (raw.length === 0) return []
-  const parsed = DesignNotesSchema.safeParse(raw)
-  return parsed.success ? parsed.data : null
+async function restoreRetainedNotes(webContents: Electron.WebContents, id: string, hostId: string) {
+  await retainedUnsentNotes.restoreInto(noteScope(id, hostId), (notes) =>
+    restoreCanvasNotes(webContents, notes)
+  )
 }
-async function restoreRetainedNotes(webContents: Electron.WebContents, hostId: string) {
-  const notes = retainedUnsentNotes.peek(hostId)
-  if (!notes.length) return
-  // Throws on failure: the attach is then retried and the snapshot is still held.
-  await webContents.executeJavaScript('window.molly.restoreNotes(' + JSON.stringify(notes) + ')')
-  retainedUnsentNotes.release(hostId)
+function restoreCanvasNotes(
+  webContents: Electron.WebContents,
+  notes: readonly DesignNotes[number][]
+) {
+  return webContents.executeJavaScript('window.molly.restoreNotes(' + JSON.stringify(notes) + ')')
 }
 export async function leaveDesign(id: string, hostId?: string): Promise<boolean> {
   // An attach that is still loading already owns a record whose webContents

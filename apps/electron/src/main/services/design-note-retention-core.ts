@@ -1,29 +1,44 @@
-/**
- * Unsent canvas notes parked in main memory while a canvas frame is replaced.
- *
- * A reload destroys the page that holds the pins, so the shell reads them first and
- * retains them here per host. Only a successful read replaces the snapshot: `null`
- * (the canvas could not be read) keeps the last good one, and an empty array clears it
- * (the user cleared the notes or an accepted send consumed them). The next frame
- * releases the snapshot once it has restored the notes. Nothing is written to disk;
- * `forget` runs when the artwork's canvas is torn down for good.
- */
-export function createRetainedNotes<T>() {
-  const notes = new Map<string, readonly T[]>()
+export function createRetainedNotes<T>({ max }: { max: number }) {
+  const copies = new Map<string, readonly T[]>()
+  const flights = new Map<string, { epoch: number; notes: readonly T[] }>()
+  const merge = (...lists: (readonly T[])[]) => {
+    const seen = new Set<string>()
+    const merged: T[] = []
+    for (const note of lists.flat()) {
+      const key = JSON.stringify(note)
+      if (seen.has(key)) continue
+      seen.add(key)
+      merged.push(note)
+    }
+    return merged.slice(0, max)
+  }
   return {
-    retain(hostId: string, value: readonly T[] | null) {
-      if (value === null) return
-      if (value.length) notes.set(hostId, value)
-      else notes.delete(hostId)
+    publish(scope: string, notes: readonly T[]) {
+      if (notes.length) copies.set(scope, notes)
+      else copies.delete(scope)
     },
-    peek(hostId: string): readonly T[] {
-      return notes.get(hostId) ?? []
+    peek(scope: string): readonly T[] {
+      return copies.get(scope) ?? []
     },
-    release(hostId: string) {
-      notes.delete(hostId)
+    accept(scope: string, epoch: number) {
+      flights.set(scope, { epoch, notes: copies.get(scope) ?? [] })
+      copies.delete(scope)
     },
-    forget(hostId: string) {
-      notes.delete(hostId)
+    settle(scope: string, epoch: number, sent: boolean): readonly T[] {
+      const flight = flights.get(scope)
+      if (!flight || flight.epoch !== epoch) return []
+      flights.delete(scope)
+      if (sent) return []
+      const merged = merge(flight.notes, copies.get(scope) ?? [])
+      if (merged.length) copies.set(scope, merged)
+      return flight.notes
+    },
+    async restoreInto(scope: string, restore: (notes: readonly T[]) => Promise<unknown>) {
+      const notes = copies.get(scope)
+      if (!notes?.length) return
+      try {
+        await restore(notes)
+      } catch {}
     }
   }
 }

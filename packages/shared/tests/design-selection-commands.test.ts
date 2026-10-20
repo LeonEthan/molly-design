@@ -466,3 +466,31 @@ describe('element change feedback', () => {
       expect(() => decodeDesignMarkedImage(input, 'photo')).toThrow();
   });
 });
+
+describe('canvas notes sync', () => {
+  const note = { elementIds: ['title'], prompt: 'Warmer' };
+
+  it('accepts a canvas state with no notes so a cleared canvas can publish it', () => {
+    expect(DesignToolbarRequestSchema.safeParse({ type: 'notes-sync', notes: [] }).success).toBe(
+      true
+    );
+  });
+
+  it('accepts a canvas state that holds notes', () => {
+    expect(
+      DesignToolbarRequestSchema.safeParse({ type: 'notes-sync', notes: [note] }).success
+    ).toBe(true);
+  });
+
+  it('rejects an invalid canvas state so the last good copy stays', () => {
+    const invalid = [
+      { type: 'notes-sync', notes: [{ elementIds: [], prompt: 'Warmer' }] },
+      { type: 'notes-sync', notes: [{ ...note, prompt: '   ' }] },
+      { type: 'notes-sync', notes: 'Warmer' },
+      { type: 'notes-sync', notes: [note], notesEpoch: 1 },
+      { type: 'notes-sync', notes: Array.from({ length: DESIGN_NOTES_MAX + 1 }, () => note) },
+    ];
+    for (const input of invalid)
+      expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
+  });
+});

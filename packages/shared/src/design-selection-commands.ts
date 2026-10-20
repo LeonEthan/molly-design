@@ -8,6 +8,7 @@ import { z } from 'zod';
  */
 
 export const DESIGN_SELECTION_BODY_LIMIT = 8192;
+export const DESIGN_NOTES_SYNC_BODY_LIMIT = 256 * 1024;
 export const DESIGN_SELECTION_SUMMARY_ELEMENTS_MAX = 8;
 
 export const DESIGN_ELEMENT_KINDS = [
@@ -273,6 +274,7 @@ export const DesignNotesSchema = z
       });
   });
 export type DesignNotes = z.infer<typeof DesignNotesSchema>;
+export const DesignNotesStateSchema = z.union([z.array(DesignNoteSchema).length(0), DesignNotesSchema]);
 /** Native toolbar requests carry a selection epoch, never an editable target. */
 export const DesignSelectionActionSchema = z.enum([
   'reference',
@@ -316,6 +318,12 @@ export const DesignToolbarRequestSchema = z.discriminatedUnion('type', [
     .object({
       type: z.literal('notes'),
       notesEpoch: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('notes-sync'),
+      notes: DesignNotesStateSchema,
     })
     .strict(),
 ]).superRefine((request, ctx) => {

@@ -54,6 +54,7 @@ type Drag =
 const EDITOR_LINE_CAP = 4;
 const COPY_MAX_EDGE = 1600;
 const MOVE_SLOP = 3;
+export const NOTE_PUBLISH_DEBOUNCE_MS = 250;
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 const moved = (origin: { x: number; y: number }, event: { clientX: number; clientY: number }) =>
@@ -68,16 +69,25 @@ const moved = (origin: { x: number; y: number }, event: { clientX: number; clien
  */
 export function createNotePins(options: {
   request(input: DesignToolbarRequest): Promise<{ ok: boolean; error?: string }>;
+  publish?(notes: DesignNote[]): Promise<unknown>;
   selectedIds(): readonly string[];
   elements(): readonly { id: string; kind: string }[];
   highlight?: { show(groups: readonly HighlightGroup[]): void };
   onTool?(tool: NoteTool): void;
+  clock?: { setTimeout(run: () => void, ms: number): unknown; clearTimeout(handle: unknown): void };
 }) {
   let pins: Pin[] = [];
   let epoch = 0;
   let readonly = true;
   let presentation: DesignToolbarPresentation | undefined;
   let busy = false;
+  let publishTimer: unknown;
+  let unpublished = false;
+  let inFlight: Promise<void> | undefined;
+  const clock = options.clock ?? {
+    setTimeout: (run: () => void, ms: number) => window.setTimeout(run, ms),
+    clearTimeout: (handle: unknown) => window.clearTimeout(handle as number),
+  };
   let message = '';
   let editing: { pin: Pin; node: HTMLElement } | undefined;
   let hovered = false;
@@ -136,7 +146,33 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     epoch++;
     message = '';
     render();
+    schedulePublish();
   };
+  const schedulePublish = () => {
+    if (!options.publish) return;
+    unpublished = true;
+    clock.clearTimeout(publishTimer);
+    publishTimer = clock.setTimeout(() => void flush(false), NOTE_PUBLISH_DEBOUNCE_MS);
+  };
+  async function flush(force: boolean) {
+    clock.clearTimeout(publishTimer);
+    publishTimer = undefined;
+    for (let pending = inFlight; pending; pending = inFlight) await pending;
+    const publish = options.publish;
+    if (!publish || !unpublished || (busy && !force)) return;
+    unpublished = false;
+    const notes = snapshot();
+    const sending = (async () => publish(notes))().then(
+      () => undefined,
+      () => {
+        unpublished = true;
+      }
+    );
+    inFlight = sending;
+    await sending;
+    if (inFlight === sending) inFlight = undefined;
+  }
+  const snapshot = (): DesignNote[] => sentNotes().map(toNote);
   const full = () => {
     message = label('notesFull', 'Send or clear notes before adding more than {{count}}', DESIGN_NOTES_MAX);
     render();
@@ -172,6 +208,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     }
     pins = pins.filter((pin) => pin.elementIds.length);
     epoch++;
+    schedulePublish();
     return true;
   };
   const sameTargets = (a: Pin, b: Pin) =>
@@ -341,6 +378,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     render();
     let failure = '';
     try {
+      await flush(true);
       const result = await options.request({ type: 'notes', notesEpoch: epoch });
       if (!result.ok) failure = result.error ?? 'Canvas request failed';
     } catch (cause) {
@@ -642,17 +680,20 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
       }
       return { elementId, mimeType, data: url.slice(url.indexOf(',') + 1) };
     },
-    snapshot(): DesignNote[] {
-      return sentNotes().map(toNote);
-    },
+    snapshot,
     restore(notes: readonly DesignNote[]) {
-      if (pins.length || !notes.length) return;
-      pins = notes.slice(0, DESIGN_NOTES_MAX).map((note) => ({
+      const held = new Set(pins.map((pin) => JSON.stringify(toNote(pin))));
+      const incoming: Pin[] = notes.map((note) => ({
         elementIds: [...new Set(note.elementIds)],
         text: note.prompt,
         ...(note.pin ? { pin: note.pin } : {}),
         ...(note.region ? { region: note.region } : {}),
       }));
+      const fresh = incoming
+        .filter((pin) => !held.has(JSON.stringify(toNote(pin))))
+        .slice(0, DESIGN_NOTES_MAX - pins.length);
+      if (!fresh.length) return;
+      pins = [...pins, ...fresh];
       prune();
       changed();
     },
@@ -660,6 +701,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
       busy = false;
       if (!sent || expected !== epoch) {
         render();
+        schedulePublish();
         return false;
       }
       closeEditor(false);
@@ -686,6 +728,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
       render();
     },
     dispose() {
+      void flush(false);
       controller.abort();
       cancelAnimationFrame(frame);
       clearHover();

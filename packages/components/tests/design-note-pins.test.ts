@@ -6,7 +6,7 @@ import {
   type DesignToolbarRequest,
 } from '@molly/shared/design-selection-commands';
 import type { HighlightGroup } from '../../design-bento/src/element-highlight';
-import { createNotePins } from '../../design-bento/src/note-pins';
+import { createNotePins, NOTE_PUBLISH_DEBOUNCE_MS } from '../../design-bento/src/note-pins';
 
 vi.mock('../../design-bento/src/image-regions', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../design-bento/src/image-regions')>();
@@ -27,6 +27,8 @@ vi.mock('../../design-bento/src/image-regions', async (importOriginal) => {
 
 let pins: ReturnType<typeof createNotePins>;
 let requests: DesignToolbarRequest[];
+let published: { elementIds: string[]; prompt: string }[][];
+let events: string[];
 let highlights: HighlightGroup[][];
 let selected: string[];
 let present: string[];
@@ -104,12 +106,20 @@ beforeEach(() => {
       value: () => ({ left: 100, top: 200, right: 500, bottom: 400, width: 400, height: 200 }),
     });
   requests = [];
+  published = [];
+  events = [];
   highlights = [];
   selected = [];
   present = ['title', 'photo', 'poster'];
   pins = createNotePins({
     request: async (input) => {
       requests.push(input);
+      events.push(input.type);
+      return { ok: true };
+    },
+    publish: async (notes) => {
+      published.push(notes);
+      events.push('publish');
       return { ok: true };
     },
     selectedIds: () => selected,
@@ -605,4 +615,108 @@ it('restores a stroke note from its snapshot into a fresh canvas', () => {
   expect(fresh.read().notes).toEqual(notes);
   expect(regionShading()).toHaveLength(1);
   fresh.dispose();
+});
+
+async function flushMicrotasks() {
+  for (let turn = 0; turn < 5; turn++) await Promise.resolve();
+}
+
+it('publishes the notes once edits settle, not on every change', () => {
+  pins.add(['title'], 'Warmer');
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS - 1);
+  expect(published).toEqual([]);
+  pins.add(['photo'], 'Crop tighter');
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS - 1);
+  expect(published).toEqual([]);
+  vi.advanceTimersByTime(1);
+  expect(published).toEqual([
+    [
+      { elementIds: ['title'], prompt: 'Warmer' },
+      { elementIds: ['photo'], prompt: 'Crop tighter' },
+    ],
+  ]);
+});
+
+it('publishes an empty state when Clear removes every note', async () => {
+  pins.add(['title'], 'Warmer');
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  await flushMicrotasks();
+  button('Clear all notes').click();
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  expect(published.at(-1)).toEqual([]);
+});
+
+it('publishes pending notes at once when the canvas is disposed', () => {
+  pins.add(['title'], 'Warmer');
+  pins.dispose();
+  expect(published).toEqual([[{ elementIds: ['title'], prompt: 'Warmer' }]]);
+});
+
+it('does not publish on dispose when nothing changed since the canvas loaded', () => {
+  pins.dispose();
+  expect(published).toEqual([]);
+});
+
+it('sends the latest state before the send request, so the copy matches what is sent', async () => {
+  pins.add(['title'], 'Warmer');
+  button('Send').click();
+  await flushMicrotasks();
+  expect(events).toEqual(['publish', 'notes']);
+  expect(published).toEqual([[{ elementIds: ['title'], prompt: 'Warmer' }]]);
+});
+
+it('does not publish while notes are in flight, so a reload cannot put sent notes back', async () => {
+  pins.add(['title'], 'Warmer');
+  button('Send').click();
+  await flushMicrotasks();
+  const before = published.length;
+  pins.dispose();
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS * 2);
+  expect(published).toHaveLength(before);
+});
+
+it('publishes the kept notes after a rejected send so the copy follows the canvas', async () => {
+  pins.add(['title'], 'Warmer');
+  button('Send').click();
+  await flushMicrotasks();
+  pins.settle(pins.read().epoch, false);
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  expect(published.at(-1)).toEqual([{ elementIds: ['title'], prompt: 'Warmer' }]);
+});
+
+it('publishes an empty state after an accepted send settles', async () => {
+  pins.add(['title'], 'Warmer');
+  button('Send').click();
+  await flushMicrotasks();
+  pins.settle(pins.read().epoch, true);
+  await flushMicrotasks();
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  expect(published.at(-1)).toEqual([]);
+});
+
+it('restore adds only the notes the canvas does not already hold', () => {
+  pins.add(['title'], 'Warmer');
+  pins.restore([
+    { elementIds: ['title'], prompt: 'Warmer' },
+    { elementIds: ['photo'], prompt: 'Crop tighter' },
+  ]);
+  expect(pins.read().notes).toEqual([
+    { elementIds: ['title'], prompt: 'Warmer' },
+    { elementIds: ['photo'], prompt: 'Crop tighter' },
+  ]);
+});
+
+it('a restore that adds nothing does not publish', () => {
+  pins.add(['title'], 'Warmer');
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  published = [];
+  pins.restore([{ elementIds: ['title'], prompt: 'Warmer' }]);
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  expect(published).toEqual([]);
+});
+
+it('a restored canvas publishes what it restored', () => {
+  pins.restore([{ elementIds: ['title'], prompt: 'Warmer' }]);
+  vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
+  expect(published.at(-1)).toEqual([{ elementIds: ['title'], prompt: 'Warmer' }]);
 });

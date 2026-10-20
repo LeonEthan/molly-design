@@ -1035,6 +1035,8 @@ function installCloseGuard(owner: BrowserWindow) {
     void (async () => {
       for (const [key, record] of records)
         if (record.owner === owner && !(await leaveDesign(record.artworkId, key))) return
+      const owned = [...records].filter(([, record]) => record.owner === owner)
+      await Promise.all(owned.map(([key]) => retireDesignInstance(key)))
       allowed = true
       owner.close()
     })()

@@ -318,3 +318,15 @@ void test('closing a canvas asks it to publish unsent notes before disposal', as
   assert.equal(flush?.retired, false)
   assert.equal(lease.disposed, true)
 })
+
+void test('closing the window asks its canvases to publish unsent notes before disposal', async () => {
+  const f = await openedCanvas()
+  const lease = f.leases.at(-1)
+  const closed = Promise.withResolvers()
+  f.owner.close = closed.resolve
+  f.owner.emit('close', { preventDefault() {} })
+  await closed.promise
+  const flush = f.scripts.find((entry) => entry.script.includes('flushNotes'))
+  assert.equal(flush?.retired, false)
+  assert.equal(lease.disposed, true)
+})

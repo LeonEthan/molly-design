@@ -702,6 +702,12 @@ describe('ImageConnectionForm', () => {
       await click(button(switched, copy('settings.imageConnection.protocols.openaiImages')));
       await settle();
       expect(requests).toHaveLength(1);
+      expect(
+        button(switched, copy('settings.models.moreOptions')).getAttribute('aria-expanded')
+      ).toBe('true');
+      expect(switched.querySelector<HTMLInputElement>('input[id$="-base-url"]')?.value).toBe(
+        'https://dashscope.aliyuncs.com/api/v1'
+      );
       expect(switched.textContent).toContain(copy('settings.models.keyRequired'));
       expect(button(switched, copy('common.save')).disabled).toBe(true);
       await typeInto(apiKeyInput(switched), 'synthetic-typed-key');
@@ -845,6 +851,34 @@ describe('ImageConnectionForm', () => {
       expect(requests).toEqual([]);
       expect(view.querySelector('[role="alert"]')?.textContent).toBe(
         copy('settings.imageConnection.check.enterBaseUrl')
+      );
+    });
+
+    it.each([
+      [
+        { ok: false, reason: 'rate_limited', status: 429 } as const,
+        'settings.check.failures.rate_limited' as const,
+        '429',
+      ],
+      [
+        { ok: false, reason: 'http_error', status: 500 } as const,
+        'settings.check.failures.http_error' as const,
+        '500',
+      ],
+      [
+        { ok: false, reason: 'invalid_response' } as const,
+        'settings.check.failures.invalid_response' as const,
+        '',
+      ],
+    ])('keeps the shared failure line for %j', async (result, key, status) => {
+      const view = await renderForm({
+        stored: storedConnection(),
+        onCheck: async () => result,
+      });
+      await settle();
+      const host = 'api.openai.com';
+      expect(view.querySelector('[role="alert"]')?.textContent).toBe(
+        copy(key).replaceAll('{{status}}', status).replaceAll('{{host}}', host)
       );
     });
 

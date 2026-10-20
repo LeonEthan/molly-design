@@ -406,8 +406,10 @@ export function ImageConnectionForm({
               label: t(PROTOCOL_COPY[protocol].label),
             }))}
             onChange={(protocol) => {
+              const next = applyImageProtocolChoice(draft, protocol);
               setAddressWhenKeyTyped(null);
-              setDraft((current) => applyImageProtocolChoice(current, protocol));
+              setDraft(next);
+              if (!isProtocolDefaultBaseUrl(next.protocol, next.baseUrl)) setAdvancedOpen(true);
             }}
           />
         </Field>

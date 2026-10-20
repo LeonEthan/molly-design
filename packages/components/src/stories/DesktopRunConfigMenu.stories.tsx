@@ -26,7 +26,7 @@ import type { AcpSessionSelectOption } from '@/components/shared/acp-session-sel
 
 /**
  * The desktop composer's two consolidated footer buttons: the run-config
- * dropdown (Provider / Model / Reasoning value rows, each opening a submenu)
+ * dropdown (Agent / Reasoning / Model value rows, each opening a submenu)
  * and the standalone permission-mode button — both on
  * the standard DropdownMenu surface (distinct background + layered float
  * shadow). The full in-context page is `SessionConversationPage.stories`

@@ -97,6 +97,7 @@ export function createElementHighlight() {
       for (const group of groups) {
         for (const id of new Set(group.elementIds)) {
           const key = `${group.tone}:${id}`;
+          if (boxes.has(key)) continue;
           const node = document.createElement('div');
           node.className = 'molly-highlight';
           node.dataset.tone = group.tone;
@@ -106,6 +107,7 @@ export function createElementHighlight() {
         }
         if (group.badge !== undefined && group.elementIds.length) {
           const key = `${group.tone}:badge:${group.badge}`;
+          remove(key);
           const node = document.createElement('div');
           node.className = 'molly-highlight-badge';
           node.textContent = group.tone === 'changed' ? '✓' : String(group.badge);

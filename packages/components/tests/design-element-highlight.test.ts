@@ -98,6 +98,18 @@ it('draws a numbered badge at the group union and replaces it with the tone', ()
   expect(document.querySelectorAll('.molly-highlight-badge')).toHaveLength(0);
 });
 
+it('draws one removable outline per element when note groups overlap', () => {
+  highlight.show([
+    { tone: 'working', elementIds: ['title', 'leaf'], badge: 1 },
+    { tone: 'working', elementIds: ['title'], badge: 2 },
+  ]);
+  expect(boxes('working')).toHaveLength(2);
+  expect(document.querySelectorAll('.molly-highlight-badge')).toHaveLength(2);
+  highlight.show([{ tone: 'working', elementIds: [] }]);
+  expect(boxes()).toHaveLength(0);
+  expect(document.querySelectorAll('.molly-highlight-badge')).toHaveLength(0);
+});
+
 it('keeps hover outlines independent of the IPC tones', () => {
   highlight.show([{ tone: 'hover', elementIds: ['title'] }]);
   highlight.show([{ tone: 'working', elementIds: ['leaf'] }]);

@@ -46,9 +46,8 @@ EN
 ### EN
 
 ```text
-AI design for graphic designers. Every layer stays editable.
-
-Get a layered file back. Retype and swap images in the same file.
+AI design for graphic designers.
+Every layer stays editable.
 
 Stillwater Clay
 Everyday objects / 01
@@ -74,8 +73,6 @@ Regenerate
 ```text
 给平面设计师的 AI 设计工具。
 每一层都能接着改。
-
-拿回一份分层设计稿，改字换图都在同一份里。
 
 Stillwater Clay
 日常器物 / 01
@@ -404,30 +401,6 @@ A brew guide for a fictional coffee roaster, 1080 × 2400, in five modules you c
 虚构陶器品牌的手冲壶，1080 × 2400。标题、卖点和规格表都是文字图层。
 长图
 虚构咖啡品牌的冲煮指南，1080 × 2400。分成五个模块，每块都能单独改。
-```
-
-## releases
-
-### EN
-
-```text
-Recent updates
-All releases →
-v0.1.1
-2026-10-17
-v0.1.0
-2026-10-15
-```
-
-### 中文
-
-```text
-最近更新
-全部版本 →
-v0.1.1
-2026-10-17
-v0.1.0
-2026-10-15
 ```
 
 ## models

@@ -58,14 +58,17 @@ html[data-theme=light] .theme [data-theme-set=light],html[data-theme=dark] .them
 .menu svg{width:18px;height:18px;stroke:var(--ink);fill:none;stroke-width:2}
 
 .hero{padding:72px 0 32px;text-align:center;background:radial-gradient(60% 50% at 50% 78%,var(--tint),transparent 70%)}
-.hero h1{font-size:76px;line-height:1.02;margin:0}
+.hero-in{container-type:inline-size}
+.hero h1{font-size:76px;font-size:min(76px,calc((100cqi - 8px) / 10.18));line-height:1.02;margin:0}
+html[data-lang=zh] .hero h1{font-size:76px;font-size:min(76px,calc((100cqi - 8px) / 14.2))}
+.hero-line{display:block;white-space:nowrap}
 .hero h1 em{font-style:italic;background:linear-gradient(transparent 64%,rgba(194,220,114,.7) 64%,rgba(194,220,114,.7) 90%,transparent 90%);padding:0 .08em}
 [data-theme=dark] .hero h1 em{background:none;color:var(--lime)}
-.hero-sub{max-width:620px;margin:18px auto 0;color:var(--muted);font-size:18px}
 
-.stage{position:relative;margin:36px auto 0;max-width:1000px;min-height:560px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:radial-gradient(55% 60% at 50% 55%,var(--tint),var(--surface) 75%)}
+.stage{position:relative;margin:36px auto 0;width:100%;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:radial-gradient(55% 60% at 50% 55%,var(--tint),var(--surface) 75%)}
 [data-theme=dark] .stage .hs-board{filter:brightness(.92)}
-.hs{position:absolute;left:50%;top:22px;width:420px;margin-left:-210px;aspect-ratio:500/540;--k:.84;--u:1;--hs-box:#5a7414;--hs-handle:#c2dc72;--hs-ink:#1a220a}
+.hs{position:relative;width:100%;aspect-ratio:500/600;--k:calc(100cqi / 500);--u:clamp(.85,calc(500 / 100cqi),1.4);--hs-box:#5a7414;--hs-handle:#c2dc72;--hs-ink:#1a220a}
+@container (min-width:588px){.hs{aspect-ratio:500/588}}
 .hs-fit{position:absolute;left:0;top:0;width:560px;height:600px;transform:scale(var(--k)) translate(-30px,-30px);transform-origin:0 0}
 .hs-scene{position:absolute;inset:0}
 .hs-board{position:absolute;left:30px;top:30px;width:500px;height:540px;border-radius:12px;overflow:hidden;background:#e9dccb;box-shadow:0 0 0 1px var(--line)}
@@ -105,7 +108,6 @@ html[data-lang=zh] .hs-head{font-size:29px;line-height:1.2;letter-spacing:-.03em
 .fh{display:flex;justify-content:space-between;align-items:flex-end;gap:40px;margin-bottom:32px}
 .fh h2{font-size:48px;line-height:1.05;margin:0}
 .fh>p{color:var(--muted);max-width:440px;margin:0}
-.fh-rel{align-items:center}
 .shot{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface);max-width:100%}
 .shot img,.shot video{width:100%;max-width:100%;display:block;height:auto}
 .wfbody,.wf-panel{min-width:0;max-width:100%}
@@ -166,12 +168,6 @@ html{overflow-x:clip}
 .wt figcaption{padding:12px 4px 0;font-size:15px;color:var(--muted)}
 .wt figcaption b{display:block;color:var(--ink);font-weight:600;font-size:17px;margin-bottom:4px}
 .wt .shot img{width:100%;height:auto}
-
-.rel{border-top:1px solid var(--line)}
-.rel-row{display:grid;grid-template-columns:1fr auto;align-items:center;padding:20px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}
-.rel-row b{font-weight:600;color:var(--ink)}
-.rel-row .mono{color:var(--muted)}
-.rel-row b s{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--lime);margin-right:10px;vertical-align:1px;box-shadow:0 0 0 3px var(--tint);text-decoration:none}
 
 .card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:24px}
 .card p{margin:8px 0 0;color:var(--muted);font-size:15px}
@@ -241,10 +237,6 @@ html{overflow-x:clip}
   .top.open .sp{display:none}
   .nav-dl{padding:7px 12px;font-size:13px}
   .hero{padding:40px 0 20px}
-  .hero h1{font-size:46px}
-  .hero-sub{font-size:16px;padding:0 12px}
-  .stage{min-height:auto;padding:16px 0 64px}
-  .hs{position:relative;left:auto;top:auto;margin:0 auto;width:300px;--k:.6}
   .band{margin-top:56px}
   .band.lime .strip>div{padding:28px 16px}
   .strip{grid-template-columns:1fr}
@@ -258,7 +250,6 @@ html{overflow-x:clip}
   .wf-panel.on{grid-template-columns:1fr;gap:16px}
   .wf-panel .wf-shot{grid-column:auto;grid-row:auto}
   .local,.wall,.wall-sq,.grid3,.mi{grid-template-columns:1fr}
-  .rel-row{grid-template-columns:1fr;gap:4px}
   .close h2{font-size:38px}
   .ft{flex-wrap:wrap;gap:32px}
   .cta-row{flex-direction:column;align-items:stretch}

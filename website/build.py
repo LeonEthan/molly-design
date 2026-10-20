@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Builds the Molly Design website into dist/ (Cloudflare Pages deploy folder)."""
 import hashlib, json, pathlib, re, shutil, sys, urllib.request
-from datetime import datetime
 
 ROOT = pathlib.Path(__file__).resolve().parent
 SRC = ROOT / 'assets'
@@ -21,7 +20,6 @@ GITHUB_LABEL = '[[在 GitHub 上查看 Molly Design||Molly Design on GitHub]]'
 CTA = '[[下载 macOS 版||Download for macOS]]'
 CTA_GH = '[[在 GitHub 看源码||View source on GitHub]]'
 WF_KEYS = ('brief', 'research', 'options', 'layers', 'edit', 'export')
-FALLBACK_RELEASES = [('v0.1.1', '2026-10-17'), ('v0.1.0', '2026-10-15')]
 TITLE_EN = 'Molly Design · AI design for graphic designers, in layers you can edit'
 TITLE_ZH = 'Molly Design · 给平面设计师的 AI 设计工具，分层设计稿可以接着改'
 DESC_EN = (
@@ -83,13 +81,6 @@ def S(name):
     return '[[%s||%s]]' % (v[0], v[1])
 
 
-def release_label(tag):
-    tag = str(tag)
-    if re.fullmatch(r'v?\d+(?:\.\d+)*', tag):
-        return tag if tag.startswith('v') else 'v' + tag
-    return tag
-
-
 def stable_releases(rows):
     """Published releases only. Drafts and prereleases are not site content."""
     stable = []
@@ -112,13 +103,12 @@ def dmg_asset(row):
 
 
 def fetch_github():
-    """Stable release rows plus the newest app DMG. Falls back offline.
+    """Newest stable app DMG. Falls back offline.
 
-    Scans the recent release list, not only the newest entry, so a draft,
+    Scans the release list, not only the newest entry, so a draft,
     prerelease, or non-app release does not hide the current installer.
     """
     global DMG, CFG
-    releases = list(FALLBACK_RELEASES)
     dmg = DMG_FALLBACK
     try:
         req = urllib.request.Request(
@@ -127,15 +117,7 @@ def fetch_github():
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
-        stable = stable_releases(data)
-        rows = []
-        for row in stable:
-            rows.append((release_label(row['tag_name']), row['published_at'][:10]))
-            if len(rows) == 3:
-                break
-        if rows:
-            releases = rows
-        for row in stable:
+        for row in stable_releases(data):
             found = dmg_asset(row)
             if found:
                 dmg = found
@@ -144,13 +126,15 @@ def fetch_github():
         pass
     DMG = dmg
     CFG = json.loads((HERE / 'slots.json').read_text().replace('@@DMG@@', DMG))
-    return releases
 
 
 def hero_h1():
+    def lines(text):
+        parts = [part.strip() for part in re.split(r'<br\s*/?>', text) if part.strip()]
+        return ''.join('<span class="hero-line">%s</span>' % part for part in parts)
+
     zh, en = CFG['text']['h1']
-    zh = zh.replace('接着改。', '<span class="nobr">接着改。</span>')
-    return '[[%s||%s]]' % (zh, en)
+    return '[[%s||%s]]' % (lines(zh), lines(en))
 
 
 def trust_line():
@@ -351,14 +335,9 @@ def head():
 '''
 
 
-def body(releases):
+def body():
     demo = CFG['demo'][0]
     bullets = ''.join('<li>%s</li>' % S('p1_b%d' % i) for i in (1, 2, 3))
-    rel_rows = ''.join(
-        '<a class="rel-row" href="%s/tag/%s"><b><s></s>%s</b><span class="mono">%s</span></a>'
-        % (RELEASES, tag, tag, date)
-        for tag, date in releases
-    )
 
     def wall_tile(w, cls=''):
         return (
@@ -422,7 +401,7 @@ def body(releases):
       <a href="#demo">[[演示||Demo]]</a>
       <a href="#workflow">[[工作流程||Workflow]]</a>
       <a href="#work">[[作品||Work]]</a>
-      <a href="#releases">[[更新||Releases]]</a>
+      <a href="{RELEASES}">[[更新||Releases]]</a>
       <a href="#faq">[[常见问题||FAQ]]</a>
     </nav>
     <span class="sp"></span>
@@ -447,7 +426,6 @@ def body(releases):
 <header class="hero">
   <div class="wrap hero-in">
     <h1 class="serif">{hero_h1()}</h1>
-    <p class="hero-sub">[[拿回一份分层设计稿，改字换图都在同一份里。||Get a layered file back. Retype and swap images in the same file.]]</p>
     {hero_stage()}
   </div>
 </header>
@@ -509,13 +487,6 @@ def body(releases):
   </div>
 </section>
 
-<section class="feat" id="releases" aria-labelledby="rel-h">
-  <div class="wrap">
-    <div class="fh fh-rel"><div><h2 class="serif" id="rel-h">[[最近更新||Recent updates]]</h2></div><a class="more" href="{RELEASES}">[[全部版本 →||All releases →]]</a></div>
-    <div class="rel">{rel_rows}</div>
-  </div>
-</section>
-
 <section class="feat" id="models" aria-labelledby="m-h">
   <div class="wrap">
     <div class="fh"><div><h2 class="serif" id="m-h">[[用你自己的模型||Bring your own models]]</h2></div><p>{S('m_lead')}</p></div>
@@ -551,7 +522,7 @@ def body(releases):
     <div class="wrap ft">
       <div><img src="@@A:brand/molly-wordmark.svg@@" width="79" height="26" alt="Molly Design" loading="lazy"><p class="ft-copy">© 2026 Molly Design</p></div>
       <div><p class="ft-h">[[产品||Product]]</p><a href="#demo">[[图层||Layers]]</a><a href="#directions">[[方向||Directions]]</a><a href="#export">[[导出||Export]]</a></div>
-      <div><p class="ft-h">[[资源||Resources]]</p><a href="#releases">[[更新||Releases]]</a><a href="#faq">[[常见问题||FAQ]]</a></div>
+      <div><p class="ft-h">[[资源||Resources]]</p><a href="{RELEASES}">[[更新||Releases]]</a><a href="#faq">[[常见问题||FAQ]]</a></div>
       <div><p class="ft-h">[[社区||Community]]</p><a class="footer-github" href="{GH}" target="_blank" rel="noopener noreferrer">{GITHUB_MARK}<span>GitHub</span></a></div>
     </div>
   </footer>
@@ -566,8 +537,8 @@ def body(releases):
 
 
 def build():
-    releases = fetch_github()
-    html = pairs(head() + body(releases))
+    fetch_github()
+    html = pairs(head() + body())
     if re.search(r'ph-tag|ph-block|placeholder|占位', html, re.I):
         sys.exit('placeholder markup left in page')
     used = sorted(set(re.findall(r'@@A:([^@]+)@@', html)))

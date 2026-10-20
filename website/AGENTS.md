@@ -16,9 +16,9 @@
   and a regenerated `docs/COPY.md`.
 - Follow the claims rules in NOTES: never call the DMG signed; no visible
   frame captions or hero eyebrow labels (#175). Version numbers stay out of
-  visible text except the Recent updates block, which lists GitHub release
-  tags and dates. That exception does not apply to any other section.
-- Nav, closing, and `404.html` link to `DOWNLOAD` (`…/releases/latest`). FAQ
+  visible text.
+- The download button, closing, and `404.html` link to `DOWNLOAD`
+  (`…/releases/latest`). Nav and footer Releases link to the releases index. FAQ
   `@@DMG@@` links use the newest stable GitHub release that has a `.dmg`
   (drafts and prereleases skipped; later releases are scanned), falling back
   to the pinned v0.1.1 URL when the API is unavailable. The HTML sha depends

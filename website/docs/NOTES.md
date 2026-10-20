@@ -5,7 +5,7 @@ Trimmed from the v7 working notes (rounds v7 → v7i, 2026-10-17). This file kee
 ## Status
 
 - Live at `https://molly-design.pages.dev` (Cloudflare Pages project `molly-design`), deployed manually.
-- #175 changed the page, and `build.py` reads GitHub Releases while it builds. `dist/index.html` therefore depends on network access, and its sha256 can differ between builds. Offline, the build uses `DMG_FALLBACK` and `FALLBACK_RELEASES`.
+- #175 changed the page, and `build.py` reads GitHub Releases while it builds so the FAQ can link to the newest DMG. `dist/index.html` therefore depends on network access, and its sha256 can differ between builds. Offline, the build uses `DMG_FALLBACK`.
 - Bringing the source into the repository was a migration only: no design, copy or animation change. The redesign after that migration is #175.
 
 ## Build pipeline
@@ -15,12 +15,12 @@ Trimmed from the v7 working notes (rounds v7 → v7i, 2026-10-17). This file kee
 - WebP derivatives carry `srcset`/`sizes` and explicit width/height. AVIF was not added: every browser that can run the macOS download (Safari 14+) supports WebP, and Lighthouse reports no image-format opportunity.
 - Video: H.264 MP4, faststart, no audio, poster frame, `preload="none"`.
 - Fonts on the page are self-hosted Inter (variable, latin), Instrument Serif (regular and italic, latin), and JetBrains Mono. Chinese text uses system fonts. Geist remains in `assets/fonts/` but the page does not request it.
-- Build guards (`sys.exit`): placeholder markup (`ph-tag`, `ph-block`, `placeholder`, `占位`), a missing asset, or 404 referencing an unshipped asset. `releases/latest` is a real nav, closing, and 404 link. Release tag links are real Recent updates rows.
+- Build guards (`sys.exit`): placeholder markup (`ph-tag`, `ph-block`, `placeholder`, `占位`), a missing asset, or 404 referencing an unshipped asset. `releases/latest` is a real closing and 404 link. Nav and footer "Releases" go to the GitHub releases index.
 
 ## Claims and honesty rules
 
 - Facts: Apple Silicon (arm64) only, macOS 13 Ventura or later. The app is Developer ID signed and notarized; the DMG itself is never called signed.
-- No version numbers in visible text except the Recent updates block (#175), which shows GitHub release tags and dates. That exception is only that block. No plugins, roadmap, stats, testimonials or customer logos.
+- No version numbers in visible text (#175, #184). No plugins, roadmap, stats, testimonials or customer logos.
 - "Real capture" wording is scoped to sections that show real app captures (the recorded edit, the export menu, workflow and explores screenshots, the sample wall of real exports).
 - The hero is a crafted animation and always shows the visible `[ Illustration ]` / `[ 示意动画 ]` label. Its bilingual aria-label says the cutouts and repaired background are crafted and that the sage-green mug is generated.
 - Sample-wall brands are made up and the captions say so: Stillwater Clay, Ember Current, Tideform, Juniper Wharf, Moss & Ember.
@@ -29,7 +29,7 @@ Trimmed from the v7 working notes (rounds v7 → v7i, 2026-10-17). This file kee
 
 ## Downloads
 
-- Nav, closing, and `404.html` link to `DOWNLOAD` (`…/releases/latest`). JSON-LD `downloadUrl` uses the same URL. The hero has no download button.
+- The download button, closing, and `404.html` link to `DOWNLOAD` (`…/releases/latest`). Nav and footer Releases link to the GitHub releases index. JSON-LD `downloadUrl` uses `DOWNLOAD`. The hero has no download button.
 - FAQ install and update answers (`@@DMG@@` in `slots.json`) use the `.dmg` `fetch_github()` selects: the newest stable release that actually has one. Drafts and prereleases are skipped, and a newer release without a DMG does not stop the scan. `DMG_FALLBACK` (the v0.1.1 asset) is used only when the API is unavailable.
 - GitHub serves a release asset with `Content-Disposition: attachment`. `releases/latest` is an HTML page, so those buttons are not direct file downloads.
 - A normal app release needs no edit to `build.py`. See README, "Release".
@@ -58,6 +58,8 @@ Every shipped image and video was checked by eye. Raw masters (app captures and 
 ## Hero animation
 
 - One Stillwater Clay photographic scene with a fixed editorial headline, spec table and caption, drawn by a fixed-size canvas compositor. The editorial text and UI stay HTML.
+- The stage is the hero content width. The poster scales to that width, and the stage height follows the poster plus the Regenerate pill, so the frame does not leave a blank field around the demo (#184). Animation content and timing are unchanged.
+- The hero headline is one sentence per line in both languages. The second sentence keeps the highlight. The subheadline under it is gone (#184).
 - One 10 s loop: cursor click-to-select → move → scale → light sweep → subject swap (kettle ↔ sage-green mug) → gentle reset. Adjacent loops alternate subjects. The headline and text never change.
 - Desktop pointer parallax only. No decorative arcs, rings, stickers or blinking particles. No animation library or runtime dependency.
 - Reduced motion draws one still with the selected kettle, handles and the Regenerate pill. Off-screen and hidden-tab states cancel the frame callback.

@@ -45,3 +45,33 @@ started again.
 
 The sidebar Later action only hides the prompt. It does not answer Sparkle's
 install reply, so a declined update still applies on quit.
+
+## Correction: final must-fix round in PR #195
+
+The earlier cleanup and timeout claims above were incomplete. Setting both quit
+completion flags after only an editor flush and CLI stop skipped the existing
+design-worker drain and browser shutdown. Relaunch preparation now leaves those
+flags to `before-quit`, which awaits the worker and browser cleanup. CLI shutdown
+shares its in-flight and completed promise; an explicit restart after an aborted
+install resets it.
+
+Clearing electron-updater's private promise lock did not cancel its request.
+The replacement reuses the library's public platform updater classes and existing
+configuration, retires the timed-out instance, and gates all event listeners by
+instance identity. The existing check ticket also gates late promise rejection.
+Retirement disables automatic download and install-on-quit on the old instance.
+This avoids both stale UI events and stale backend metadata affecting the retry.
+Reusing the singleton with only a ticket or asynchronous-context event filter was
+rejected because electron-updater writes metadata before emitting events and can
+automatically download afterward. No custom update transport is introduced.
+
+Deterministic regressions reproduce concurrent CLI shutdown and stale events
+overwriting retry states before the fixes. They now cover shared pending/completed
+shutdown, restart, and stale events/rejection during checking, downloading, and
+error. The read-only Codex second opinion independently confirmed the singleton
+metadata hazard in electron-updater 6.7.3.
+
+The earlier Later/install-on-quit statement is not established for Sparkle:
+review thread 4322895351 identifies the missing `installUpdateOnQuit` call.
+That P1 is deferred pending packaged Mac verification, outside this round's
+authorized items 1–3. No Sparkle implementation or packaged update test is included.

@@ -227,12 +227,8 @@ if (hasSingleInstanceLock) {
         if (!ready) throw new Error('Could not save your designs before updating')
         await cliService.shutdownForQuit()
         cliStoppedForRelaunch = true
-        designShutdownComplete = true
-        cliShutdownComplete = true
       },
       abortRelaunch: () => {
-        designShutdownComplete = false
-        cliShutdownComplete = false
         if (!cliStoppedForRelaunch) return
         cliStoppedForRelaunch = false
         cliService.autoStart(getMainWindow()?.webContents)

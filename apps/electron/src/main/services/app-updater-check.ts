@@ -8,20 +8,6 @@ export function shouldResetPhaseForManualCheck(phase: ElectronUpdaterPhase): boo
 
 export type TimeoutHandle = { cancel(): void }
 
-function isUpdaterCheckLock(updater: object): updater is {
-  checkForUpdatesPromise?: Promise<unknown> | null
-} {
-  if (!('checkForUpdatesPromise' in updater)) return false
-  const current = Reflect.get(updater, 'checkForUpdatesPromise')
-  return current == null || current instanceof Promise
-}
-
-/** electron-updater keeps a hung check on this field and returns the same promise. */
-export function releaseUpdaterCheckLock(updater: object): void {
-  if (!isUpdaterCheckLock(updater)) return
-  updater.checkForUpdatesPromise = null
-}
-
 export function cancelSparkleCheck(sparkle: object): void {
   if (!('cancelCheck' in sparkle)) return
   const cancel = Reflect.get(sparkle, 'cancelCheck')
@@ -30,11 +16,9 @@ export function cancelSparkleCheck(sparkle: object): void {
 }
 
 export function recoverUnansweredCheck(input: {
-  electronUpdater: object
   sparkle: object | null
   sparkleSessionOpen: boolean
 }): { sparkleSessionOpen: false; ignoreUntilChecking: boolean } {
-  releaseUpdaterCheckLock(input.electronUpdater)
   const cancelOpenSparkleSession = input.sparkle !== null && input.sparkleSessionOpen
   if (cancelOpenSparkleSession && input.sparkle) cancelSparkleCheck(input.sparkle)
   return {

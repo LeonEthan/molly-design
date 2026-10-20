@@ -3,7 +3,7 @@ import { appendFileSync, existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import { autoUpdater, MacUpdater, NsisUpdater, type AppUpdater } from 'electron-updater'
 import { loadSparkleBridge, type SparkleBridge } from 'electron-sparkle-updater'
 import type {
   CheckForElectronUpdateResult,
@@ -91,7 +91,7 @@ export class AppUpdaterService {
     currentVersion: app.getVersion()
   }
   private started = false
-  private listenersAttached = false
+  private electronUpdater: AppUpdater | null = null
   private checkInFlight = false
   private checkTicket = 0
   private intervalRef: NodeJS.Timeout | null = null
@@ -146,31 +146,36 @@ export class AppUpdaterService {
       return
     }
 
-    autoUpdater.logger = createUpdaterLogger()
-    autoUpdater.autoDownload = true
-    autoUpdater.autoInstallOnAppQuit = true
+    this.configureElectronUpdater(autoUpdater)
+    void this.checkForUpdates()
+    this.intervalRef = setInterval(() => {
+      void this.checkForUpdates()
+    }, UPDATE_CHECK_INTERVAL_MS)
+  }
+
+  private configureElectronUpdater(updater: AppUpdater): void {
+    updater.logger = createUpdaterLogger()
+    updater.autoDownload = true
+    updater.autoInstallOnAppQuit = true
 
     if (!app.isPackaged) {
-      autoUpdater.forceDevUpdateConfig = true
+      updater.forceDevUpdateConfig = true
     }
 
     const updateChannel = this.resolveUpdateChannel()
-    autoUpdater.channel = updateChannel
-    autoUpdater.allowPrerelease = updateChannel !== 'latest'
+    updater.channel = updateChannel
+    updater.allowPrerelease = updateChannel !== 'latest'
 
     const updateUrl = readNonEmptyString(import.meta.env.VITE_ELECTRON_UPDATE_URL)
     if (updateUrl) {
-      autoUpdater.setFeedURL({
+      updater.setFeedURL({
         provider: 'generic',
         url: updateUrl
       })
     }
 
-    this.attachListeners()
-    void this.checkForUpdates()
-    this.intervalRef = setInterval(() => {
-      void this.checkForUpdates()
-    }, UPDATE_CHECK_INTERVAL_MS)
+    this.electronUpdater = updater
+    this.attachListeners(updater)
   }
 
   stop(): void {
@@ -257,11 +262,18 @@ export class AppUpdaterService {
     })
 
     try {
-      await autoUpdater.checkForUpdates()
+      let updater = this.electronUpdater
+      if (!updater) {
+        if (process.platform === 'darwin') updater = new MacUpdater()
+        else if (process.platform === 'win32') updater = new NsisUpdater()
+        else throw new Error('Unsupported updater platform')
+        this.configureElectronUpdater(updater)
+      }
+      await updater.checkForUpdates()
       return { started: true }
     } catch (error) {
       const message = formatUnknownError(error)
-      this.recordError(message)
+      if (this.checkTicket === ticket) this.recordError(message)
       return {
         started: false,
         error: message
@@ -319,7 +331,7 @@ export class AppUpdaterService {
       }
     }
 
-    if (this.state.phase !== 'downloaded') {
+    if (this.state.phase !== 'downloaded' || !this.electronUpdater) {
       return {
         ok: false,
         error: 'update_not_downloaded'
@@ -329,7 +341,7 @@ export class AppUpdaterService {
     try {
       setAppQuitting(true)
       const errorsBeforeInstall = this.errorCount
-      autoUpdater.quitAndInstall(false, true)
+      this.electronUpdater.quitAndInstall(false, true)
       // electron-updater reports install failures through its `error` event and
       // returns normally, so a plain `ok: true` here would leave the renderer
       // spinning on an install that never started. The event listener is
@@ -497,11 +509,9 @@ export class AppUpdaterService {
     return 'latest'
   }
 
-  private attachListeners(): void {
-    if (this.listenersAttached) return
-    this.listenersAttached = true
-
-    autoUpdater.on('checking-for-update', () => {
+  private attachListeners(updater: AppUpdater): void {
+    updater.on('checking-for-update', () => {
+      if (updater !== this.electronUpdater) return
       this.setState({
         phase: 'checking',
         error: undefined,
@@ -513,7 +523,8 @@ export class AppUpdaterService {
       })
     })
 
-    autoUpdater.on('update-available', (payload) => {
+    updater.on('update-available', (payload) => {
+      if (updater !== this.electronUpdater) return
       const record = readObject(payload)
       const version = readNonEmptyString(record?.version)
       // A newer version supersedes whatever is cached; electron-updater cleans
@@ -529,7 +540,8 @@ export class AppUpdaterService {
       })
     })
 
-    autoUpdater.on('update-not-available', () => {
+    updater.on('update-not-available', () => {
+      if (updater !== this.electronUpdater) return
       this.setState({
         phase: 'up_to_date',
         availableVersion: undefined,
@@ -543,7 +555,8 @@ export class AppUpdaterService {
       })
     })
 
-    autoUpdater.on('download-progress', (payload) => {
+    updater.on('download-progress', (payload) => {
+      if (updater !== this.electronUpdater) return
       const record = readObject(payload)
       this.setState({
         phase: 'downloading',
@@ -554,7 +567,8 @@ export class AppUpdaterService {
       })
     })
 
-    autoUpdater.on('update-downloaded', (payload) => {
+    updater.on('update-downloaded', (payload) => {
+      if (updater !== this.electronUpdater) return
       const record = readObject(payload)
       const version = readNonEmptyString(record?.version)
       const targetVersion = version ?? this.state.availableVersion
@@ -569,7 +583,8 @@ export class AppUpdaterService {
       })
     })
 
-    autoUpdater.on('error', (error) => {
+    updater.on('error', (error) => {
+      if (updater !== this.electronUpdater) return
       this.recordError(formatUnknownError(error))
     })
   }
@@ -599,8 +614,12 @@ export class AppUpdaterService {
         onUnanswered: () => {
           this.checkTicket += 1
           this.checkInFlight = false
+          if (!this.sparkleBridge && this.electronUpdater) {
+            this.electronUpdater.autoDownload = false
+            this.electronUpdater.autoInstallOnAppQuit = false
+            this.electronUpdater = null
+          }
           const recovered = recoverUnansweredCheck({
-            electronUpdater: autoUpdater,
             sparkle: this.sparkleBridge,
             sparkleSessionOpen: this.sparkleSessionOpen
           })

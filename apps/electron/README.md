@@ -128,6 +128,15 @@ packages do not enable the inherited Lody updater, including with
 `MOLLY_ELECTRON_ENABLE_UPDATER=1`. Packaging is not signing, notarization or release
 publication.
 
+Install and Relaunch flushes open designs and awaits CLI shutdown. The normal
+`before-quit` path still drains accepted design-worker requests, closes worker
+input, waits for exit, and runs browser account cleanup. CLI quit shutdown shares
+one completion promise until the CLI is restarted after a failed install.
+An unanswered electron-updater check retires its backend instance before retry:
+late events and promise failures cannot replace the current state, and the retired
+instance cannot automatically download or install an update. Packaged Sparkle
+relaunch and Later/install-on-quit verification remain outstanding for PR #195.
+
 The agent-browser + WebMCP implementation follows the
 [draft browser Spec](../../specs/agent-browser-webmcp.zh.md).
 This migration has build/static evidence only; prior Playwright acceptance does not

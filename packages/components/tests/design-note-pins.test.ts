@@ -7,6 +7,23 @@ import {
 import type { HighlightGroup } from '../../design-bento/src/element-highlight';
 import { createNotePins } from '../../design-bento/src/note-pins';
 
+vi.mock('../../design-bento/src/image-regions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../design-bento/src/image-regions')>();
+  return {
+    ...actual,
+    imageGeometry: (elementId: string) => {
+      const node = document.querySelector<HTMLElement>(`[data-el-id="${elementId}"]`);
+      return node
+        ? {
+            node,
+            source: 'asset.png',
+            matrix: { a: 400, b: 0, c: 0, d: 200, e: 100, f: 200 },
+          }
+        : undefined;
+    },
+  };
+});
+
 let pins: ReturnType<typeof createNotePins>;
 let requests: DesignToolbarRequest[];
 let highlights: HighlightGroup[][];
@@ -19,6 +36,17 @@ function element(id: string) {
 function press(target: HTMLElement, init: MouseEventInit = {}) {
   target.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, ...init }));
   target.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, ...init }));
+}
+function drag(target: HTMLElement, [fromX, fromY]: number[], [toX, toY]: number[]) {
+  const at = (clientX: number, clientY: number) => ({
+    bubbles: true,
+    button: 0,
+    clientX,
+    clientY,
+  });
+  target.dispatchEvent(new MouseEvent('pointerdown', at(fromX, fromY)));
+  target.dispatchEvent(new MouseEvent('pointermove', at(toX, toY)));
+  target.dispatchEvent(new MouseEvent('pointerup', at(toX, toY)));
 }
 function button(name: string) {
   const node = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -51,7 +79,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal('CSS', { escape: (value: string) => value });
   document.body.innerHTML =
-    '<div class="ed-stage-scale"><div data-el-id="title"><span>Hi</span></div><div data-el-id="photo"></div></div>';
+    '<div class="ed-stage-scale"><div data-el-id="title"><span>Hi</span></div><div data-el-id="photo"></div><div data-el-id="poster"></div></div>';
   for (const node of document.querySelectorAll('[data-el-id]'))
     Object.defineProperty(node, 'getBoundingClientRect', {
       value: () => ({ left: 100, top: 200, right: 500, bottom: 400, width: 400, height: 200 }),
@@ -59,14 +87,14 @@ beforeEach(() => {
   requests = [];
   highlights = [];
   selected = [];
-  present = ['title', 'photo'];
+  present = ['title', 'photo', 'poster'];
   pins = createNotePins({
     request: async (input) => {
       requests.push(input);
       return { ok: true };
     },
     selectedIds: () => selected,
-    elementIds: () => present,
+    elements: () => present.map((id) => ({ id, kind: id === 'title' ? 'text' : 'image' })),
     highlight: { show: (groups) => highlights.push([...groups]) },
   });
   pins.present({ dark: false, actionsEnabled: true, labels: {} });
@@ -79,28 +107,34 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('drops a numbered pin on Cmd/Ctrl-click and reads its note', () => {
-  press(element('title').querySelector('span')!, { metaKey: true });
+it('drops a numbered pin at the clicked point on Cmd/Ctrl-click and reads its note', () => {
+  press(element('title').querySelector('span')!, { metaKey: true, clientX: 150, clientY: 300 });
   expect(button('Note 1: ').textContent).toBe('1');
   type('Warmer headline');
   button('Save note').click();
-  press(element('photo'), { ctrlKey: true });
+  press(element('photo'), { ctrlKey: true, clientX: 500, clientY: 400 });
   type('Crop tighter');
   button('Save note').click();
   expect(tray().hidden).toBe(false);
   expect(tray().textContent).toContain('2 comments');
   expect(pins.read().notes).toEqual([
-    { elementIds: ['title'], prompt: 'Warmer headline' },
-    { elementIds: ['photo'], prompt: 'Crop tighter' },
+    { elementIds: ['title'], prompt: 'Warmer headline', pin: { elementId: 'title', at: [0.125, 0.5] } },
+    { elementIds: ['photo'], prompt: 'Crop tighter', pin: { elementId: 'photo', at: [1, 1] } },
   ]);
 });
 
 it('pins the whole selection when the click lands inside it', () => {
   selected = ['title', 'photo'];
-  press(element('photo'), { metaKey: true });
+  press(element('photo'), { metaKey: true, clientX: 300, clientY: 300 });
   type('Align these');
   button('Save note').click();
-  expect(pins.read().notes).toEqual([{ elementIds: ['title', 'photo'], prompt: 'Align these' }]);
+  expect(pins.read().notes).toEqual([
+    {
+      elementIds: ['title', 'photo'],
+      prompt: 'Align these',
+      pin: { elementId: 'photo', at: [0.5, 0.5] },
+    },
+  ]);
   expect(tray().textContent).toContain('1 comment');
   expect(tray().textContent).not.toContain('1 comments');
 });
@@ -122,14 +156,55 @@ it('turns plain clicks into pins only while the comment tool is on', () => {
   expect(document.querySelector('.molly-note-editor')).toBeNull();
   pins.setCommenting(true);
   expect(document.body.dataset.commenting).toBe('true');
-  press(element('photo'));
+  press(element('photo'), { clientX: 300, clientY: 300 });
   type('Crop tighter');
   button('Save note').click();
-  expect(pins.read().notes).toEqual([{ elementIds: ['photo'], prompt: 'Crop tighter' }]);
+  expect(pins.read().notes).toEqual([
+    { elementIds: ['photo'], prompt: 'Crop tighter', pin: { elementId: 'photo', at: [0.5, 0.5] } },
+  ]);
   pins.setCommenting(false);
   expect(document.body.dataset.commenting).toBe('false');
   press(element('title'));
   expect(document.querySelector('.molly-note-editor')).toBeNull();
+});
+
+it('draws a region on an image in comment mode and reads it as that note', () => {
+  pins.setCommenting(true);
+  drag(element('photo'), [200, 250], [300, 350]);
+  type('Brighter');
+  button('Save note').click();
+  expect(pins.read().notes).toEqual([
+    { elementIds: ['photo'], prompt: 'Brighter', region: { from: [0.25, 0.25], to: [0.5, 0.75] } },
+  ]);
+  expect(pins.snapshot()).toEqual(pins.read().notes);
+});
+
+it('ignores drags on text, tiny moves, and drags outside comment mode', () => {
+  drag(element('photo'), [200, 250], [300, 350]);
+  expect(document.querySelector('.molly-note-editor')).toBeNull();
+  pins.setCommenting(true);
+  drag(element('title'), [200, 250], [300, 350]);
+  drag(element('photo'), [200, 250], [201, 251]);
+  expect(document.querySelector('.molly-note-editor')).toBeNull();
+  expect(pins.read().notes).toEqual([]);
+});
+
+it('keeps regions on one image and says so when a second image is marked', () => {
+  pins.setCommenting(true);
+  drag(element('photo'), [200, 250], [300, 350]);
+  type('Brighter');
+  button('Save note').click();
+  drag(element('poster'), [200, 250], [300, 350]);
+  expect(pins.read().notes).toHaveLength(1);
+  expect(tray().querySelector('[role=alert]')?.textContent).toBe(
+    'Mark regions on one image at a time'
+  );
+});
+
+it('reads no marked copy without regions and rejects a stale one', async () => {
+  pins.add(['title'], 'Warmer');
+  await expect(pins.marked(pins.read().epoch)).resolves.toBeNull();
+  await expect(pins.marked(pins.read().epoch - 1)).rejects.toThrow('Notes changed');
 });
 
 it('never enters the comment tool while read-only and drops it when the canvas locks', () => {
@@ -239,7 +314,7 @@ it('shows a failed send in the tray and keeps the notes', async () => {
   pins = createNotePins({
     request: async () => ({ ok: false, error: 'Select the current elements again' }),
     selectedIds: () => selected,
-    elementIds: () => present,
+    elements: () => present.map((id) => ({ id, kind: 'text' })),
     highlight: { show: (groups) => highlights.push([...groups]) },
   });
   pins.present({ dark: false, actionsEnabled: true, labels: {} });
@@ -288,7 +363,7 @@ it('restores a snapshot into a fresh canvas and drops targets that are gone', ()
   const fresh = createNotePins({
     request: async () => ({ ok: true }),
     selectedIds: () => [],
-    elementIds: () => present,
+    elements: () => present.map((id) => ({ id, kind: 'text' })),
   });
   fresh.present({ dark: false, actionsEnabled: true, labels: {} });
   fresh.restore(notes);

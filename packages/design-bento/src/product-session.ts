@@ -22,7 +22,6 @@ import {
   type UiIconNode,
 } from '@molly/shared/ui-icons';
 import { createElementHighlight } from './element-highlight';
-import { createImageMarks } from './image-marks';
 import { createNotePins } from './note-pins';
 import { createLayersPanel, type LayerElement } from './layers-panel';
 import { createSelectionToolbar } from './selection-toolbar';
@@ -99,16 +98,12 @@ export function createProductSession(options: {
   const pins = createNotePins({
     request,
     selectedIds: () => selectedIds,
-    elementIds: () => options.elements().map((element) => element.id),
+    elements: options.elements,
     highlight,
   });
-  const marks = createImageMarks({ request });
   const toolbar = createSelectionToolbar({
     request,
     addNote: (text) => pins.add(selectedIds, text),
-    markImage: (elementId, expected) => {
-      if (expected === selectionEpoch) marks.open(elementId, expected);
-    },
   });
   const layers = createLayersPanel({
     request,
@@ -123,7 +118,6 @@ export function createProductSession(options: {
       keys.abort();
       toolbar.dispose();
       pins.dispose();
-      marks.dispose();
       highlight.dispose();
     },
     { once: true }
@@ -489,7 +483,6 @@ export function createProductSession(options: {
     toolbar.setReadonly(value);
     pins.setReadonly(value);
     syncCommentTool();
-    marks.setReadonly(value);
     layers.setReadonly(value);
     try {
       if (value) {
@@ -644,7 +637,6 @@ export function createProductSession(options: {
         setStatusMessage(statusSource);
         toolbar.present(value);
         pins.present(value);
-        marks.present(value);
         layers.present(value.labels);
       },
       highlight(groups: DesignHighlight) {
@@ -666,8 +658,8 @@ export function createProductSession(options: {
       restoreNotes(notes: Parameters<typeof pins.restore>[0]) {
         pins.restore(notes);
       },
-      marks(expected: number) {
-        return marks.read(expected);
+      marked(expected: number) {
+        return pins.marked(expected);
       },
       state() {
         return {
@@ -751,7 +743,6 @@ export function createProductSession(options: {
       selection = elements;
       lastSelectionSummary = summary;
       toolbar.update(summary as DesignSelectionSummary, selectedIds, selectionEpoch);
-      marks.select(selectedIds, selectionEpoch);
       layers.update(selectedIds, selectionEpoch);
       emit('selection', { elements });
       reportSelection(summary);

@@ -16,7 +16,6 @@ import {
   boldIcon,
   chevronDownIcon,
   cropIcon,
-  highlighterIcon,
   imagePlusIcon,
   italicIcon,
   paletteIcon,
@@ -91,7 +90,6 @@ const icons = {
   style: paletteIcon,
   regenerate: regenerateIcon,
   wording: typeIcon,
-  mark: highlighterIcon,
   bold: boldIcon,
   italic: italicIcon,
 };
@@ -105,7 +103,6 @@ const alignmentIcons = {
 export function createSelectionToolbar(options: {
   request(input: DesignToolbarRequest): Promise<{ ok: boolean; error?: string }>;
   addNote?(text: string): void;
-  markImage?(elementId: string, selectionEpoch: number): void;
 }) {
   let summary: DesignSelectionSummary = { count: 0, kinds: [] };
   let ids: string[] = [];
@@ -604,13 +601,6 @@ export function createSelectionToolbar(options: {
     };
     ask();
     const kind = summary.kinds.length === 1 ? summary.kinds[0] : undefined;
-    const markImage = options.markImage;
-    if (kind === 'image' && summary.count === 1 && markImage) {
-      const mark = button(bar, icons.mark, label('markImage', 'Mark areas to edit'), () =>
-        markImage(ids[0], epoch)
-      );
-      mark.disabled = busy || !presentation?.actionsEnabled;
-    }
     separator();
     const current = summary.elements?.find((element) => element.kind === kind);
     const typed = current && kind !== 'table' && kind !== 'chart' && summary.count <= 8;

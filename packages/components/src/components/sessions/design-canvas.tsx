@@ -180,7 +180,8 @@ export function DesignCanvas({
     image?: File
   ) => Promise<void>;
   onSendNotes?: (
-    notes: readonly { reference: DesignElementReference; prompt: string }[]
+    notes: readonly { reference: DesignElementReference; prompt: string }[],
+    attachment?: { intro: string; image: File }
   ) => Promise<boolean>;
   /** Passive mirror of the live canvas selection into the composer chip. */
   onSyncSelection?: (reference: DesignElementReference | null, label: string) => void;
@@ -740,30 +741,10 @@ export function DesignCanvas({
       preset ? [presetPrompt(preset), prompt].filter(Boolean).join('\n') : prompt,
       send
     );
-  const markSelection = (
-    reference: DesignElementReference,
-    prompt: string,
-    send: boolean,
-    count: number,
-    image: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array }
-  ) =>
-    sendOrReference(
-      reference,
-      t(
-        'design.marksPrompt',
-        "The attached image is a copy of the selected image with {{count}} numbered marks drawn on it. Edit the selected image using its current asset as the source, changing only the marked areas; the marks are guides and must not appear in the result. Replace only that image's asset and preserve the rest of the artwork. Requested change:",
-        { count }
-      ) +
-        '\n' +
-        prompt,
-      send,
-      new File([new Uint8Array(image.bytes)], image.mimeType === 'image/png' ? 'marked.png' : 'marked.jpg', {
-        type: image.mimeType,
-      })
-    );
   const sendNotes = (
     notes: readonly { reference: DesignElementReference; prompt: string }[],
-    notesEpoch: number
+    notesEpoch: number,
+    image?: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array }
   ) => {
     const generation = attachmentGeneration.current;
     run(async () => {
@@ -774,7 +755,22 @@ export function DesignCanvas({
           throw Error(
             t('design.selectionChanged', 'Artwork view changed; select the current elements again')
           );
-        sent = await onSendNotes(notes);
+        sent = await onSendNotes(
+          notes,
+          image
+            ? {
+                intro: t(
+                  'design.notesRegionIntro',
+                  "The attached image is a copy of one artwork image with numbered regions drawn on it. Each numbered region belongs to the note with the same number. Edit that image using its current asset as the source, changing only what those notes describe; the region outlines are guides and must not appear in the result. Replace only that image’s asset and preserve the rest of the artwork."
+                ),
+                image: new File(
+                  [new Uint8Array(image.bytes)],
+                  image.mimeType === 'image/png' ? 'marked.png' : 'marked.jpg',
+                  { type: image.mimeType }
+                ),
+              }
+            : undefined
+        );
         if (sent)
           notesRun.current = {
             groups: notes.map((note, index) => ({
@@ -791,8 +787,8 @@ export function DesignCanvas({
       }
     });
   };
-  const actionCallback = useRef({ selectionAction, askSelection, markSelection, sendNotes });
-  actionCallback.current = { selectionAction, askSelection, markSelection, sendNotes };
+  const actionCallback = useRef({ selectionAction, askSelection, sendNotes });
+  actionCallback.current = { selectionAction, askSelection, sendNotes };
   useEffect(
     () =>
       onIpcEvent('design.selectionAction', (event) => {
@@ -803,7 +799,7 @@ export function DesignCanvas({
             !readonlyView &&
             event.notes.every((note) => note.reference.artworkId === artworkId)
           )
-            actionCallback.current.sendNotes(event.notes, event.notesEpoch);
+            actionCallback.current.sendNotes(event.notes, event.notesEpoch, event.image);
           else
             void getIpcServices()
               ?.design.settleNotes(artworkId, hostId, event.notesEpoch, false)
@@ -818,14 +814,6 @@ export function DesignCanvas({
             event.prompt,
             event.send,
             event.preset
-          );
-        else if (event.action === 'marks')
-          actionCallback.current.markSelection(
-            event.reference,
-            event.prompt,
-            event.send,
-            event.count,
-            event.image
           );
         else actionCallback.current.selectionAction(event.action, event.reference, event.wording);
       }),

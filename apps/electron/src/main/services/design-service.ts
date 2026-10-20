@@ -252,12 +252,17 @@ export async function surface(
           assertCurrent()
           if (input.type === 'notes') {
             const notes = await getDesignNotes(id, hostId, input.notesEpoch, assertCurrent)
+            const region = notes.find((note) => note.region)
+            const image = region
+              ? await readDesignNoteImage(record!, input.notesEpoch, region.reference.elementIds[0])
+              : undefined
             assertCurrent()
             record!.owner.webContents.send('design.selectionAction', {
               hostId,
               action: 'notes',
               notes,
-              notesEpoch: input.notesEpoch
+              notesEpoch: input.notesEpoch,
+              ...(image ? { image } : {})
             })
             return Response.json({ ok: true }, { headers })
           }
@@ -275,46 +280,16 @@ export async function surface(
           const reference = await getDesignSelection(
             id,
             hostId,
-            input.type === 'marks' ||
-              (input.type === 'action' &&
-                (input.action === 'edit' ||
-                  input.action === 'generate' ||
-                  input.action === 'edit-wording'))
+            input.type === 'action' &&
+              (input.action === 'edit' ||
+                input.action === 'generate' ||
+                input.action === 'edit-wording')
               ? 'image'
               : preset && DESIGN_ASK_PRESETS[preset].kind,
             { selectionEpoch: input.selectionEpoch, assertCurrent }
           )
-          if (
-            (input.type === 'marks' || (preset && DESIGN_ASK_PRESETS[preset].single)) &&
-            reference.elementIds.length !== 1
-          )
+          if (preset && DESIGN_ASK_PRESETS[preset].single && reference.elementIds.length !== 1)
             throw Error('Select a single element for this action')
-          if (input.type === 'marks') {
-            const image = decodeDesignMarkedImage(
-              await record!.view.webContents.executeJavaScript(
-                `window.molly.marks(${JSON.stringify(input.marksEpoch)})`
-              ),
-              reference.elementIds[0]
-            )
-            const size = nativeImage.createFromBuffer(Buffer.from(image.bytes)).getSize()
-            if (
-              !size.width ||
-              !size.height ||
-              Math.max(size.width, size.height) > DESIGN_MARKED_IMAGE_MAX_EDGE
-            )
-              throw Error('Marked image could not be read')
-            assertCurrent()
-            record!.owner.webContents.send('design.selectionAction', {
-              hostId,
-              action: 'marks',
-              reference,
-              prompt: input.prompt,
-              send: input.send,
-              count: image.count,
-              image: { mimeType: image.mimeType, bytes: image.bytes }
-            })
-            return Response.json({ ok: true }, { headers })
-          }
           assertCurrent()
           record!.owner.webContents.send(
             'design.selectionAction',
@@ -697,16 +672,15 @@ export async function getDesignNotes(
   assertCurrent: () => void
 ) {
   const read = `window.molly.notes(${JSON.stringify(notesEpoch)})`
-  let prompts: string[] = []
+  let notes: DesignNotes = []
   const references = await captureDesignReferences(
     id,
     hostId,
     async (record) => {
       const value: unknown = await record.view.webContents.executeJavaScript(read)
-      const notes = DesignNotesSchema.parse(
+      notes = DesignNotesSchema.parse(
         typeof value === 'object' && value !== null && 'notes' in value ? value.notes : undefined
       )
-      prompts = notes.map((note) => note.prompt)
       return notes.map((note) => note.elementIds)
     },
     async (record) => {
@@ -714,7 +688,29 @@ export async function getDesignNotes(
     },
     { assertCurrent }
   )
-  return references.map((reference, index) => ({ reference, prompt: prompts[index] }))
+  return references.map((reference, index) => ({
+    reference,
+    prompt: notes[index].prompt,
+    ...(notes[index].region ? { region: true as const } : {})
+  }))
+}
+
+/** The marked copy of the one image region notes mark; bytes are validated before they leave main. */
+async function readDesignNoteImage(record: RecordEntry, notesEpoch: number, elementId: string) {
+  const image = decodeDesignMarkedImage(
+    await record.view.webContents.executeJavaScript(
+      `window.molly.marked(${JSON.stringify(notesEpoch)})`
+    ),
+    elementId
+  )
+  const size = nativeImage.createFromBuffer(Buffer.from(image.bytes)).getSize()
+  if (
+    !size.width ||
+    !size.height ||
+    Math.max(size.width, size.height) > DESIGN_MARKED_IMAGE_MAX_EDGE
+  )
+    throw Error('Marked image could not be read')
+  return { mimeType: image.mimeType, bytes: image.bytes }
 }
 
 async function captureDesignReferences(

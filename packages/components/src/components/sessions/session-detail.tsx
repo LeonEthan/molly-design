@@ -3437,7 +3437,7 @@ const SessionDetail = ({
             onSendNotes={
               activeSession.isArchived
                 ? undefined
-                : async (notes) => {
+                : async (notes, attachment) => {
                     const chat = chatRefsMap.current.get(activeTabSessionId);
                     if (
                       activeTabSessionId !== activeSession.id ||
@@ -3454,7 +3454,8 @@ const SessionDetail = ({
                       notes.map((note, index) => ({
                         ...note,
                         label: t('design.notePin', 'Note {{count}}', { count: index + 1 }),
-                      }))
+                      })),
+                      attachment
                     );
                   }
             }

@@ -29,8 +29,11 @@ tool (`C`; `V` or Escape returns to select) turns plain clicks into pins and set
 frame reload: the shell snapshots them (`window.molly.notesSnapshot`) before the old frame is
 destroyed and restores them (`window.molly.restoreNotes`) into the next one. Restored pins
 are memory-only, prune missing targets, and are dropped on send, clear, or instance destruction.
-Image marks are screen-only, in image-normalized coordinates mapped through the
-rendered image; requests carry only their epoch, and main reads the marked copy. Test visual changes with real
+A drag on an image in commenting mode draws a box region in image-normalized coordinates
+(`image-regions.ts`) and sets the note's `region`; a click stores a `pin` at a point normalized to its
+element's box. Regions cover one image per read; `window.molly.marked(epoch)` returns the marked copy
+of that image with the note numbers drawn on it. Requests carry only their epoch, and main reads the
+marked copy. Test visual changes with real
 Electron composite screenshots for each supported element kind in both themes.
 Canvas copy is never hardcoded in one language: key it into the shell's `design.*`
 locale entries, list the key in `DESIGN_CANVAS_LABEL_KEYS`, and let Electron

@@ -217,37 +217,27 @@ describe('inline ask from the canvas selection', () => {
   });
 });
 
-describe('marked images from the canvas', () => {
+describe('region notes with a marked image from the canvas', () => {
   const image = { mimeType: 'image/png', bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) };
+  const regionNotes = [{ reference, prompt: 'Make it gold', region: true as const }];
 
-  it('sends the marked copy as an image attachment with the marks instruction', async () => {
-    const sent: [DesignElementReference, string, File | undefined][] = [];
+  it('sends the notes with the marked copy as one attachment', async () => {
+    const sent: unknown[][] = [];
     await mount({
-      onSendSelection: async (target, prompt, file) => {
-        sent.push([target, prompt, file]);
+      onSendNotes: async (value, attachment) => {
+        sent.push([value, attachment]);
+        return true;
       },
       onReferenceSelection: () => {},
     });
-    await emit({ action: 'marks', prompt: 'Make it gold', send: true, count: 2, image });
+    await emit({ action: 'notes', notes: regionNotes, notesEpoch: 4, image });
     expect(sent).toHaveLength(1);
-    const [target, prompt, file] = sent[0]!;
-    expect(target).toEqual(reference);
-    expect(prompt).toMatch(/^The attached image is a copy of the selected image with .* marks/);
-    expect(prompt.endsWith('Requested change:\nMake it gold')).toBe(true);
-    expect(file?.type).toBe('image/png');
-    expect(file?.size).toBe(4);
-  });
-
-  it('adds the marked copy and instruction to the draft when not sending', async () => {
-    const referenced: [DesignElementReference, string | undefined, File | undefined][] = [];
-    await mount({
-      onSendSelection: async () => {},
-      onReferenceSelection: (target, prompt, file) => referenced.push([target, prompt, file]),
-    });
-    await emit({ action: 'marks', prompt: 'Make it gold', send: false, count: 1, image });
-    expect(referenced).toHaveLength(1);
-    expect(referenced[0]![1]).toContain('Make it gold');
-    expect(referenced[0]![2]?.name).toBe('marked.png');
+    const [value, attachment] = sent[0] as [unknown, { intro: string; image: File }];
+    expect(value).toEqual(regionNotes);
+    expect(attachment.intro).toContain('numbered regions');
+    expect(attachment.image.name).toBe('marked.png');
+    expect(attachment.image.type).toBe('image/png');
+    expect(attachment.image.size).toBe(4);
   });
 });
 

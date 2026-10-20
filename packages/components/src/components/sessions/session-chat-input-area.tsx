@@ -408,7 +408,8 @@ export type SessionChatInputAreaHandle = {
    * false without touching the draft when the turn cannot be sent; the canvas keeps them.
    */
   sendDesignNotes: (
-    notes: readonly { reference: DesignElementReference; label: string; prompt: string }[]
+    notes: readonly { reference: DesignElementReference; label: string; prompt: string }[],
+    attachment?: { intro: string; image: File }
   ) => Promise<boolean>;
   insertSessionMention: (sessionId: string) => boolean;
 };
@@ -1390,7 +1391,8 @@ export const SessionChatInputArea = memo(
       async (
         items: readonly { reference: DesignElementReference; label: string; prompt: string }[],
         numbered: boolean,
-        image?: File
+        image?: File,
+        intro = ''
       ) => {
         if (
           isArchived ||
@@ -1403,7 +1405,7 @@ export const SessionChatInputArea = memo(
           return false;
         designSendInFlightRef.current = true;
         try {
-          let text = '';
+          let text = intro;
           const mentions: MentionRange[] = [];
           items.forEach((item, index) => {
             const line = numbered ? `${index + 1}. ${item.prompt.trim()}` : item.prompt.trim();
@@ -1465,8 +1467,11 @@ export const SessionChatInputArea = memo(
       [isArchived, referenceDesignSelection, sendDesignMentions]
     );
     const sendDesignNotes = useCallback(
-      (notes: readonly { reference: DesignElementReference; label: string; prompt: string }[]) =>
-        sendDesignMentions(notes, true),
+      (
+        notes: readonly { reference: DesignElementReference; label: string; prompt: string }[],
+        attachment?: { intro: string; image: File }
+      ) =>
+        sendDesignMentions(notes, true, attachment?.image, attachment?.intro),
       [sendDesignMentions]
     );
 

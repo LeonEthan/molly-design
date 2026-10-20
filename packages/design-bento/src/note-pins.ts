@@ -1,25 +1,54 @@
 import {
   DESIGN_ASK_PROMPT_MAX,
+  DESIGN_MARKED_IMAGE_MAX_BYTES,
   DESIGN_NOTES_MAX,
+  type DesignMarkedImage,
+  type DesignNote,
   type DesignToolbarPresentation,
   type DesignToolbarRequest,
 } from '@molly/shared/design-selection-commands';
 import { arrowUpIcon, renderUiIconSvg, xIcon } from '@molly/shared/ui-icons';
 import type { HighlightGroup } from './element-highlight';
+import {
+  drawNoteRegions,
+  imageGeometry,
+  paintRegionPolygon,
+  REGION_COLOR,
+  regionFromPoints,
+  svgOverlay,
+  toImage,
+  toScreen,
+  type ImageGeometry,
+  type NormalizedPoint,
+  type NoteRegion,
+} from './image-regions';
 
-type Pin = { elementIds: string[]; text: string };
+type Pin = {
+  elementIds: string[];
+  text: string;
+  pin?: { elementId: string; at: NormalizedPoint };
+  region?: NoteRegion;
+};
 
 const EDITOR_LINE_CAP = 4;
+const COPY_MAX_EDGE = 1600;
+const MOVE_SLOP = 3;
+
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+const moved = (origin: { x: number; y: number }, event: { clientX: number; clientY: number }) =>
+  Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > MOVE_SLOP;
 
 /**
- * Numbered notes pinned to elements, sent to Molly together as one turn. Pins are
- * screen-only canvas state keyed by element id: they never touch the document, and
- * the request carries only the notes epoch so main reads and validates the targets.
+ * Numbered notes pinned to the canvas, sent to Molly together as one turn. A note is
+ * a pin (a point inside an element, or the element's default corner) or a region (a box
+ * drawn on one image, marked on a copy of that image). Notes are screen-only canvas state
+ * keyed by element id: they never touch the document, and the request carries only the
+ * notes epoch so main reads and validates the targets.
  */
 export function createNotePins(options: {
   request(input: DesignToolbarRequest): Promise<{ ok: boolean; error?: string }>;
   selectedIds(): readonly string[];
-  elementIds(): readonly string[];
+  elements(): readonly { id: string; kind: string }[];
   highlight?: { show(groups: readonly HighlightGroup[]): void };
 }) {
   let pins: Pin[] = [];
@@ -33,6 +62,15 @@ export function createNotePins(options: {
   let commenting = false;
   let frame = 0;
   let press: { x: number; y: number } | undefined;
+  let drag:
+    | {
+        elementId: string;
+        geo: ImageGeometry;
+        origin: { x: number; y: number };
+        start: NormalizedPoint;
+        current: NormalizedPoint;
+      }
+    | undefined;
   const controller = new AbortController();
   const signal = controller.signal;
   const label = (key: string, fallback: string, count?: number) =>
@@ -40,6 +78,7 @@ export function createNotePins(options: {
   const style = document.createElement('style');
   style.textContent = `
 body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!important}
+.molly-note-regions{position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483097;pointer-events:none;overflow:visible}
 .molly-note-pin{position:fixed;z-index:2147483099;display:flex;align-items:center;justify-content:center;width:28px;height:28px;min-width:0!important;padding:0!important;box-sizing:border-box;border-radius:50%!important;border:2px solid var(--surface);background:var(--accent)!important;color:var(--on-accent)!important;font:600 12px/1 Inter,system-ui,sans-serif!important;box-shadow:0 2px 8px rgb(0 0 0 / .22);cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
 .molly-note-pin[aria-expanded=true]{transform:scale(1.12);box-shadow:0 6px 16px rgb(0 0 0 / .3)}
 .molly-note-tray{position:fixed;left:50%;bottom:calc(var(--molly-dock-bottom,18px) + var(--molly-dock-height,52px) + 12px);transform:translateX(-50%);z-index:2147483099;display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;max-width:calc(100vw - 16px);border-radius:999px;background:var(--ink);color:var(--surface);border:1px solid var(--line);box-shadow:0 6px 20px rgb(0 0 0 / .22);font:12px Inter,system-ui,sans-serif;box-sizing:border-box}
@@ -61,6 +100,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
   document.head.append(style);
   const layer = document.createElement('div');
   layer.className = 'molly-note-layer';
+  const overlay = svgOverlay();
   const tray = document.createElement('div');
   tray.className = 'molly-note-tray';
   tray.dataset.mollyToolbar = '';
@@ -70,16 +110,21 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
   tooltip.className = 'molly-note-tooltip';
   tooltip.setAttribute('role', 'tooltip');
   tooltip.hidden = true;
-  document.body.append(layer, tray, tooltip);
+  document.body.append(overlay, layer, tray, tooltip);
   for (const node of [layer, tray])
     for (const type of ['pointerdown', 'mousedown', 'dblclick', 'keydown', 'keyup', 'wheel'])
       node.addEventListener(type, (event) => event.stopPropagation(), { signal });
 
   const nodeFor = (id: string) =>
     document.querySelector<HTMLElement>(`.ed-stage-scale [data-el-id="${CSS.escape(id)}"]`);
+  const kindOf = (id: string) => options.elements().find((element) => element.id === id)?.kind;
   const changed = () => {
     epoch++;
     message = '';
+    render();
+  };
+  const full = () => {
+    message = label('notesFull', 'Send or clear notes before adding more than {{count}}', DESIGN_NOTES_MAX);
     render();
   };
   const setCommentingState = (value: boolean) => {
@@ -87,9 +132,15 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
     document.body.dataset.commenting = String(commenting);
   };
   const prune = () => {
-    const present = new Set(options.elementIds());
-    if (pins.every((pin) => pin.elementIds.every((id) => present.has(id)))) return false;
-    for (const pin of pins) pin.elementIds = pin.elementIds.filter((id) => present.has(id));
+    const present = new Set(options.elements().map((element) => element.id));
+    const stale = (pin: Pin) =>
+      pin.elementIds.some((id) => !present.has(id)) ||
+      (!!pin.pin && !present.has(pin.pin.elementId));
+    if (!pins.some(stale)) return false;
+    for (const pin of pins) {
+      pin.elementIds = pin.elementIds.filter((id) => present.has(id));
+      if (pin.pin && !present.has(pin.pin.elementId)) delete pin.pin;
+    }
     if (editing && !editing.pin.elementIds.length) {
       editing.node.remove();
       editing = undefined;
@@ -107,6 +158,37 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
     tooltip.hidden = true;
     options.highlight?.show([{ tone: 'hover', elementIds: [] }]);
   };
+  const pinPoint = (pin: Pin): { x: number; y: number } | undefined => {
+    if (pin.region) {
+      const geo = imageGeometry(pin.elementIds[0]);
+      if (!geo) return undefined;
+      const [x, y] = toScreen(geo, pin.region.from);
+      return { x, y };
+    }
+    const anchor = pin.pin && nodeFor(pin.pin.elementId);
+    if (!pin.pin || !anchor) return undefined;
+    const rect = anchor.getBoundingClientRect();
+    return {
+      x: rect.left + pin.pin.at[0] * rect.width,
+      y: rect.top + pin.pin.at[1] * rect.height,
+    };
+  };
+  function paintRegions() {
+    overlay.replaceChildren();
+    for (const pin of pins) {
+      if (!pin.region) continue;
+      const geo = imageGeometry(pin.elementIds[0]);
+      if (geo) paintRegionPolygon(overlay, geo, pin.region, REGION_COLOR);
+    }
+    if (drag) {
+      paintRegionPolygon(
+        overlay,
+        drag.geo,
+        regionFromPoints(drag.start, drag.current),
+        REGION_COLOR
+      );
+    }
+  }
   function position() {
     frame = 0;
     if (!pins.length) return;
@@ -114,18 +196,24 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
     const markers = [...layer.children] as HTMLElement[];
     pins.forEach((pin, index) => {
       const marker = markers[index];
+      const point = pinPoint(pin);
       const rects = pin.elementIds
         .map(nodeFor)
         .filter((node): node is HTMLElement => !!node)
         .map((node) => node.getBoundingClientRect());
       if (!marker) return;
-      marker.hidden = readonly || !rects.length;
+      marker.hidden = readonly || (!point && !rects.length);
       if (marker.hidden) return;
+      const place = (x: number, y: number) => {
+        marker.style.left = `${Math.max(4, Math.min(x, innerWidth - 32))}px`;
+        marker.style.top = `${Math.max(4, Math.min(y, innerHeight - 32))}px`;
+      };
+      if (point) return place(point.x - 14, point.y - 14);
       const right = Math.max(...rects.map((rect) => rect.right));
       const top = Math.min(...rects.map((rect) => rect.top));
-      marker.style.left = `${Math.max(4, Math.min(right - 8, innerWidth - 32))}px`;
-      marker.style.top = `${Math.max(4, Math.min(top - 14, innerHeight - 32))}px`;
+      place(right - 8, top - 14);
     });
+    paintRegions();
     if (editing) placeEditor();
     frame = requestAnimationFrame(position);
   }
@@ -331,10 +419,14 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
     grow();
     field.focus();
   }
-  function add(elementIds: readonly string[], text = '') {
+  function add(elementIds: readonly string[], text = '', point?: Pin['pin']) {
     if (readonly || busy || !elementIds.length) return;
-    const pin = { elementIds: [...new Set(elementIds)], text };
-    const existing = pins.find((item) => sameTargets(item, pin));
+    const pin: Pin = {
+      elementIds: [...new Set(elementIds)],
+      text,
+      ...(point ? { pin: point } : {}),
+    };
+    const existing = !point && pins.find((item) => !item.pin && !item.region && sameTargets(item, pin));
     if (existing) {
       if (text.trim())
         existing.text = existing.text.trim() ? `${existing.text.trim()}\n${text}` : text;
@@ -342,18 +434,51 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
       if (!text.trim()) openEditor(existing);
       return;
     }
-    if (pins.length >= DESIGN_NOTES_MAX) {
-      message = label(
-        'notesFull',
-        'Send or clear notes before adding more than {{count}}',
-        DESIGN_NOTES_MAX
-      );
-      render();
-      return;
-    }
+    if (pins.length >= DESIGN_NOTES_MAX) return full();
     pins = [...pins, pin];
     changed();
     if (!text.trim()) openEditor(pin);
+  }
+  function addRegion(elementId: string, region: NoteRegion) {
+    if (readonly || busy) return;
+    if (pins.some((pin) => pin.region && pin.elementIds[0] !== elementId)) {
+      message = label('notesRegionOneImage', 'Mark regions on one image at a time');
+      render();
+      return;
+    }
+    if (pins.length >= DESIGN_NOTES_MAX) return full();
+    const pin: Pin = { elementIds: [elementId], text: '', region };
+    pins = [...pins, pin];
+    changed();
+    openEditor(pin);
+  }
+  function startRegion(event: PointerEvent) {
+    if (
+      !commenting ||
+      busy ||
+      event.button !== 0 ||
+      event.altKey ||
+      event.shiftKey ||
+      event.metaKey ||
+      event.ctrlKey
+    )
+      return;
+    const target = event.target as Element | null;
+    if (!target?.closest || target.closest('[data-molly-toolbar]')) return;
+    const elementId = target.closest<HTMLElement>('.ed-stage-scale [data-el-id]')?.dataset.elId;
+    if (!elementId || kindOf(elementId) !== 'image') return;
+    const geo = imageGeometry(elementId);
+    const start = geo && toImage(geo, event.clientX, event.clientY);
+    if (!geo || !start) return;
+    event.stopPropagation();
+    event.preventDefault();
+    drag = {
+      elementId,
+      geo,
+      origin: { x: event.clientX, y: event.clientY },
+      start,
+      current: start,
+    };
   }
   document.addEventListener(
     'pointerdown',
@@ -361,17 +486,45 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
       press = { x: event.clientX, y: event.clientY };
       if (editing && !(event.target as Element | null)?.closest?.('[data-molly-toolbar]'))
         closeEditor(false);
+      startRegion(event);
     },
     { capture: true, signal }
   );
   document.addEventListener(
+    'pointermove',
+    (event) => {
+      if (!drag) return;
+      const point = toImage(drag.geo, event.clientX, event.clientY);
+      if (!point) return;
+      drag.current = point;
+      paintRegions();
+    },
+    { capture: true, signal }
+  );
+  const endRegion = (event: PointerEvent, commit: boolean) => {
+    if (!drag) return;
+    const { elementId, geo, origin, start } = drag;
+    const end = toImage(geo, event.clientX, event.clientY) ?? drag.current;
+    drag = undefined;
+    paintRegions();
+    if (commit && moved(origin, event)) addRegion(elementId, regionFromPoints(start, end));
+  };
+  document.addEventListener('pointerup', (event) => endRegion(event, true), {
+    capture: true,
+    signal,
+  });
+  document.addEventListener('pointercancel', (event) => endRegion(event, false), {
+    capture: true,
+    signal,
+  });
+  document.addEventListener(
     'click',
     (event) => {
-      const moved = press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 3;
+      const dragged = press && moved(press, event);
       press = undefined;
       if (
         readonly ||
-        moved ||
+        dragged ||
         event.button !== 0 ||
         !(commenting || event.metaKey || event.ctrlKey) ||
         event.altKey ||
@@ -393,11 +546,30 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
         const node = nodeFor(id);
         return !!node && (node.contains(target) || hit!.contains(node));
       });
-      add(inSelection ? selected : [hit.dataset.elId!]);
+      const rect = hit.getBoundingClientRect();
+      const point: Pin['pin'] | undefined =
+        rect.width && rect.height && hit.dataset.elId
+          ? {
+              elementId: hit.dataset.elId,
+              at: [
+                clamp01((event.clientX - rect.left) / rect.width),
+                clamp01((event.clientY - rect.top) / rect.height),
+              ],
+            }
+          : undefined;
+      add(inSelection ? selected : [hit.dataset.elId!], '', point);
     },
     { capture: true, signal }
   );
   window.addEventListener('resize', () => editing && placeEditor(), { signal });
+
+  const sentNotes = () => pins.filter((pin) => pin.text.trim());
+  const toNote = (pin: Pin): DesignNote => ({
+    elementIds: [...pin.elementIds],
+    prompt: pin.text.trim(),
+    ...(pin.pin ? { pin: { elementId: pin.pin.elementId, at: [...pin.pin.at] as NormalizedPoint } } : {}),
+    ...(pin.region ? { region: pin.region } : {}),
+  });
 
   return {
     add,
@@ -405,24 +577,52 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
       if (prune()) render();
       if (expected !== undefined && expected !== epoch)
         throw Error('Notes changed; send them again');
-      return {
-        epoch,
-        notes: pins
-          .filter((pin) => pin.text.trim())
-          .map((pin) => ({ elementIds: pin.elementIds, prompt: pin.text.trim() })),
-      };
+      return { epoch, notes: sentNotes().map(toNote) };
     },
-    snapshot() {
+    async marked(expected: number): Promise<DesignMarkedImage | null> {
+      if (expected !== epoch) throw Error('Notes changed; send them again');
+      const regions = sentNotes().flatMap((pin, index) =>
+        pin.region ? [{ badge: index + 1, region: pin.region, elementId: pin.elementIds[0] }] : []
+      );
+      if (!regions.length) return null;
+      const { elementId } = regions[0];
+      const geo = imageGeometry(elementId);
+      if (!geo) throw Error('The marked image is no longer visible');
+      const source = new Image();
+      source.src = geo.source;
+      await source.decode();
+      if (expected !== epoch) throw Error('Notes changed; send them again');
+      const scale = Math.min(1, COPY_MAX_EDGE / Math.max(source.naturalWidth, source.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(source.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(source.naturalHeight * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw Error('Marked image could not be drawn');
+      context.drawImage(source, 0, 0, canvas.width, canvas.height);
+      drawNoteRegions(context, regions, canvas.width, canvas.height);
+      let mimeType: DesignMarkedImage['mimeType'] = 'image/png';
+      let url = canvas.toDataURL(mimeType);
+      if (((url.length - url.indexOf(',') - 1) * 3) / 4 > DESIGN_MARKED_IMAGE_MAX_BYTES) {
+        context.globalCompositeOperation = 'destination-over';
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        mimeType = 'image/jpeg';
+        url = canvas.toDataURL(mimeType, 0.9);
+      }
+      return { elementId, mimeType, data: url.slice(url.indexOf(',') + 1) };
+    },
+    snapshot(): DesignNote[] {
       if (busy) return [];
-      return pins
-        .filter((pin) => pin.text.trim())
-        .map((pin) => ({ elementIds: [...pin.elementIds], prompt: pin.text.trim() }));
+      return sentNotes().map(toNote);
     },
-    restore(notes: readonly { elementIds: readonly string[]; prompt: string }[]) {
+    restore(notes: readonly DesignNote[]) {
       if (pins.length || !notes.length) return;
-      pins = notes
-        .slice(0, DESIGN_NOTES_MAX)
-        .map((note) => ({ elementIds: [...new Set(note.elementIds)], text: note.prompt }));
+      pins = notes.slice(0, DESIGN_NOTES_MAX).map((note) => ({
+        elementIds: [...new Set(note.elementIds)],
+        text: note.prompt,
+        ...(note.pin ? { pin: note.pin } : {}),
+        ...(note.region ? { region: note.region } : {}),
+      }));
       prune();
       changed();
     },
@@ -444,6 +644,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
         setCommentingState(false);
         closeEditor(false);
         clearHover();
+        drag = undefined;
       }
       render();
     },
@@ -460,6 +661,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
       setCommentingState(false);
       editing?.node.remove();
       layer.remove();
+      overlay.remove();
       tray.remove();
       tooltip.remove();
       style.remove();

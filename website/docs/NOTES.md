@@ -58,7 +58,7 @@ Every shipped image and video was checked by eye. Raw masters (app captures and 
 ## Hero animation
 
 - One Stillwater Clay photographic scene with a fixed editorial headline, spec table and caption, drawn by a fixed-size canvas compositor. The editorial text and UI stay HTML.
-- The stage is the hero content width. The poster scales to that width, and the stage height follows the poster plus the Regenerate pill, so the frame does not leave a blank field around the demo (#184). Animation content and timing are unchanged.
+- The stage keeps the original 1000×560 landscape frame. It fills the hero content width and its height follows that ratio, scaled uniformly so the poster, pill and cursor stay in the same composition. Mobile uses the same frame. Animation content and timing are unchanged (#184).
 - The hero headline is one sentence per line in both languages. The second sentence keeps the highlight. The subheadline under it is gone (#184).
 - One 10 s loop: cursor click-to-select → move → scale → light sweep → subject swap (kettle ↔ sage-green mug) → gentle reset. Adjacent loops alternate subjects. The headline and text never change.
 - Desktop pointer parallax only. No decorative arcs, rings, stickers or blinking particles. No animation library or runtime dependency.

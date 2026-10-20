@@ -159,7 +159,7 @@ def hero_stage():
         scene_asset(k)
         for k in ('scene-plate', 'scene-kettle', 'scene-kettle-shadow', 'scene-mug', 'scene-mug-shadow')
     )
-    return f'''<div class="stage">
+    return f'''<div class="stage"><div class="stage-fit">
     <div class="hs" role="img" aria-label="[[示意动画：产品照片中的茶壶被单击选中、移动和缩放，再重新生成一个鼠尾草绿马克杯。背景和文字保持原位。马克杯由图像生成，抠图与背景修补为示意制作。||Illustration: the kettle in a product photo is clicked to select, moved and resized, then regenerated into a sage-green mug. Background and text stay in place. The mug is image-generated; cutouts and the repaired background are crafted for this illustration.]]">
       <div class="hs-fit"><div class="hs-scene">
         <div class="hs-board">
@@ -179,7 +179,7 @@ def hero_stage():
         </div>
       </div></div>
     </div>
-  </div>'''
+  </div></div>'''
 
 
 ICON = {

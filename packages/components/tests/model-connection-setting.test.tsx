@@ -969,7 +969,8 @@ describe('connection management', () => {
       expect(slot?.className).toContain('min-h-0');
       expect(slot?.className).toContain('grow');
       expect(slot?.className).toContain('shrink-0');
-      expect(slot?.className).toContain('basis-48');
+      expect(slot?.className).toContain('basis-0');
+      expect(slot?.className).not.toContain('basis-48');
       expect(slot?.className).toContain('flex-col');
       expect(slot?.className).toContain('overflow-hidden');
       expect(slot?.className).not.toContain('overflow-y-auto');
@@ -1017,8 +1018,8 @@ describe('connection management', () => {
       const classes = list.className.split(/\s+/);
       expect(classes).toContain('overflow-y-auto');
       expect(classes).toContain('min-h-0');
-      expect(classes).toContain('shrink');
-      expect(classes).not.toContain('shrink-0');
+      expect(classes).toContain('max-h-16');
+      expect(classes).toContain('shrink-0');
       expect(classes).not.toContain('flex-1');
       expect(classes).not.toContain('grow');
     }
@@ -1029,12 +1030,15 @@ describe('connection management', () => {
     expect(lists[1]?.textContent).toContain('Saved 5');
     expect(lists[1]?.textContent).toContain('Saved 6');
     const footer = host.querySelector('[data-drawer-footer]');
+    expect(footer?.textContent).toContain(en['common.cancel']);
     expect(footer?.textContent).toContain(en['common.save']);
     expect(footer?.textContent).toContain(en['settings.models.delete']);
     expect(lists.some((list) => list.contains(footer))).toBe(false);
     const slot = footer?.closest('form')?.parentElement;
     expect(slot?.className).toContain('shrink-0');
-    expect(slot?.className).toContain('basis-48');
+    expect(slot?.className).toContain('basis-0');
+    expect(slot?.className).toContain('grow');
+    expect(slot?.className).not.toContain('basis-48');
     expect(lists.some((list) => list.contains(slot ?? null))).toBe(false);
     await openMoreOptions();
     expect(host.querySelector<HTMLInputElement>('[id$="-name"]')?.value).toBe('Saved 4');
@@ -1042,9 +1046,7 @@ describe('connection management', () => {
 
   it('does not let an empty connection list claim card space from the first form', async () => {
     connectionIpc.getSnapshot.mockResolvedValue({ connections: [] });
-    await act(async () =>
-      root.render(createElement(ModelConnectionSetting, { variant: 'panel' }))
-    );
+    await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
     const list = host.querySelector('[data-connection-list]');
     expect(list).not.toBeNull();
     expect(list?.textContent).toBe('');
@@ -1086,9 +1088,7 @@ describe('connection management', () => {
       displayName: 'Second',
     };
     connectionIpc.getSnapshot.mockResolvedValue({ connections: [stored, second] });
-    await act(async () =>
-      root.render(createElement(ModelConnectionSetting, { variant: 'panel' }))
-    );
+    await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
     const list = host.querySelector('[data-connection-list]');
     expect(list?.textContent).toContain('Synthetic');
     expect(list?.textContent).toContain('Second');

@@ -1021,16 +1021,16 @@ const panelListClass = (variant: 'section' | 'panel', editing: Editing): string 
   if (variant !== 'panel') return PANEL_LIST;
   if (editing !== null && !isNew(editing))
     return `flex min-h-0 flex-1 flex-col overflow-hidden ${PANEL_LIST}`;
-  if (isNew(editing)) return `min-h-0 shrink overflow-y-auto ${PANEL_LIST}`;
+  if (isNew(editing)) return `min-h-0 max-h-16 shrink-0 overflow-y-auto ${PANEL_LIST}`;
   return `min-h-0 overflow-y-auto ${PANEL_LIST}`;
 };
 
-const panelSiblingListClass = 'min-h-0 shrink overflow-y-auto divide-y divide-border/40';
+const panelSiblingListClass = 'min-h-0 max-h-16 shrink-0 overflow-y-auto divide-y divide-border/40';
 
 const panelFormSlotClass = (variant: 'section' | 'panel', extra = ''): string => {
   const tone = extra ? `${extra} bg-foreground/[0.015]` : 'bg-foreground/[0.015]';
   if (variant !== 'panel') return tone;
-  return `flex min-h-0 grow shrink-0 basis-48 flex-col overflow-hidden ${tone}`;
+  return `flex min-h-0 grow shrink-0 basis-0 flex-col overflow-hidden ${tone}`;
 };
 
 export function ModelConnectionSetting({

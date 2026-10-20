@@ -102,6 +102,7 @@ export function createProductSession(options: {
     selectedIds: () => selectedIds,
     elements: options.elements,
     highlight,
+    onTool: () => syncTool(),
   });
   const toolbar = createSelectionToolbar({
     request,
@@ -545,9 +546,13 @@ export function createProductSession(options: {
       if ((event.target as Element | null)?.closest('input,textarea,[contenteditable="true"]'))
         return;
       const key = event.key.toLowerCase();
+      if (key === 'escape') {
+        if (pins.escape()) consumeShortcut(event);
+        return;
+      }
       if (key === 'c') setTool('comment');
       else if (key === 'b') setTool('brush');
-      else if ((key === 'v' || key === 'escape') && pins.tool() !== 'select') setTool('select');
+      else if (key === 'v' && pins.tool() !== 'select') setTool('select');
       else return;
       consumeShortcut(event);
     },

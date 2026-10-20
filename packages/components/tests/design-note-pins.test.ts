@@ -70,6 +70,16 @@ function type(text: string) {
   field.dispatchEvent(new Event('input', { bubbles: true }));
   return field;
 }
+function escape(field: HTMLElement, init: KeyboardEventInit = {}) {
+  const event = new KeyboardEvent('keydown', {
+    key: 'Escape',
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  });
+  field.dispatchEvent(event);
+  return event;
+}
 function enter(field: HTMLElement, init: KeyboardEventInit = {}) {
   const event = new KeyboardEvent('keydown', {
     key: 'Enter',
@@ -323,6 +333,51 @@ it('saves the note on Enter without sending, and keeps Shift+Enter as a newline'
   expect(document.querySelector('.molly-note-editor')).toBeNull();
   expect(pins.read().notes).toEqual([{ elementIds: ['title'], prompt: 'Warmer headline' }]);
   expect(requests).toEqual([]);
+});
+
+it('one Escape closes the editor, keeps a written note, and returns to Select', () => {
+  pins.setTool('comment');
+  pins.add(['title'], 'Warmer headline');
+  button('Note 1: Warmer headline').click();
+  const field = document.querySelector<HTMLTextAreaElement>('.molly-note-editor textarea')!;
+  expect(escape(field).defaultPrevented).toBe(true);
+  expect(document.querySelector('.molly-note-editor')).toBeNull();
+  expect(pins.tool()).toBe('select');
+  expect(pins.read().notes).toEqual([{ elementIds: ['title'], prompt: 'Warmer headline' }]);
+});
+
+it('one Escape in Brush drops the empty note being written and returns to Select', () => {
+  pins.setTool('brush');
+  stroke(element('photo'), [
+    [200, 250],
+    [300, 350],
+  ]);
+  const field = document.querySelector<HTMLTextAreaElement>('.molly-note-editor textarea')!;
+  escape(field);
+  expect(document.querySelector('.molly-note-editor')).toBeNull();
+  expect(pins.tool()).toBe('select');
+  expect(pins.read().notes).toEqual([]);
+  expect(regionShading()).toHaveLength(0);
+});
+
+it('keeps the editor and the tool for an Escape that confirms an IME composition', () => {
+  pins.setTool('comment');
+  pins.add(['title'], 'Warmer');
+  button('Note 1: Warmer').click();
+  const field = document.querySelector<HTMLTextAreaElement>('.molly-note-editor textarea')!;
+  expect(escape(field, { isComposing: true, keyCode: 229 }).defaultPrevented).toBe(false);
+  expect(document.querySelector('.molly-note-editor')).not.toBeNull();
+  expect(pins.tool()).toBe('comment');
+});
+
+it('one Escape from the canvas closes an editor that lost focus and returns to Select', () => {
+  pins.setTool('comment');
+  pins.add(['title'], 'Warmer');
+  button('Note 1: Warmer').click();
+  expect(pins.escape()).toBe(true);
+  expect(document.querySelector('.molly-note-editor')).toBeNull();
+  expect(pins.tool()).toBe('select');
+  expect(pins.escape()).toBe(false);
 });
 
 it('sends every note on Cmd/Ctrl+Enter from the editor', async () => {

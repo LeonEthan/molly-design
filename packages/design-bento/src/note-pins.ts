@@ -71,6 +71,7 @@ export function createNotePins(options: {
   selectedIds(): readonly string[];
   elements(): readonly { id: string; kind: string }[];
   highlight?: { show(groups: readonly HighlightGroup[]): void };
+  onTool?(tool: NoteTool): void;
 }) {
   let pins: Pin[] = [];
   let epoch = 0;
@@ -146,6 +147,14 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     document.body.dataset.commenting = String(tool === 'comment');
     document.body.dataset.brushing = String(tool === 'brush');
     paintRegions();
+    options.onTool?.(tool);
+  };
+  /** One Escape closes an open editor (a written note stays, an empty one goes) and returns to Select. */
+  const escape = () => {
+    if (!editing && tool === 'select') return false;
+    closeEditor(editing !== undefined);
+    setTool('select');
+    return true;
   };
   const prune = () => {
     const present = new Set(options.elements().map((element) => element.id));
@@ -399,9 +408,9 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     field.addEventListener(
       'keydown',
       (event) => {
-        if (event.key === 'Escape') {
+        if (event.key === 'Escape' && !event.isComposing && event.keyCode !== 229) {
           event.preventDefault();
-          closeEditor(true);
+          escape();
         } else if (
           event.key === 'Enter' &&
           !event.shiftKey &&
@@ -670,6 +679,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
       render();
     },
     setTool,
+    escape,
     tool: () => tool,
     present(value: DesignToolbarPresentation) {
       presentation = value;

@@ -25,12 +25,17 @@ notes-run badge number (`working` shows the number, `changed` a check); the pin
 hover preview uses an in-page-only `hover` tone that never crosses IPC. Note pins are
 screen-only state keyed by element id; requests carry only their epoch. The dock comment
 tool (`C`) turns plain clicks into pins and sets `body[data-commenting]`; the dock brush
-tool (`B`) sets `body[data-brushing]`. The two are mutually exclusive, `V` or Escape
-returns to select, and neither is on while readonly. Both keys are consumed in the
+tool (`B`) sets `body[data-brushing]`. The two are mutually exclusive, `V` returns to select,
+and neither is on while readonly. One Escape closes an open note editor (a written note stays,
+an empty one is dropped) and returns to select for either tool; Escape during IME composition
+does not exit, and `V` typed in the editor is text. Both keys are consumed in the
 capture phase so Bento's legacy `c` handler never sees them. Unsent pins survive an in-session
 frame reload: the shell snapshots them (`window.molly.notesSnapshot`) before the old frame is
-destroyed and restores them (`window.molly.restoreNotes`) into the next one. Restored pins
-are memory-only, prune missing targets, and are dropped on send, clear, or instance destruction.
+destroyed and restores them (`window.molly.restoreNotes`) into the next one. A failed snapshot
+(`null`) keeps the last good one; an empty successful snapshot clears it. Restore releases the
+snapshot only after it lands, and a failed attach keeps it for the retry. Restored pins are
+memory-only and prune missing targets. Pins are dropped on send, clear, or when their target is
+gone; only teardown forgets the snapshot. Pins stay snapshotted while a send is in flight.
 A drag on an image in comment mode draws a box region, and a drag on an image in brush mode
 draws a stroke region (ordered points thinned and resampled to `DESIGN_STROKE_POINTS_MAX`). Both use
 image-normalized coordinates (`image-regions.ts`) and set the note's `region`; a click stores a `pin`

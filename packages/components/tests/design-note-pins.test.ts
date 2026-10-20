@@ -274,3 +274,31 @@ it('merges a note into an existing pin on the same targets and caps the count', 
   expect(pins.read().notes).toHaveLength(DESIGN_NOTES_MAX);
   expect(tray().querySelector('[role=alert]')?.textContent).toContain(String(DESIGN_NOTES_MAX));
 });
+
+it('restores a snapshot into a fresh canvas and drops targets that are gone', () => {
+  pins.add(['title'], 'Warmer');
+  pins.add(['photo'], 'Crop tighter');
+  const notes = pins.snapshot();
+  expect(notes).toEqual([
+    { elementIds: ['title'], prompt: 'Warmer' },
+    { elementIds: ['photo'], prompt: 'Crop tighter' },
+  ]);
+  pins.dispose();
+  present = ['title'];
+  const fresh = createNotePins({
+    request: async () => ({ ok: true }),
+    selectedIds: () => [],
+    elementIds: () => present,
+  });
+  fresh.present({ dark: false, actionsEnabled: true, labels: {} });
+  fresh.restore(notes);
+  fresh.setReadonly(false);
+  expect(fresh.read().notes).toEqual([{ elementIds: ['title'], prompt: 'Warmer' }]);
+  fresh.dispose();
+});
+
+it('keeps notes out of a snapshot while they are being sent', () => {
+  pins.add(['title'], 'Warmer');
+  button('Send').click();
+  expect(pins.snapshot()).toEqual([]);
+});

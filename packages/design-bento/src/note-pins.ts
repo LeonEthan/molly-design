@@ -412,6 +412,20 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
           .map((pin) => ({ elementIds: pin.elementIds, prompt: pin.text.trim() })),
       };
     },
+    snapshot() {
+      if (busy) return [];
+      return pins
+        .filter((pin) => pin.text.trim())
+        .map((pin) => ({ elementIds: [...pin.elementIds], prompt: pin.text.trim() }));
+    },
+    restore(notes: readonly { elementIds: readonly string[]; prompt: string }[]) {
+      if (pins.length || !notes.length) return;
+      pins = notes
+        .slice(0, DESIGN_NOTES_MAX)
+        .map((note) => ({ elementIds: [...new Set(note.elementIds)], text: note.prompt }));
+      prune();
+      changed();
+    },
     settle(expected: number, sent: boolean) {
       busy = false;
       if (!sent || expected !== epoch) {

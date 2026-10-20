@@ -656,6 +656,12 @@ export function createProductSession(options: {
       settleNotes(expected: number, sent: boolean) {
         return pins.settle(expected, sent);
       },
+      notesSnapshot() {
+        return pins.snapshot();
+      },
+      restoreNotes(notes: Parameters<typeof pins.restore>[0]) {
+        pins.restore(notes);
+      },
       marks(expected: number) {
         return marks.read(expected);
       },

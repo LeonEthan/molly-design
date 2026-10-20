@@ -1,5 +1,10 @@
 import type { SessionInputBlock } from '@molly/shared';
 
+/** Composer text for a short title, before mention expansion or canvas scaffolding. */
+export function designSessionTitleBrief(composerText: string): string {
+  return composerText.trim();
+}
+
 /** Capture artwork creation and first-turn input from the same landing selection. */
 export function buildCanvasSubmission(
   inputBlocks: SessionInputBlock[],

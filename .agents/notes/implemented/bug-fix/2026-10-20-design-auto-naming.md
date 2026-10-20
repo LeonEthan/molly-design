@@ -42,7 +42,8 @@ model, not a spawned title worker. The existing guard
 `setTitleIfSourceIn(..., 'generated', ['draft'])` still gates the write, so a
 manual rename is never overwritten. Custom-size and other internal scaffolding
 added to the durable first-turn text is excluded from the title-generation
-prompt. A committed artwork `title` renames draft or generated names exactly
+prompt. The brief is the composer text from before `$skill`, session, and
+element mentions expand into paths and tool instructions. A committed artwork `title` renames draft or generated names exactly
 as before.
 
 ## Verification

@@ -9,6 +9,7 @@ import {
 } from '@molly/shared';
 import {
   buildCanvasSubmission,
+  designSessionTitleBrief,
   parseCanvasSizeInstruction,
 } from '../src/components/chat/canvas-submission';
 import en from '../../../locales/en.json';
@@ -27,6 +28,16 @@ const draft: SessionInputBlock[] = [
     sizeBytes: 100,
   },
 ];
+
+describe('design session title brief', () => {
+  it('keeps the composer text from before mention expansion', () => {
+    const composer = 'Use $poster for a jazz night';
+    const expanded =
+      'Use use /poster [Skill Path](/skills/poster/SKILL.md) for a jazz night\nuse molly mcp to read the skill';
+    expect(designSessionTitleBrief(`  ${composer}  `)).toBe(composer);
+    expect(designSessionTitleBrief(composer)).not.toBe(expanded);
+  });
+});
 
 describe('landing canvas submission through durable turn input', () => {
   it.each([

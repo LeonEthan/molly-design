@@ -197,6 +197,18 @@
     vis = false,
     ready = false;
   var REST_X = 0.44, REST_Y = 0.293, REST_W = 0.4, IMG = 782 / 1014;
+  var chrome = { pw: 0, ph: 0, sw: 0, sh: 0, pct: '', busy: false };
+  function measureChrome() {
+    chrome.pw = pill.offsetWidth;
+    chrome.ph = pill.offsetHeight;
+    chrome.sw = size.offsetWidth;
+    chrome.sh = size.offsetHeight;
+  }
+  if (typeof ResizeObserver === 'function') {
+    var chromeObserver = new ResizeObserver(measureChrome);
+    chromeObserver.observe(pill);
+    chromeObserver.observe(size);
+  }
   function clamp(x) { return Math.max(0, Math.min(1, x)); }
   function seg(time, a, b) { return clamp((time - a) / (b - a)); }
   function ease(x) { return x * x * (3 - 2 * x); }
@@ -247,6 +259,15 @@
     alpha(sweep, reduce ? 0 : magic);
     place(sweep, box.x, box.y, box.w, box.h);
     sweep.firstElementChild.style.backgroundPosition = (ease(seg(time, 4.25, 5.8)) * 140 - 20).toFixed(1) + '% 0';
+    var pct = Math.round(k * 100) + '%',
+      busy = time > 4 && time < 5.95;
+    if (size.dataset.pct !== pct) size.dataset.pct = pct;
+    if (pill.classList.contains('busy') !== busy) pill.classList.toggle('busy', busy);
+    if (!chrome.pw || chrome.pct !== pct || chrome.busy !== busy) {
+      measureChrome();
+      chrome.pct = pct;
+      chrome.busy = busy;
+    }
     var glide = ease(seg(time, 0.1, 0.7)),
       tipX = mix(x + bw + W * 0.02, x + bw * 0.62, glide),
       tipY = mix(y + bh * 0.42, y + bh * 0.55, glide);
@@ -256,8 +277,8 @@
       tipX = mix(x + bw * 0.62, box.x + box.w, toHandle);
       tipY = mix(y + bh * 0.55, box.y + box.h, toHandle);
     }
-    var pillH = pill.offsetHeight || W * 34 / 1536,
-      pillW = pill.offsetWidth || W * 120 / 1536,
+    var pillH = chrome.ph || W * 34 / 1536,
+      pillW = chrome.pw || W * 120 / 1536,
       pillX = Math.min(Math.max(box.x + box.w / 2, pillW / 2 + 8), W - pillW / 2 - 8),
       pillY = Math.min(box.y + box.h + 8 + pillH / 2, H - 8 - pillH / 2);
     if (time > 3.6) {
@@ -276,9 +297,9 @@
     cur.classList.toggle('rsz', time > 2.8 && time < 3.6);
     pill.style.transform = 'translate(' + pillX.toFixed(2) + 'px,' + pillY.toFixed(2) + 'px) translate(-50%,-50%)';
     alpha(pill, reduce ? 0 : fade(time, 3.5, 3.75, 6.4, 6.7));
-    pill.classList.toggle('busy', time > 4 && time < 5.95);
-    size.dataset.pct = Math.round(k * 100) + '%';
-    size.style.transform = 'translate(' + (box.x + box.w - size.offsetWidth - 6).toFixed(2) + 'px,' + Math.max(6, box.y - size.offsetHeight - 6).toFixed(2) + 'px)';
+    var sizeX = Math.min(Math.max(6, box.x + box.w - chrome.sw - 6), Math.max(6, W - chrome.sw - 6)),
+      sizeY = Math.min(Math.max(6, box.y - chrome.sh - 6), Math.max(6, H - chrome.sh - 6));
+    size.style.transform = 'translate(' + sizeX.toFixed(2) + 'px,' + sizeY.toFixed(2) + 'px)';
     alpha(size, reduce ? 0 : fade(time, 2.6, 2.72, 3.55, 3.8));
     hs.dataset.time = time.toFixed(3);
     hs.dataset.iteration = String(it);
@@ -321,10 +342,11 @@
       t = 0;
       it = 0;
       render(0);
-    }
+    } else loadNext();
     run();
   });
   function loadNext() {
+    if (next) return;
     var img = document.createElement('img');
     img.className = 'hero-kettle-next';
     img.alt = '';

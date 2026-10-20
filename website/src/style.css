@@ -239,6 +239,8 @@ html{overflow-x:clip}
   .top.open .sp{display:none}
   .nav-dl{padding:7px 12px;font-size:13px}
   .hero{padding:40px 0 20px}
+  .hero-copy{padding-left:28px}
+  .hero-plate{width:calc(100% + 2px);height:calc(100% + 2px);left:-1px;top:-1px;max-width:none}
   .band{margin-top:56px}
   .band.lime .strip>div{padding:28px 16px}
   .strip{grid-template-columns:1fr}

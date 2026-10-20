@@ -622,7 +622,7 @@ GitHub
 | EN | 中文 |
 |---|---|
 | Molly Design | Molly Design |
-| Illustration: a landscape frame filled edge to edge. The kettle layer is selected, moved, scaled, then regenerated. Headline and specs stay on the left. Reduced motion keeps this frame still. | 示意：横版画面铺满画幅。茶壶图层被选中、移动、缩放，再点重新生成。标题和材质说明留在左侧。减少动态效果时保持这一静帧。 |
+| Illustration: a landscape frame filled edge to edge. The kettle layer is selected, moved, scaled, then regenerated into a sage stoneware kettle. Headline and specs stay on the left. The regenerated kettle is image-generated; cutouts and the repaired background are crafted for this illustration. Reduced motion keeps this frame still. | 示意：横版画面铺满画幅。茶壶图层被选中、移动、缩放，再点重新生成换成鼠尾草绿炻器茶壶。标题和材质说明留在左侧。重新生成的茶壶由图像生成；抠图与背景修补为示意制作。减少动态效果时保持这一静帧。 |
 | The Pour-over headline text layer selected on a coffee guide. The canvas shows selection handles and a floating toolbar with font and size, while the Layers panel highlights the row with its position and size | 在手冲咖啡长图上选中 Pour-over 标题文字图层：画布上有选框，浮动工具栏显示字体和字号，右侧图层面板高亮这一层并显示位置和尺寸 |
 | A screen recording: on the Molly canvas, the headline of a café poster is selected and changed from “maple oat” to “honey oat” | 一段屏幕录制：在 Molly 画布上选中咖啡海报的标题，把 maple oat 改成 honey oat |
 | Molly’s list of public-domain reference images it checked on Wikimedia Commons, and what it took from each | Molly 列出它在维基共享资源上查过的公版参考图，以及每一张借鉴了什么 |

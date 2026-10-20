@@ -9,9 +9,8 @@ run(`pause ${lang || 'auto'} ${width}`, async () => {
   if (lang) await page.addInitScript((language) => localStorage.setItem('molly-lang', language), lang);
   await page.goto(BASE, { waitUntil: 'load' });
   if ((await page.locator('.hs').count()) === 0) {
-    console.log('pause: no hero loop');
     await browser.close();
-    return [];
+    throw new Error('pause: hero loop missing');
   }
   const stage = page.locator('.hs');
   const time = () => page.evaluate(() => document.querySelector('.hs').dataset.time);

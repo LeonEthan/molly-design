@@ -22,7 +22,7 @@ Trimmed from the v7 working notes (rounds v7 → v7i, 2026-10-17). This file kee
 - Facts: Apple Silicon (arm64) only, macOS 13 Ventura or later. The app is Developer ID signed and notarized; the DMG itself is never called signed.
 - No version numbers in visible text (#175, #184). No plugins, roadmap, stats, testimonials or customer logos.
 - "Real capture" wording is scoped to sections that show real app captures (the recorded edit, the export menu, workflow and explores screenshots, the sample wall of real exports).
-- The hero is a crafted animation and always shows the visible `[ Illustration ]` / `[ 示意动画 ]` label. Its bilingual aria-label says the cutouts and repaired background are crafted and that the sage-green mug is generated.
+- The hero is a crafted animation and has no visible illustration label. Its bilingual aria-label says the regenerated sage stoneware kettle is image-generated, and that the cutouts and the repaired background are crafted for this illustration.
 - Sample-wall brands are made up and the captions say so: Stillwater Clay, Ember Current, Tideform, Juniper Wharf, Moss & Ember.
 - The research capture shows a 1936 WPA public-domain poster as a reference inside the built-in browser, not as Molly output. It is the only third-party artwork.
 - "Connect a model" was removed from the demo: the only Settings capture shows provider and model names. "Your key stays on this computer" remains in the hero bullets and FAQ.
@@ -51,14 +51,17 @@ Every shipped image and video was checked by eye. Raw masters (app captures and 
 | Explores trio | `p-research-v7c`, `p-options-v7c`, `p-decide-v7c` | Crops of the research and options captures; "You decide" shows the agent waiting for the pick |
 | Sample wall | `s-detail`, `s-longform`, `s-kv`, `s-social`, `s-packaging` | Real Molly exports (made-up brands) |
 | Hero tiles | `hx-kettle`, `hx-latte`, `hx-forest`, `hx-ribbon` | Crops of the sample exports |
-| Hero scene | `scene-plate`, `scene-kettle`, `scene-kettle-shadow`, `scene-mug`, `scene-mug-shadow` | Crafted from the Stillwater Clay photo; repaired plate; mug image-generated; synthesized shadows |
+| Hero plate | `hero-plate` | Generated landscape photograph, 1536×864 |
+| Hero kettle | `hero-kettle` | Generated speckled stoneware cutout, 1014×782 |
+| Hero kettle, regenerated | `hero-kettle-next` | Glaze edit of `hero-kettle` (sage stoneware, gpt-image-2), fitted to the same 1014×782 frame |
 | `og.png` | — | Real wordmark plus the Tideform KV export, 1200×630 |
 | Wordmark, icons | `brand/`, `icons/` | Real Molly wordmark and icon |
 
 ## Hero animation
 
 - The hero demo rest frame is a 1536×864 landscape. A warm stone photograph fills the stage edge to edge, with the counter across the bottom. The left column is vertically centered: a header rule, the two-line poster headline, the spec rows, and the tagline. The speckled kettle is a separate transparent layer, large on the right, and “Object study · 2026” sits beside it (#184).
-- The loop selects that kettle layer, drags it, and scales it from the kettle’s bottom center so the base stays on the counter. The size readout counts from 100% to the final scale while that handle is dragged. Regenerate then crossfades it to a second sage stoneware kettle in the same frame. The return eases back to the original cream kettle and the rest frame. The second image loads after the plate has painted. `prefers-reduced-motion` keeps the rest frame and does not run the loop.
+- The loop selects that kettle layer, drags it, and scales it from the kettle’s bottom center so the base stays on the counter. The size readout counts from 100% to the final scale while that handle is dragged. Regenerate then crossfades it to a second sage stoneware kettle in the same frame. The return eases back to the original cream kettle and the rest frame. The second image loads after the plate has painted, including when reduced motion is turned off after load. `prefers-reduced-motion` keeps the rest frame and does not run the loop.
+- Desktop placement stays `left: 44%`, `top: 29.3%`, `width: 40%`. At 700px and below, the left column uses 28px of padding and the plate extends 1px under the stage clip so the rounded edge does not reveal the stage background. The size readout is kept inside the stage.
 - The hero headline is one sentence per line in both languages. The second sentence keeps the highlight. The subheadline under it is gone (#184).
 - The plate photograph is the LCP element. The labelled image role describes the still; it does not change which element Lighthouse paints first.
 
@@ -85,7 +88,7 @@ Mobile performance has varied from 95 to 99 between runs; the gate is ≥95.
 
 ## Known limits
 
-- The hero mug is an illustration composite: its shadow is synthesized and its satin texture is smoother than the kettle.
+- The regenerated hero kettle is a glaze edit of the original cutout in the same frame. The plate photograph supplies the counter and the shadow.
 - The cursor press is subtle and best judged in motion.
 - Native video-control focus is drawn inside the browser's shadow DOM, so the a11y checker logs those stops without a CSS ring.
 - Three existing GitHub Issues links remain in the page alongside the repository and DMG links.

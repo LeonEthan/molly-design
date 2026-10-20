@@ -171,8 +171,12 @@ describe('image connection form values', () => {
     ).toMatchObject({
       protocol: 'dashscope',
       baseUrl: 'https://images.example/v1',
-      apiKey: 'synthetic',
+      apiKey: '',
     });
+    expect(
+      applyImageProtocolChoice(draftOf({ protocol: 'dashscope', apiKey: 'synthetic' }), 'dashscope')
+        .apiKey
+    ).toBe('synthetic');
     expect(createImageConnectionFormDraft(storedConnection()).baseUrl).toBe(
       storedConnection().baseUrl
     );
@@ -599,6 +603,29 @@ describe('ImageConnectionForm', () => {
         baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
         apiKey: 'synthetic-typed-key',
       });
+    });
+
+    it('drops a key once the first address changes', async () => {
+      const requests: CheckImageConnection[] = [];
+      const view = await renderForm({
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true };
+        },
+      });
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      await typeInto(await baseUrlInput(view), 'https://images.example.com/v1');
+      expect(apiKeyInput(view).value).toBe('synthetic-typed-key');
+      await typeInto(await baseUrlInput(view), 'https://elsewhere.example.com/v1');
+      expect(apiKeyInput(view).value).toBe('');
+      await settle();
+      expect(requests).toEqual([]);
+      await click(button(view, copy('settings.imageConnection.protocols.dashscope')));
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      await click(button(view, copy('settings.imageConnection.protocols.openaiImages')));
+      expect(apiKeyInput(view).value).toBe('');
+      await settle();
+      expect(requests).toEqual([]);
     });
 
     it('drops a key that was typed for a different address', async () => {

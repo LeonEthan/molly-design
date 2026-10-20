@@ -77,15 +77,16 @@ export const imageProtocolLabelKey = (connection: Pick<ImageConnectionView, 'pro
   PROTOCOL_COPY[imageConnectionProtocol(connection)].label;
 
 /**
- * Switching the connection type keeps the address and anything the user typed.
+ * Switching the connection type keeps the address already in the field.
  * An empty address stays empty — the field has no vendor default to swap in.
- * A saved key does not follow: the form treats the new protocol as a new destination.
+ * A typed key does not follow: the new protocol is a different destination.
  */
 export function applyImageProtocolChoice(
   draft: ImageConnectionFormDraft,
   protocol: ImageConnectionProtocol
 ): ImageConnectionFormDraft {
-  return { ...draft, protocol };
+  if (draft.protocol === protocol) return draft;
+  return { ...draft, protocol, apiKey: '' };
 }
 
 /** A saved credential belongs to one protocol and one address. */
@@ -360,9 +361,10 @@ export function ImageConnectionForm({
               value: protocol,
               label: t(PROTOCOL_COPY[protocol].label),
             }))}
-            onChange={(protocol) =>
-              setDraft((current) => applyImageProtocolChoice(current, protocol))
-            }
+            onChange={(protocol) => {
+              keyBoundUrl.current = null;
+              setDraft((current) => applyImageProtocolChoice(current, protocol));
+            }}
           />
         </Field>
 
@@ -391,8 +393,12 @@ export function ImageConnectionForm({
             onChange={(event) => {
               const next = event.target.value;
               const bound = keyBoundUrl.current;
-              const clearTypedKey = bound !== null && bound.trim() !== '' && bound !== next;
+              const unbound = bound === null || bound.trim() === '';
+              const completing =
+                unbound && ImageConnectionEndpointSchema.safeParse(next.trim()).success;
+              const clearTypedKey = !unbound && bound !== next;
               if (clearTypedKey) keyBoundUrl.current = null;
+              else if (completing) keyBoundUrl.current = next;
               setDraft((current) => ({
                 ...current,
                 baseUrl: next,

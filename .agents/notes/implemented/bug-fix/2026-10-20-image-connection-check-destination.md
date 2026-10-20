@@ -5,7 +5,7 @@ Translation: pending
 
 ## Abstract
 
-The image connection form was sending a saved key to a different protocol when the address stayed the same, wiping a key typed before the address, and treating a missing model list as “address not found.” A saved key is now used only for its own protocol and address. A key typed while the address is empty stays as that address is filled. Optional model-list 404/405/501 responses stay silent.
+The image connection form was sending a saved key to a different protocol when the address stayed the same, wiping a key typed before the address, and treating a missing model list as “address not found.” A saved key is now used only for its own protocol and address. A typed key is cleared when the protocol changes. A key typed while the address is empty stays until that first valid address is replaced. Optional model-list 404/405/501 responses stay silent.
 
 ## Evidence and decision
 

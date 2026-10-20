@@ -377,3 +377,32 @@ it('keeps notes out of a snapshot while they are being sent', () => {
   button('Send').click();
   expect(pins.snapshot()).toEqual([]);
 });
+
+function regionShading() {
+  return document.querySelectorAll('.molly-note-regions polygon');
+}
+
+function drawRegionNote() {
+  pins.setCommenting(true);
+  drag(element('photo'), [200, 250], [300, 350]);
+  type('Brighter');
+  button('Save note').click();
+  expect(regionShading()).toHaveLength(1);
+}
+
+it('clears region shading when Clear removes every note', () => {
+  drawRegionNote();
+  button('Clear all notes').click();
+  expect(pins.read().notes).toEqual([]);
+  expect(regionShading()).toHaveLength(0);
+});
+
+it('clears region shading once an accepted send settles', async () => {
+  drawRegionNote();
+  const { epoch } = pins.read();
+  button('Send').click();
+  await vi.waitFor(() => expect(requests).toEqual([{ type: 'notes', notesEpoch: epoch }]));
+  expect(pins.settle(epoch, true)).toBe(true);
+  expect(pins.read().notes).toEqual([]);
+  expect(regionShading()).toHaveLength(0);
+});

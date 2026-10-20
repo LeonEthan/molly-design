@@ -191,7 +191,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id]{cursor:crosshair!impor
   }
   function position() {
     frame = 0;
-    if (!pins.length) return;
+    if (!pins.length) return paintRegions();
     if (prune()) return render();
     const markers = [...layer.children] as HTMLElement[];
     pins.forEach((pin, index) => {

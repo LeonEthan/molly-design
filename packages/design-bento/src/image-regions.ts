@@ -154,9 +154,9 @@ function screenCorners(image: HTMLImageElement): NormalizedPoint[] | undefined {
     return corner;
   });
   parent.append(probe);
-  const points = corners.map((corner) => {
+  const points = corners.map((corner): NormalizedPoint => {
     const rect = corner.getBoundingClientRect();
-    return [rect.left, rect.top] as const;
+    return [rect.left, rect.top];
   });
   probe.remove();
   return points;

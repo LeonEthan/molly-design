@@ -416,9 +416,12 @@ export const resolveAcpSessionConfigSelection = (
         !(configId in edits.configOptions);
       if (!runtimeOmittedKey) {
         const offered = resolvedThought.options.map((option) => option.value);
-        configOptionValues[configId] = offered.includes(hierarchy.reasoning)
-          ? hierarchy.reasoning
-          : defaultComposerReasoning(offered, true);
+        configOptionValues[configId] =
+          hierarchy.reasoning === 'off'
+            ? 'off'
+            : offered.includes(hierarchy.reasoning)
+              ? hierarchy.reasoning
+              : defaultComposerReasoning(offered, true);
       }
     }
     const modelSelector = selectors.find(

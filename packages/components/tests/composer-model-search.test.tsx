@@ -253,19 +253,19 @@ describe('composer model picker search', () => {
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
   });
 
-  it('labels ungrouped catalog rows as Other models on the provider row', async () => {
+  it('labels ungrouped catalog rows as Models on the provider row', async () => {
     const plain = { value: 'plain-gpt', label: 'Plain GPT' };
     await openRunConfigMenu({
       ...mollyProps,
       modelOptions: [...twoProviderModels, plain],
       selectedModelId: plain.value,
     });
-    expect(rootRowText().some((text) => text.startsWith('ProviderOther models'))).toBe(true);
+    expect(rootRowText().some((text) => text.startsWith('ProviderModels'))).toBe(true);
     const providerRows = radioRows(await openSubmenu('Provider'));
     expect(providerRows.map((row) => row.textContent)).toEqual([
       'Studio',
       'Review',
-      'Other models',
+      'Models',
     ]);
     expect(providerRows[2]?.getAttribute('aria-checked')).toBe('true');
   });

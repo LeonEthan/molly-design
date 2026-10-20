@@ -410,7 +410,7 @@ export function DesktopRunConfigMenu({
   const modelPickerLabel = t('chat.runConfig.modelPickerLabel', 'Provider and model');
   const providerRowLabel = t('chat.runConfig.providerLabel', 'Provider');
   const catalogProviderLabel = t('chat.runConfig.catalogProvider', 'Models');
-  const ungroupedProviderLabel = t('chat.runConfig.ungroupedProvider', 'Other models');
+  const ungroupedProviderLabel = t('chat.runConfig.ungroupedProvider', 'Models');
   const connectionsLabel = t('chat.runConfig.openConnections', 'Connections');
   const modelRowLabel = t('chat.runConfig.modelLabel', 'Model');
   const modelSearchPlaceholder = t('chat.runConfig.modelSearchPlaceholder', 'Search models');

@@ -536,7 +536,7 @@
   "chat.runConfig.agentLabel": "代理",
   "chat.runConfig.providerLabel": "服务商",
   "chat.runConfig.catalogProvider": "模型",
-  "chat.runConfig.ungroupedProvider": "其他模型",
+  "chat.runConfig.ungroupedProvider": "模型",
   "chat.runConfig.openConnections": "连接",
   "chat.runConfig.allProviders": "全部服务商",
   "chat.runConfig.deepseek.delegationDiscussion": "上游讨论",

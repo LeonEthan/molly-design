@@ -615,6 +615,36 @@ describe('fenceAcpSessionUserEdits', () => {
     expect(resolved.configOptionValues.model).toBe(first);
   });
 
+  it('keeps submit at off when the published ladder is empty but probe options omit off', () => {
+    const flash = encodeMollyModelOption('deepseek', 'deepseek-v4-flash');
+    const resolved = resolveAcpSessionConfigSelection(
+      { edits: emptyEdits, preferences: { modelId: flash } },
+      {
+        capabilityAuthority: 'authoritative',
+        modeOptions: [],
+        modelOptions: [{ value: flash, label: 'Flash', group: 'DeepSeek' }],
+        defaultModeId: null,
+        defaultModelId: flash,
+        modelReasoningEfforts: { [flash]: [] },
+        configOptionSelectors: [
+          {
+            configId: 'reasoning_effort',
+            label: 'Reasoning',
+            type: 'select',
+            category: 'thought_level',
+            currentValue: 'high',
+            options: [
+              { value: 'low', label: 'Low' },
+              { value: 'high', label: 'High' },
+            ],
+          },
+        ],
+      },
+      { cliType: 'builtin', agentType: 'molly' }
+    );
+    expect(resolved.configOptionValues.reasoning_effort).toBe('off');
+  });
+
   it('defaults a fresh Molly connection to the first provider model and high', () => {
     const first = encodeMollyModelOption('deepseek', 'deepseek-v4-flash');
     const second = encodeMollyModelOption('deepseek', 'deepseek-v4-pro');

@@ -12,6 +12,8 @@ import {
   designSessionTitleBrief,
   parseCanvasSizeInstruction,
 } from '../src/components/chat/canvas-submission';
+import { wrapPastedTextChipLabel } from '../src/components/mentions/mention-chips';
+import { insertPastedTextDraft } from '../src/lib/pasted-text-draft';
 import en from '../../../locales/en.json';
 import zhCN from '../../../locales/zh_CN.json';
 
@@ -36,6 +38,26 @@ describe('design session title brief', () => {
       'Use use /poster [Skill Path](/skills/poster/SKILL.md) for a jazz night\nuse molly mcp to read the skill';
     expect(designSessionTitleBrief(`  ${composer}  `)).toBe(composer);
     expect(designSessionTitleBrief(composer)).not.toBe(expanded);
+  });
+
+  it('restores a large paste and leaves skill mentions literal', () => {
+    const pasted = `${'Poster copy. '.repeat(80)}\nUse $poster for the headline.`;
+    const prefix = 'Brief for $poster: ';
+    const inserted = insertPastedTextDraft({
+      currentValue: prefix,
+      pastedText: pasted,
+      displayText: wrapPastedTextChipLabel(`[Pasted ${pasted.length} chars]`),
+      id: 'paste-1',
+      selectionStart: prefix.length,
+      selectionEnd: prefix.length,
+    });
+    expect(inserted).not.toBeNull();
+    const brief = designSessionTitleBrief(inserted!.nextValue, [inserted!.draft]);
+    expect(brief).toBe(`${prefix}${pasted}`);
+    expect(brief).not.toContain('[Pasted');
+    expect(brief).toContain('$poster');
+    expect(brief).not.toContain('Skill Path');
+    expect(brief).not.toContain('Canvas size:');
   });
 });
 

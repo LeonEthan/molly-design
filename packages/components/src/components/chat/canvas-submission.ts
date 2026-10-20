@@ -1,8 +1,18 @@
-import type { SessionInputBlock } from '@molly/shared';
+import { applyTextRewrites, type SessionInputBlock } from '@molly/shared';
+import { buildPastedTextRewrites, type PastedTextDraft } from '@/lib/pasted-text-draft';
 
-/** Composer text for a short title, before mention expansion or canvas scaffolding. */
-export function designSessionTitleBrief(composerText: string): string {
-  return composerText.trim();
+/**
+ * Composer text for a short title.
+ *
+ * A large paste is only a `[Pasted N chars]` chip in the composer; the brief
+ * restores that text. `$skill`, session, and element mentions stay literal,
+ * and canvas scaffolding is never part of this string.
+ */
+export function designSessionTitleBrief(
+  composerText: string,
+  pastedTextDrafts: readonly PastedTextDraft[] = []
+): string {
+  return applyTextRewrites(composerText, buildPastedTextRewrites(pastedTextDrafts)).text.trim();
 }
 
 /** Capture artwork creation and first-turn input from the same landing selection. */

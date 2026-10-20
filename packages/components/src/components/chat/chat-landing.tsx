@@ -1391,7 +1391,7 @@ function WorkspaceChatLanding({
       const inputConfig = buildSessionTurnInputConfig({
         inputBlocks,
         prompt: promptPayload,
-        titlePrompt: designSessionTitleBrief(prompt) || undefined,
+        titlePrompt: designSessionTitleBrief(prompt, pastedTextDrafts) || undefined,
         cliType: selectedConfig.cliType,
         agentType: selectedConfig.agentType,
         modeId: modeOptions.length > 0 ? (selectedModeId ?? undefined) : undefined,

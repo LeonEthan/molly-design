@@ -43,8 +43,9 @@ model, not a spawned title worker. The existing guard
 manual rename is never overwritten. Custom-size and other internal scaffolding
 added to the durable first-turn text is excluded from the title-generation
 prompt. The brief is the composer text from before `$skill`, session, and
-element mentions expand into paths and tool instructions. A committed artwork `title` renames draft or generated names exactly
-as before.
+element mentions expand into paths and tool instructions, with a large-paste
+placeholder restored to the pasted text. A committed artwork `title` renames
+draft or generated names exactly as before.
 
 ## Verification
 

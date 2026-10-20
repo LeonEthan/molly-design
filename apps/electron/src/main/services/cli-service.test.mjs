@@ -166,3 +166,34 @@ void test('turning the setting off during a run releases the block', () => {
   service.setPreventSleepEnabled(false)
   assert.equal(powerSave.active, false)
 })
+
+void test('quit shutdown shares its pending drain and stays complete until CLI restart', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const { service } = loadCliServiceWithSettings(undefined)
+  const stopped = Promise.withResolvers()
+  const child = new EventEmitter()
+  child.exitCode = null
+  child.signalCode = null
+  child.kill = () => {
+    child.signalCode = 'SIGTERM'
+    service.trackedCliChildren.delete(child)
+    child.emit('close')
+  }
+  service.trackedCliChildren.add(child)
+  service.supervisor = { stop: () => stopped.promise }
+  const first = service.shutdownForQuit()
+  const second = service.shutdownForQuit()
+  assert.equal(first, second)
+  assert.equal(child.signalCode, null)
+  stopped.resolve()
+  await first
+  assert.equal(child.signalCode, 'SIGTERM')
+  assert.equal(service.supervisor, null)
+  assert.equal(service.shutdownForQuit(), first)
+
+  service.startSupervisorIfNeeded = () => undefined
+  service.autoStart(undefined)
+  const restartedShutdown = service.shutdownForQuit()
+  assert.notEqual(restartedShutdown, first)
+  await restartedShutdown
+})

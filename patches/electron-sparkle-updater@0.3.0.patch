@@ -1,0 +1,100 @@
+diff --git a/native/src/sparkle_bridge.mm b/native/src/sparkle_bridge.mm
+--- a/native/src/sparkle_bridge.mm
++++ b/native/src/sparkle_bridge.mm
+@@ -65,6 +65,7 @@
+ // and never presents SPUStandardUserDriver alerts.
+ @interface SilentUserDriver : NSObject <SPUUserDriver>
+ @property(nonatomic, copy, nullable) void (^readyToInstallReply)(SPUUserUpdateChoice);
++@property(nonatomic, copy, nullable) void (^checkCancellation)(void);
+ @property(nonatomic, assign) uint64_t expectedContentLength;
+ @property(nonatomic, assign) uint64_t receivedLength;
+ @property(nonatomic, assign) BOOL installWhenReady;
+@@ -78,13 +79,19 @@
+   reply([[SUUpdatePermissionResponse alloc] initWithAutomaticUpdateChecks:YES sendSystemProfile:NO]);
+ }
+ 
++- (void)retireCheckCancellation {
++  self.checkCancellation = nil;
++}
++
+ - (void)showUserInitiatedUpdateCheckWithCancellation:(void (^)(void))cancellation {
++  self.checkCancellation = cancellation;
+   EmitSparkleEvent(@{@"type" : @"checking"});
+ }
+ 
+ - (void)showUpdateFoundWithAppcastItem:(SUAppcastItem *)appcastItem
+                                  state:(SPUUserUpdateState *)state
+                                  reply:(void (^)(SPUUserUpdateChoice))reply {
++  [self retireCheckCancellation];
+   if (appcastItem.informationOnlyUpdate) {
+     self.installWhenReady = NO;
+     EmitSparkleEvent(@{@"type" : @"error", @"message" : @"informational update"});
+@@ -121,6 +128,7 @@
+ }
+ 
+ - (void)showUpdateNotFoundWithError:(NSError *)error acknowledgement:(void (^)(void))acknowledgement {
++  [self retireCheckCancellation];
+   self.installWhenReady = NO;
+   self.readyToInstallReply = nil;
+   EmitSparkleEvent(@{@"type" : @"update-not-available"});
+@@ -128,6 +136,7 @@
+ }
+ 
+ - (void)showUpdaterError:(NSError *)error acknowledgement:(void (^)(void))acknowledgement {
++  [self retireCheckCancellation];
+   self.installWhenReady = NO;
+   self.readyToInstallReply = nil;
+   NSString *message = error.localizedDescription.length > 0 ? error.localizedDescription : @"sparkle_error";
+@@ -136,6 +145,7 @@
+ }
+ 
+ - (void)showDownloadInitiatedWithCancellation:(void (^)(void))cancellation {
++  [self retireCheckCancellation];
+   self.receivedLength = 0;
+   self.expectedContentLength = 0;
+ }
+@@ -195,6 +205,7 @@
+ }
+ 
+ - (void)dismissUpdateInstallation {
++  [self retireCheckCancellation];
+   self.installWhenReady = NO;
+   self.readyToInstallReply = nil;
+ }
+@@ -305,6 +316,17 @@
+   }
+ }
+ 
++Napi::Value CancelCheck(const Napi::CallbackInfo &info) {
++  Napi::Env env = info.Env();
++  RunOnMain(^{
++    if (g_userDriver == nil) return;
++    void (^cancel)(void) = g_userDriver.checkCancellation;
++    [g_userDriver retireCheckCancellation];
++    if (cancel != nil) cancel();
++  });
++  return env.Undefined();
++}
++
+ Napi::Value CheckForUpdates(const Napi::CallbackInfo &info) {
+   Napi::Env env = info.Env();
+   RunOnMain(^{
+@@ -385,6 +407,7 @@
+ Napi::Object InitModule(Napi::Env env, Napi::Object exports) {
+   exports.Set(Napi::String::New(env, "init"), Napi::Function::New(env, Init));
+   exports.Set(Napi::String::New(env, "checkForUpdates"), Napi::Function::New(env, CheckForUpdates));
++  exports.Set(Napi::String::New(env, "cancelCheck"), Napi::Function::New(env, CancelCheck));
+   exports.Set(Napi::String::New(env, "installUpdateNow"), Napi::Function::New(env, InstallUpdateNow));
+   exports.Set(Napi::String::New(env, "setAutomaticChecks"), Napi::Function::New(env, SetAutomaticChecks));
+   exports.Set(Napi::String::New(env, "setEventHandler"), Napi::Function::New(env, SetEventHandler));
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -17,6 +17,7 @@
+ export interface SparkleBridge {
+     init(options: SparkleInitOptions): boolean;
+     checkForUpdates(): void;
++    cancelCheck?(): void;
+     installUpdateNow(): void;
+     setAutomaticChecks(enabled: boolean): void;
+     setEventHandler(handler: (event: SparkleBridgeEvent) => void): void;

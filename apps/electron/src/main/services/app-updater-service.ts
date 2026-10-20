@@ -3,7 +3,7 @@ import { appendFileSync, existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import { autoUpdater, MacUpdater, NsisUpdater, type AppUpdater } from 'electron-updater'
 import { loadSparkleBridge, type SparkleBridge } from 'electron-sparkle-updater'
 import type {
   CheckForElectronUpdateResult,
@@ -15,6 +15,16 @@ import { formatUnknownError } from '../utils'
 import { setAppQuitting } from '../window-state'
 import { readUpdaterReleaseMetadata } from './app-updater-metadata'
 import { sparkleEventToStatePatch } from './app-updater-sparkle-events'
+import { UPDATE_CHECK_UNANSWERED } from '@molly/shared/electron-ipc'
+import {
+  UPDATE_CHECK_UNANSWERED_MS,
+  beginSparkleCheck,
+  createCheckingWatchdog,
+  nextSparkleEventGate,
+  recoverUnansweredCheck,
+  shouldResetPhaseForManualCheck,
+  type TimeoutHandle
+} from './app-updater-check'
 import {
   resolveSparkleAddonPath,
   resolveSparkleAppcastUrl,
@@ -81,21 +91,29 @@ export class AppUpdaterService {
     currentVersion: app.getVersion()
   }
   private started = false
-  private listenersAttached = false
+  private electronUpdater: AppUpdater | null = null
   private checkInFlight = false
+  private checkTicket = 0
   private intervalRef: NodeJS.Timeout | null = null
   private sparkleBridge: SparkleBridge | null = null
+  private sparkleSessionOpen = false
+  private ignoreSparkleUntilChecking = false
   /** Package electron-updater has on disk, cleared when a newer one supersedes it. */
   private downloadedFile: string | undefined
   private errorCount = 0
   private preparationInFlight = false
   private configurationUnavailable = false
+  private checkingWatchdog: ReturnType<typeof createCheckingWatchdog> | null = null
 
   constructor(
     private readonly options: {
       enabled?: boolean
       requireSparkle?: boolean
       prepareInstall?: () => Promise<() => Promise<void>>
+      prepareToRelaunch?: () => Promise<void>
+      abortRelaunch?: () => void
+      checkTimeoutMs?: number
+      scheduleTimeout?: (callback: () => void, delayMs: number) => TimeoutHandle
     } = {}
   ) {}
 
@@ -128,31 +146,36 @@ export class AppUpdaterService {
       return
     }
 
-    autoUpdater.logger = createUpdaterLogger()
-    autoUpdater.autoDownload = true
-    autoUpdater.autoInstallOnAppQuit = false
+    this.configureElectronUpdater(autoUpdater)
+    void this.checkForUpdates()
+    this.intervalRef = setInterval(() => {
+      void this.checkForUpdates()
+    }, UPDATE_CHECK_INTERVAL_MS)
+  }
+
+  private configureElectronUpdater(updater: AppUpdater): void {
+    updater.logger = createUpdaterLogger()
+    updater.autoDownload = true
+    updater.autoInstallOnAppQuit = true
 
     if (!app.isPackaged) {
-      autoUpdater.forceDevUpdateConfig = true
+      updater.forceDevUpdateConfig = true
     }
 
     const updateChannel = this.resolveUpdateChannel()
-    autoUpdater.channel = updateChannel
-    autoUpdater.allowPrerelease = updateChannel !== 'latest'
+    updater.channel = updateChannel
+    updater.allowPrerelease = updateChannel !== 'latest'
 
     const updateUrl = readNonEmptyString(import.meta.env.VITE_ELECTRON_UPDATE_URL)
     if (updateUrl) {
-      autoUpdater.setFeedURL({
+      updater.setFeedURL({
         provider: 'generic',
         url: updateUrl
       })
     }
 
-    this.attachListeners()
-    void this.checkForUpdates()
-    this.intervalRef = setInterval(() => {
-      void this.checkForUpdates()
-    }, UPDATE_CHECK_INTERVAL_MS)
+    this.electronUpdater = updater
+    this.attachListeners(updater)
   }
 
   stop(): void {
@@ -160,6 +183,7 @@ export class AppUpdaterService {
       clearInterval(this.intervalRef)
       this.intervalRef = null
     }
+    this.checkingWatchdog?.stop()
   }
 
   async checkForUpdates(): Promise<CheckForElectronUpdateResult> {
@@ -171,6 +195,25 @@ export class AppUpdaterService {
     }
     if (this.sparkleBridge) {
       try {
+        if (!shouldResetPhaseForManualCheck(this.state.phase)) {
+          this.emitState()
+          return { started: false }
+        }
+        const started = beginSparkleCheck({
+          bridge: this.sparkleBridge,
+          sessionOpen: this.sparkleSessionOpen
+        })
+        this.sparkleSessionOpen = started.sessionOpen
+        this.ignoreSparkleUntilChecking =
+          started.ignoreUntilChecking || this.ignoreSparkleUntilChecking
+        if (!started.started) {
+          this.setState({
+            phase: 'error',
+            error: UPDATE_CHECK_UNANSWERED,
+            checkedAtMs: Date.now()
+          })
+          return { started: false, error: UPDATE_CHECK_UNANSWERED }
+        }
         this.setState({
           phase: 'checking',
           error: undefined,
@@ -180,7 +223,6 @@ export class AppUpdaterService {
           transferred: undefined,
           total: undefined
         })
-        this.sparkleBridge.checkForUpdates()
         return { started: true }
       } catch (error) {
         const message = formatUnknownError(error)
@@ -202,24 +244,42 @@ export class AppUpdaterService {
       }
     }
 
+    if (!shouldResetPhaseForManualCheck(this.state.phase)) {
+      this.emitState()
+      return { started: false }
+    }
+
+    const ticket = ++this.checkTicket
     this.checkInFlight = true
     this.setState({
       phase: 'checking',
-      error: undefined
+      error: undefined,
+      checkedAtMs: Date.now(),
+      percent: undefined,
+      bytesPerSecond: undefined,
+      transferred: undefined,
+      total: undefined
     })
 
     try {
-      await autoUpdater.checkForUpdates()
+      let updater = this.electronUpdater
+      if (!updater) {
+        if (process.platform === 'darwin') updater = new MacUpdater()
+        else if (process.platform === 'win32') updater = new NsisUpdater()
+        else throw new Error('Unsupported updater platform')
+        this.configureElectronUpdater(updater)
+      }
+      await updater.checkForUpdates()
       return { started: true }
     } catch (error) {
       const message = formatUnknownError(error)
-      this.recordError(message)
+      if (this.checkTicket === ticket) this.recordError(message)
       return {
         started: false,
         error: message
       }
     } finally {
-      this.checkInFlight = false
+      if (this.checkTicket === ticket) this.checkInFlight = false
     }
   }
 
@@ -245,6 +305,15 @@ export class AppUpdaterService {
   }
 
   private async installDownloadedUpdate(): Promise<QuitAndInstallElectronUpdateResult> {
+    try {
+      await this.options.prepareToRelaunch?.()
+    } catch (error) {
+      this.options.abortRelaunch?.()
+      const message = formatUnknownError(error)
+      this.recordError(message)
+      return { ok: false, error: message }
+    }
+
     if (this.sparkleBridge) {
       try {
         setAppQuitting(true)
@@ -252,6 +321,7 @@ export class AppUpdaterService {
         return { ok: true }
       } catch (error) {
         setAppQuitting(false)
+        this.options.abortRelaunch?.()
         const message = formatUnknownError(error)
         this.recordError(message)
         return {
@@ -261,7 +331,7 @@ export class AppUpdaterService {
       }
     }
 
-    if (this.state.phase !== 'downloaded') {
+    if (this.state.phase !== 'downloaded' || !this.electronUpdater) {
       return {
         ok: false,
         error: 'update_not_downloaded'
@@ -269,10 +339,9 @@ export class AppUpdaterService {
     }
 
     try {
-      // Ensure macOS close handlers don't hide windows and block updater-triggered quit.
       setAppQuitting(true)
       const errorsBeforeInstall = this.errorCount
-      autoUpdater.quitAndInstall(false, true)
+      this.electronUpdater.quitAndInstall(false, true)
       // electron-updater reports install failures through its `error` event and
       // returns normally, so a plain `ok: true` here would leave the renderer
       // spinning on an install that never started. The event listener is
@@ -281,6 +350,7 @@ export class AppUpdaterService {
       // user can retry.
       if (this.errorCount !== errorsBeforeInstall) {
         setAppQuitting(false)
+        this.options.abortRelaunch?.()
         return {
           ok: false,
           error: this.state.error ?? 'update_install_failed'
@@ -289,11 +359,9 @@ export class AppUpdaterService {
       return { ok: true }
     } catch (error) {
       setAppQuitting(false)
+      this.options.abortRelaunch?.()
       const message = formatUnknownError(error)
-      this.setState({
-        phase: 'error',
-        error: message
-      })
+      this.recordError(message)
       return {
         ok: false,
         error: message
@@ -402,9 +470,15 @@ export class AppUpdaterService {
       return
     }
     bridge.setEventHandler((event) => {
+      const eventType = typeof event?.type === 'string' ? event.type : undefined
+      const gate = nextSparkleEventGate(this.ignoreSparkleUntilChecking, eventType)
+      this.ignoreSparkleUntilChecking = gate.ignoreUntilChecking
+      if (!gate.deliver) return
       try {
         const patch = sparkleEventToStatePatch(event, Date.now())
-        if (patch) this.setState(patch)
+        if (!patch) return
+        if (patch.phase) this.sparkleSessionOpen = patch.phase === 'checking'
+        this.setState(patch)
       } catch (error) {
         console.log(`[sparkle] event handler failed: ${formatUnknownError(error)}`)
       }
@@ -435,11 +509,9 @@ export class AppUpdaterService {
     return 'latest'
   }
 
-  private attachListeners(): void {
-    if (this.listenersAttached) return
-    this.listenersAttached = true
-
-    autoUpdater.on('checking-for-update', () => {
+  private attachListeners(updater: AppUpdater): void {
+    updater.on('checking-for-update', () => {
+      if (updater !== this.electronUpdater) return
       this.setState({
         phase: 'checking',
         error: undefined,
@@ -451,7 +523,8 @@ export class AppUpdaterService {
       })
     })
 
-    autoUpdater.on('update-available', (payload) => {
+    updater.on('update-available', (payload) => {
+      if (updater !== this.electronUpdater) return
       const record = readObject(payload)
       const version = readNonEmptyString(record?.version)
       // A newer version supersedes whatever is cached; electron-updater cleans
@@ -467,7 +540,8 @@ export class AppUpdaterService {
       })
     })
 
-    autoUpdater.on('update-not-available', () => {
+    updater.on('update-not-available', () => {
+      if (updater !== this.electronUpdater) return
       this.setState({
         phase: 'up_to_date',
         availableVersion: undefined,
@@ -481,7 +555,8 @@ export class AppUpdaterService {
       })
     })
 
-    autoUpdater.on('download-progress', (payload) => {
+    updater.on('download-progress', (payload) => {
+      if (updater !== this.electronUpdater) return
       const record = readObject(payload)
       this.setState({
         phase: 'downloading',
@@ -492,7 +567,8 @@ export class AppUpdaterService {
       })
     })
 
-    autoUpdater.on('update-downloaded', (payload) => {
+    updater.on('update-downloaded', (payload) => {
+      if (updater !== this.electronUpdater) return
       const record = readObject(payload)
       const version = readNonEmptyString(record?.version)
       const targetVersion = version ?? this.state.availableVersion
@@ -507,7 +583,8 @@ export class AppUpdaterService {
       })
     })
 
-    autoUpdater.on('error', (error) => {
+    updater.on('error', (error) => {
+      if (updater !== this.electronUpdater) return
       this.recordError(formatUnknownError(error))
     })
   }
@@ -519,6 +596,44 @@ export class AppUpdaterService {
       currentVersion: app.getVersion()
     }
     this.emitState()
+    this.syncCheckingWatchdog()
+  }
+
+  private syncCheckingWatchdog(): void {
+    if (!this.checkingWatchdog) {
+      const schedule =
+        this.options.scheduleTimeout ??
+        ((callback: () => void, delayMs: number): TimeoutHandle => {
+          const timer = setTimeout(callback, delayMs)
+          return { cancel: () => clearTimeout(timer) }
+        })
+      this.checkingWatchdog = createCheckingWatchdog({
+        delayMs: this.options.checkTimeoutMs ?? UPDATE_CHECK_UNANSWERED_MS,
+        schedule,
+        isChecking: () => this.state.phase === 'checking',
+        onUnanswered: () => {
+          this.checkTicket += 1
+          this.checkInFlight = false
+          if (!this.sparkleBridge && this.electronUpdater) {
+            this.electronUpdater.autoDownload = false
+            this.electronUpdater.autoInstallOnAppQuit = false
+            this.electronUpdater = null
+          }
+          const recovered = recoverUnansweredCheck({
+            sparkle: this.sparkleBridge,
+            sparkleSessionOpen: this.sparkleSessionOpen
+          })
+          this.sparkleSessionOpen = recovered.sparkleSessionOpen
+          this.ignoreSparkleUntilChecking = recovered.ignoreUntilChecking
+          this.setState({
+            phase: 'error',
+            error: UPDATE_CHECK_UNANSWERED,
+            checkedAtMs: Date.now()
+          })
+        }
+      })
+    }
+    this.checkingWatchdog.sync(this.state.phase)
   }
 
   private emitState(): void {

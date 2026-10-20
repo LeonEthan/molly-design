@@ -1201,18 +1201,16 @@ export async function renameDesign(id: string, name: string) {
   await syncDesignCanvasFromStore(id)
   return renamed
 }
+export async function flushOpenDesigns(): Promise<boolean> {
+  for (const id of new Set([...records.values()].map((entry) => entry.artworkId)))
+    if (!(await leaveDesign(id))) return false
+  return true
+}
+
 export async function prepareDesignQuit(): Promise<boolean> {
-  return quitDesignWorker(
-    designWorker,
-    async () => {
-      for (const id of new Set([...records.values()].map((entry) => entry.artworkId)))
-        if (!(await leaveDesign(id))) return false
-      return true
-    },
-    () => {
-      for (const key of [...records.keys()]) destroyDesignInstance(key)
-    }
-  )
+  return quitDesignWorker(designWorker, flushOpenDesigns, () => {
+    for (const key of [...records.keys()]) destroyDesignInstance(key)
+  })
 }
 
 async function unfreezeDesigns() {

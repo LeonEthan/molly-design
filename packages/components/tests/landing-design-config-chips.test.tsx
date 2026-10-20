@@ -27,12 +27,14 @@ describe('LandingDesignConfigChips', () => {
     root = null;
   });
 
-  it('always shows full agent and image model labels without a collapse control', async () => {
+  it('shows the image model chip and no agent or provider chip', async () => {
     await act(async () =>
-      root?.render(<LandingDesignConfigChips agentLabel="Molly" imageModelId="gpt-image-1" />)
+      root?.render(<LandingDesignConfigChips imageModelId="gpt-image-1" />)
     );
     expect(container.querySelectorAll('button').length).toBe(0);
-    expect(container.textContent).toContain('Molly');
+    expect(container.textContent).toContain('Image model');
     expect(container.textContent).toContain('gpt-image-1');
+    expect(container.textContent).not.toContain('Agent');
+    expect(container.textContent).not.toContain('Provider');
   });
 });

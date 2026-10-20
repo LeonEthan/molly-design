@@ -3,12 +3,17 @@ import {
   buildPendingUserHistoryEntry,
   buildSessionTurnInputConfig,
   historyItemsToInputBlocks,
+  extractPromptPreviewFromInputBlocks,
+  normalizeSessionTurnInputConfig,
   type SessionInputBlock,
 } from '@molly/shared';
 import {
   buildCanvasSubmission,
+  designSessionTitleBrief,
   parseCanvasSizeInstruction,
 } from '../src/components/chat/canvas-submission';
+import { wrapPastedTextChipLabel } from '../src/components/mentions/mention-chips';
+import { insertPastedTextDraft } from '../src/lib/pasted-text-draft';
 import en from '../../../locales/en.json';
 import zhCN from '../../../locales/zh_CN.json';
 
@@ -26,6 +31,36 @@ const draft: SessionInputBlock[] = [
   },
 ];
 
+describe('design session title brief', () => {
+  it('keeps the composer text from before mention expansion', () => {
+    const composer = 'Use $poster for a jazz night';
+    const expanded =
+      'Use use /poster [Skill Path](/skills/poster/SKILL.md) for a jazz night\nuse molly mcp to read the skill';
+    expect(designSessionTitleBrief(`  ${composer}  `)).toBe(composer);
+    expect(designSessionTitleBrief(composer)).not.toBe(expanded);
+  });
+
+  it('restores a large paste and leaves skill mentions literal', () => {
+    const pasted = `${'Poster copy. '.repeat(80)}\nUse $poster for the headline.`;
+    const prefix = 'Brief for $poster: ';
+    const inserted = insertPastedTextDraft({
+      currentValue: prefix,
+      pastedText: pasted,
+      displayText: wrapPastedTextChipLabel(`[Pasted ${pasted.length} chars]`),
+      id: 'paste-1',
+      selectionStart: prefix.length,
+      selectionEnd: prefix.length,
+    });
+    expect(inserted).not.toBeNull();
+    const brief = designSessionTitleBrief(inserted!.nextValue, [inserted!.draft]);
+    expect(brief).toBe(`${prefix}${pasted}`);
+    expect(brief).not.toContain('[Pasted');
+    expect(brief).toContain('$poster');
+    expect(brief).not.toContain('Skill Path');
+    expect(brief).not.toContain('Canvas size:');
+  });
+});
+
 describe('landing canvas submission through durable turn input', () => {
   it.each([
     [1200, 628],
@@ -39,6 +74,7 @@ describe('landing canvas submission through durable turn input', () => {
     expect(submission.dimensions).toEqual({ width, height });
     const config = buildSessionTurnInputConfig({
       inputBlocks: submission.inputBlocks,
+      titlePrompt: extractPromptPreviewFromInputBlocks(draft),
       cliType: 'codex',
       agentType: 'codex',
     });
@@ -49,6 +85,7 @@ describe('landing canvas submission through durable turn input', () => {
       inputConfig: config,
     });
     expect(config.prompt).toContain(instruction({ width, height }));
+    expect(normalizeSessionTurnInputConfig(entry?.inputConfig)?.titlePrompt).toBe('Make a poster');
     expect(historyItemsToInputBlocks(entry!.items)).toEqual(submission.inputBlocks);
     expect(submission.inputBlocks.slice(0, draft.length)).toEqual(draft);
     expect(submit()).toEqual(submission); // Retrying rebuilds from the untouched draft.

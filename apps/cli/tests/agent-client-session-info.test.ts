@@ -65,6 +65,12 @@ describe('AgentClient session title updates', () => {
     expect(onSessionTitleUpdate).toHaveBeenCalledWith('Diagnose title generation');
   });
 
+  it('forwards an embedded model title with draft-only publication', async () => {
+    const { client, onSessionTitleUpdate } = createTestClient('molly');
+    await client.sessionUpdate(sessionInfoNotification({ title: 'Warm Jazz Night', _meta: { lody: { titleSource: 'explicit' } } }));
+    expect(onSessionTitleUpdate).toHaveBeenCalledWith('Warm Jazz Night', true);
+  });
+
   it('ignores source-tagged Codex prompt fallback titles', async () => {
     const { client, onSessionTitleUpdate } = createTestClient('codex');
 

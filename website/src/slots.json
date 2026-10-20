@@ -7,11 +7,7 @@
  "text": {
   "h1": [
    "给平面设计师的 AI 设计工具。<br><em>每一层都能接着改。</em>",
-   "AI design for graphic designers. <em>Every layer stays editable.</em>"
-  ],
-  "sub": [
-   "把海报、社媒图或主视觉的需求丢进去，拿回一份分层稿。改字、调形状、换图都在同一份稿上，不用重新生成。",
-   "Put in a brief for a poster, a social post or a key visual and get a layered file back. Retype copy, adjust shapes and swap images in the same file instead of starting over."
+   "AI design for graphic designers.<br><em>Every layer stays editable.</em>"
   ],
   "note": [
    "适用于 Apple Silicon Mac · 应用经 Developer ID 签名并通过 Apple 公证",

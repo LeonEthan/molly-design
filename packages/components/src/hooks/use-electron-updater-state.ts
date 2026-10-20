@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ElectronUpdaterState } from '@molly/shared';
 import { getIpcServices, onIpcEvent } from '@/lib/electron-ipc-client';
+import { shouldApplyUpdaterSnapshot } from '@/lib/updater-check-presentation';
 
 export function useElectronUpdaterState(): ElectronUpdaterState | null {
   const [state, setState] = useState<ElectronUpdaterState | null>(null);
@@ -11,16 +12,17 @@ export function useElectronUpdaterState(): ElectronUpdaterState | null {
     if (!getIpcServices()) return undefined;
 
     let active = true;
+    let pushesSinceSnapshot = 0;
+    const unsubscribe = onIpcEvent('updater.state', (s) => {
+      pushesSinceSnapshot += 1;
+      if (active) setState(s);
+    });
     void getIpcServices()!
       .updater.getState()
       .then((s) => {
-        if (active) setState(s);
+        if (active && shouldApplyUpdaterSnapshot(pushesSinceSnapshot)) setState(s);
       })
       .catch(() => undefined);
-
-    const unsubscribe = onIpcEvent('updater.state', (s) => {
-      if (active) setState(s);
-    });
 
     return () => {
       active = false;

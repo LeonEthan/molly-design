@@ -248,59 +248,34 @@
     "height": 860
    }
   },
-  "scene-plate": {
-   "w": 1080,
-   "h": 963,
+  "hero-plate": {
+   "w": 1536,
+   "h": 864,
    "files": {
-    "540": "img/scene-plate-540.webp",
-    "810": "img/scene-plate-810.webp",
-    "1080": "img/scene-plate-1080.webp"
+    "768": "img/hero-plate-768.webp",
+    "1536": "img/hero-plate.webp"
    },
-   "src": "crafted-v7g/clean-plate.png",
+   "src": "generated-184/hero-plate.png",
    "crop": null
   },
-  "scene-kettle": {
-   "w": 1080,
-   "h": 963,
+  "hero-kettle": {
+   "w": 1014,
+   "h": 782,
    "files": {
-    "540": "img/scene-kettle-540.webp",
-    "810": "img/scene-kettle-810.webp",
-    "1080": "img/scene-kettle-1080.webp"
+    "480": "img/hero-kettle-480.webp",
+    "1014": "img/hero-kettle.webp"
    },
-   "src": "crafted-v7f/kettle.png",
+   "src": "generated-184/hero-kettle.png",
    "crop": null
   },
-  "scene-kettle-shadow": {
-   "w": 1080,
-   "h": 963,
+  "hero-kettle-next": {
+   "w": 1014,
+   "h": 782,
    "files": {
-    "540": "img/scene-kettle-shadow-540.webp",
-    "810": "img/scene-kettle-shadow-810.webp",
-    "1080": "img/scene-kettle-shadow-1080.webp"
+    "480": "img/hero-kettle-next-480.webp",
+    "1014": "img/hero-kettle-next.webp"
    },
-   "src": "crafted-v7f/kettle-shadow.png",
-   "crop": null
-  },
-  "scene-mug": {
-   "w": 1080,
-   "h": 963,
-   "files": {
-    "540": "img/scene-mug-540.webp",
-    "810": "img/scene-mug-810.webp",
-    "1080": "img/scene-mug-1080.webp"
-   },
-   "src": "crafted-v7g/mug.png",
-   "crop": null
-  },
-  "scene-mug-shadow": {
-   "w": 1080,
-   "h": 963,
-   "files": {
-    "540": "img/scene-mug-shadow-540.webp",
-    "810": "img/scene-mug-shadow-810.webp",
-    "1080": "img/scene-mug-shadow-1080.webp"
-   },
-   "src": "crafted-v7g/mug-shadow.png",
+   "src": "generated-184/hero-kettle.png (gpt-image-2 glaze edit, fitted to this 1014×782 frame)",
    "crop": null
   }
  },

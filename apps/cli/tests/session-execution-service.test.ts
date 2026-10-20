@@ -3775,6 +3775,123 @@ describe('SessionExecutionService', () => {
     ]);
   });
 
+  it.each([
+    { first: true, source: 'draft', image: false, expected: 'Design a warm jazz poster.' },
+    { first: true, source: 'draft', image: true, expected: 'Design a warm jazz poster.' },
+    { first: false, source: 'draft', image: false, expected: undefined },
+    { first: true, source: 'user', image: false, expected: undefined },
+    { first: true, source: 'generated', image: false, expected: undefined },
+  ])('routes only first draft user text to the selected worker: $first/$source/$image', async (testCase) => {
+    const sessionId = 'session-title-route' as SessionId;
+    const brief = 'Design a warm jazz poster.';
+    let history: SessionHistoryInput[] = [
+      ...(testCase.first ? [] : [{ id: 'older', role: 'user' as const, items: [{ type: 'text' as const, text: 'Earlier brief' }] }]),
+      { id: 'user-turn', role: 'user', status: 'pending', items: [{ type: 'text', text: brief }] },
+    ];
+    const sessionDoc = withHistoryPort({
+      roomId: `session-${sessionId}`,
+      getMetaState: async () => ({ id: sessionId, isArchived: false, title: 'Untitled design', titleSource: testCase.source }),
+      getHistory: () => history,
+      updateHistory: async (update: (value: SessionHistoryInput[]) => SessionHistoryInput[]) => { history = update(history); },
+      setStatus: async () => {}, setProject: async () => {}, setBaseBranch: async () => {},
+    });
+    const delivered: Array<string | undefined> = [];
+    const promptEmbeddedHarness = async (_turnId: string, _blocks: unknown, _signal: AbortSignal, titlePrompt?: string) => {
+      delivered.push(titlePrompt);
+      return { stopReason: 'end_turn' as const };
+    };
+    const session = {
+      sessionId, acpSessionId: 'acp-title' as ACPSessionId,
+      agentClient: { isCreated: () => true, cancel: async () => {} },
+      isEmbeddedHarness: () => true, promptEmbeddedHarness,
+      terminalManager: {}, getWorkdir: () => '/tmp', getHostWorkdir: () => '/tmp',
+      getParentSessionId: () => undefined, updateGitIdentity: () => {}, applyExecutionPlaneLimits: async () => {},
+    };
+    const deps = createBaseDeps({
+      sessionManager: { getSession: () => session, getPendingSession: () => null, createSession: async () => session, terminateSession: async () => {}, setSessionError: async () => {}, refreshGhTokenForSession: async () => {} } as unknown as SessionManager,
+      workspaceDocument: { repo: { upsertDocMeta: async () => {}, getDocMeta: async () => ({ meta: { titleSource: testCase.source } }) }, getOrCreateSessionDoc: async () => sessionDoc, updateAcpCapabilities: async () => {} } as unknown as LoroDocumentManager,
+    });
+    await new SessionExecutionService(deps).startSession({
+      type: 'session/create', sessionId, machineId: 'machine-1', workspaceId: 'workspace-1' as WorkspaceId,
+      acpSessionConfig: { cliType: 'builtin', agentType: 'molly', prompt: `${brief}\nCanvas size: 800 × 600 px.\nInternal scaffold`, titlePrompt: brief,
+        inputBlocks: [{ type: 'text', text: brief }, ...(testCase.image ? [{ type: 'image' as const, imageId: 'synthetic-image', mimeType: 'image/png', width: 1, height: 1, sizeBytes: 100 }] : [])] },
+      userTurnId: 'user-turn', userId: 'user-1', userName: 'User', userEmail: 'user@example.com',
+    });
+    expect(delivered).toEqual([testCase.expected]);
+  });
+
+  it('does not start a legacy title generator before the embedded run', async () => {
+    let history: Array<Record<string, unknown>> = [
+      {
+        id: 'turn-user-1',
+        role: 'user',
+        status: 'pending',
+        read: false,
+      },
+    ];
+    const sessionDoc = withHistoryPort({
+      getMetaState: vi.fn(async () => ({
+        isArchived: false,
+        title: 'Untitled design',
+        titleSource: 'draft',
+      })),
+      setStatus: vi.fn(async () => {}),
+      setProject: vi.fn(async () => {}),
+      getHistory: vi.fn(() => history),
+      updateHistory: vi.fn(async (updater: (prev: typeof history) => typeof history) => {
+        history = updater(history);
+      }),
+      roomId: 'session-molly-title',
+    });
+    const createSession = vi.fn(async () => {
+      throw new Error('title dispatch must not wait for an agent');
+    });
+    const deps = createBaseDeps({
+      sessionManager: {
+        getSession: vi.fn(() => null),
+        getPendingSession: vi.fn(() => null),
+        createSession,
+        setSessionError: vi.fn(),
+        terminateSession: vi.fn(),
+        refreshGhTokenForSession: vi.fn(async () => {}),
+      } as unknown as SessionManager,
+      workspaceDocument: {
+        repo: {
+          upsertDocMeta: vi.fn(async () => {}),
+          getDocMeta: vi.fn(async () => undefined),
+        },
+        getOrCreateSessionDoc: vi.fn(async () => sessionDoc),
+        updateAcpCapabilities: vi.fn(async () => {}),
+      } as unknown as LoroDocumentManager,
+      evictForMemoryPressure: vi.fn(async () => ({
+        availableMemoryBytes: 128 * 1024 * 1024,
+        thresholdBytes: 1024 * 1024 * 1024,
+        hadMemoryPressure: true,
+        stillUnderPressure: true,
+        evictedSessionIds: [],
+        pressureReason: 'physical',
+      })),
+    });
+
+    const service = new SessionExecutionService(deps);
+    const prompt = '优化一下这个构图';
+    await service.startSession({
+      type: 'session/create',
+      sessionId: 'session-molly-title' as SessionId,
+      machineId: 'machine-1',
+      workspaceId: 'workspace-1' as WorkspaceId,
+      project: undefined,
+      acpSessionConfig: { prompt, cliType: 'builtin', agentType: 'molly' },
+      userTurnId: 'turn-user-1',
+      userId: 'user-1',
+      userName: 'User',
+      userEmail: 'user@example.com',
+    });
+
+    expect(deps.maybeGenerateAndStoreSessionTitle).not.toHaveBeenCalled();
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
   it('starts create prompt block building only after session creation registers the workspace', async () => {
     const events: string[] = [];
     let history: Array<Record<string, unknown>> = [

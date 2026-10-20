@@ -361,6 +361,7 @@ export class CliService {
   private runActive = false
   private powerSaveBlockerId: number | null = null
   private supervisor: CliSupervisor | null = null
+  private quitShutdownPromise: Promise<void> | null = null
   private readonly supervisorInstanceId = randomUUID()
   private readonly supervisorToken = `${randomUUID()}${randomUUID()}`
   private hostLease: LocalCliHostLease | null = null
@@ -743,7 +744,12 @@ export class CliService {
    * the next launch. Here we send SIGTERM, wait up to `graceMs` for a clean exit,
    * then SIGKILL anything still alive so nothing is left holding resources.
    */
-  async shutdownForQuit(graceMs = CLI_QUIT_GRACE_MS): Promise<void> {
+  shutdownForQuit(graceMs = CLI_QUIT_GRACE_MS): Promise<void> {
+    this.quitShutdownPromise ??= this.drainForQuit(graceMs)
+    return this.quitShutdownPromise
+  }
+
+  private async drainForQuit(graceMs: number): Promise<void> {
     if (this.supervisor) {
       // Stop polling/retry first so the supervisor does not relaunch the child
       // after we signal it. (This also sends SIGTERM to its active child.)
@@ -805,6 +811,7 @@ export class CliService {
   }
 
   autoStart(sender: WebContents | undefined): void {
+    this.quitShutdownPromise = null
     this.autoStartSender = sender
     this.attachCliStateSender(sender)
 

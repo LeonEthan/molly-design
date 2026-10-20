@@ -178,156 +178,132 @@
 (function () {
   var hs = document.querySelector('.hs');
   if (!hs) return;
-  var scene = hs.querySelector('.hs-scene'),
-    canvas = hs.querySelector('canvas'),
-    ctx = canvas.getContext('2d'),
-    imgs = {},
-    ready = false;
-  var gb = hs.querySelector('.hs-gb'),
+  var kettle = hs.querySelector('.hero-kettle'),
+    next = null,
+    gb = hs.querySelector('.hs-gb'),
+    sweep = hs.querySelector('.hs-clip'),
     pill = hs.querySelector('.hs-pill'),
     cur = hs.querySelector('.hs-cur'),
     size = hs.querySelector('.hs-size');
-  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches,
+  if (!kettle || !hs.dataset.kettleNext || !gb || !sweep || !pill || !cur || !size) return;
+  var plate = hs.querySelector('.hero-plate'),
+    motion = matchMedia('(prefers-reduced-motion: reduce)'),
+    reduce = motion.matches,
     T = 10,
     t = 0,
     it = 0,
     raf = 0,
     last = 0,
     vis = false,
-    U = 1;
-  var boxes = [[290, 267, 678, 479], [485, 443, 415, 303]],
-    names = ['kettle', 'mug'];
+    ready = false;
+  var REST_X = 0.44, REST_Y = 0.293, REST_W = 0.4, IMG = 782 / 1014;
+  var chrome = { pw: 0, ph: 0, sw: 0, sh: 0, pct: '', busy: false };
+  function measureChrome() {
+    chrome.pw = pill.offsetWidth;
+    chrome.ph = pill.offsetHeight;
+    chrome.sw = size.offsetWidth;
+    chrome.sh = size.offsetHeight;
+  }
+  if (typeof ResizeObserver === 'function') {
+    var chromeObserver = new ResizeObserver(measureChrome);
+    chromeObserver.observe(pill);
+    chromeObserver.observe(size);
+  }
   function clamp(x) { return Math.max(0, Math.min(1, x)); }
-  function seg(t, a, b) { return clamp((t - a) / (b - a)); }
+  function seg(time, a, b) { return clamp((time - a) / (b - a)); }
   function ease(x) { return x * x * (3 - 2 * x); }
   function mix(a, b, x) { return a + (b - a) * x; }
-  function fade(t, a, b, c, d) { return Math.min(seg(t, a, b), 1 - seg(t, c, d)); }
-  function alpha(e, n) { e.style.opacity = n.toFixed(3); }
-  function box(e, b) {
-    e.style.transform = 'translate(' + b[0] + 'px,' + b[1] + 'px)';
-    e.style.width = b[2] + 'px';
-    e.style.height = b[3] + 'px';
+  function fade(time, a, b, c, d) { return Math.min(seg(time, a, b), 1 - seg(time, c, d)); }
+  function alpha(e, n) { e.style.opacity = n <= 0 ? '0' : n >= 1 ? '1' : n.toFixed(3); }
+  function place(e, x, y, w, h) {
+    e.style.left = x.toFixed(2) + 'px';
+    e.style.top = y.toFixed(2) + 'px';
+    if (w !== undefined) e.style.width = w.toFixed(2) + 'px';
+    if (h !== undefined) e.style.height = h.toFixed(2) + 'px';
   }
-  function point(e, x, y, k) {
-    e.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + U * (k === undefined ? 1 : k) + ')';
-  }
-  function drawAsset(key, opacity, k, dx, dy, blur, clip) {
-    if (opacity <= 0) return;
-    ctx.save();
-    ctx.globalAlpha = opacity;
-    if (clip) {
-      ctx.beginPath();
-      ctx.rect(clip[0], 0, clip[1], 540);
-      ctx.clip();
+  function render(time) {
+    var W = hs.clientWidth, H = hs.clientHeight;
+    if (!W || !H) return;
+    var move = ease(seg(time, 1.5, 2.25)),
+      grown = seg(time, 2.6, 3.55),
+      reset = ease(seg(time, 7.8, 9.25)),
+      hold = 1 - reset,
+      dx = -0.018 * move * hold,
+      dy = -0.016 * move * hold,
+      k = 1 + 0.06 * grown * hold,
+      rw = REST_W * W,
+      rh = rw * IMG,
+      ax = REST_X * W + rw / 2 + dx * W,
+      ay = REST_Y * H + rh + dy * H,
+      bw = rw * k,
+      bh = rh * k,
+      x = ax - bw / 2,
+      y = ay - bh,
+      pad = Math.max(6, W * 14 / 1536),
+      box = { x: x - pad, y: y - pad, w: bw + pad * 2, h: bh + pad * 2 },
+      magic = fade(time, 4, 4.65, 5.6, 6.3),
+      shown = next && next.complete && next.naturalWidth && !reduce
+        ? ease(seg(time, 4.25, 5.8)) * (1 - ease(seg(time, 7.8, 9.25)))
+        : 0,
+      shift = !reduce && (dx || dy || k !== 1)
+        ? 'translate(' + (dx * W).toFixed(2) + 'px,' + (dy * H).toFixed(2) + 'px) scale(' + k.toFixed(4) + ')'
+        : '';
+    kettle.style.transform = shift;
+    kettle.style.opacity = shown > 0 ? (1 - shown).toFixed(3) : '';
+    if (next) {
+      next.style.transform = shift;
+      next.style.opacity = shown > 0 ? shown.toFixed(3) : '';
     }
-    ctx.translate(305 + dx, 416 + dy);
-    ctx.scale(k, k);
-    ctx.translate(-305, -416);
-    if (blur) ctx.filter = 'blur(' + blur + 'px)';
-    ctx.drawImage(imgs['scene-' + key], -52.804, 0, 605.607, 540);
-    ctx.restore();
-  }
-  function bounds(b, k, dx, dy) {
-    var q = 540 / 963;
-    return [(b[0] * q - 52.804 - 305) * k + 305 + dx + 30, (b[1] * q - 416) * k + 416 + dy + 30, b[2] * q * k, b[3] * q * k];
-  }
-  function render(time, iteration) {
-    var from = iteration % 2,
-      to = 1 - from,
-      move = ease(seg(time, 1.5, 2.25)),
-      scale = ease(seg(time, 2.8, 3.55)),
-      reset = ease(seg(time, 7.8, 9.25));
-    var dx = -32 * move * (1 - reset),
-      dy = -3 * move * (1 - reset),
-      k = 1 + 0.075 * scale * (1 - reset),
-      swap = ease(seg(time, 4.7, 5.8));
-    var a = bounds(boxes[from], k, dx, dy),
-      b = bounds(boxes[to], k, dx, dy),
-      un = [
-        Math.min(a[0], b[0]),
-        Math.min(a[1], b[1]),
-        Math.max(a[0] + a[2], b[0] + b[2]) - Math.min(a[0], b[0]),
-        Math.max(a[1] + a[3], b[1] + b[3]) - Math.min(a[1], b[1]),
-      ];
-    var r = a.map(function (v, i) {
-      return mix(mix(v, un[i], ease(seg(time, 4.25, 4.65))), b[i], ease(seg(time, 5.8, 6.15)));
-    });
-    if (ready) {
-      ctx.setTransform(2, 0, 0, 2, 0, 0);
-      ctx.clearRect(0, 0, 500, 540);
-      ctx.drawImage(imgs['scene-plate'], -52.804, 0, 605.607, 540);
-      var cut = Math.max(0, Math.min(500, un[0] - 30 - 14 + (un[2] + 28) * swap)),
-        oldClip = swap > 0 ? [cut, 500 - cut] : null,
-        newClip = swap < 1 ? [0, cut] : null;
-      drawAsset(names[from] + '-shadow', swap < 1 ? 1 : 0, k, dx, dy, 0, oldClip);
-      drawAsset(names[to] + '-shadow', swap > 0 ? 1 : 0, k, dx, dy, 0, newClip);
-      var magic = fade(time, 4, 4.65, 5.6, 6.3);
-      drawAsset(names[from], swap < 1 ? 1 : 0, k, dx, dy, magic * 0.35, oldClip);
-      drawAsset(names[to], swap > 0 ? 1 : 0, k, dx, dy, magic * 0.35, newClip);
-      if (magic > 0) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'screen';
-        ctx.filter = 'blur(8px)';
-        var sx = time < 4.7 ? un[0] - 44 : cut,
-          grad = ctx.createLinearGradient(sx - 50, 0, sx + 50, 0);
-        grad.addColorStop(0, 'rgba(194,220,114,0)');
-        grad.addColorStop(0.35, 'rgba(194,220,114,' + 0.25 * magic + ')');
-        grad.addColorStop(0.5, 'rgba(252,250,238,' + 0.7 * magic + ')');
-        grad.addColorStop(0.65, 'rgba(194,220,114,' + 0.35 * magic + ')');
-        grad.addColorStop(1, 'rgba(194,220,114,0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(un[0] - 52, un[1] - 52, un[2] + 44, un[3] + 44);
-        ctx.restore();
-      }
+    alpha(gb, reduce ? 0 : fade(time, 0.96, 1.08, 7.1, 7.5));
+    place(gb, box.x, box.y, box.w, box.h);
+    alpha(sweep, reduce ? 0 : magic);
+    place(sweep, box.x, box.y, box.w, box.h);
+    sweep.firstElementChild.style.backgroundPosition = (ease(seg(time, 4.25, 5.8)) * 140 - 20).toFixed(1) + '% 0';
+    var pct = Math.round(k * 100) + '%',
+      busy = time > 4 && time < 5.95;
+    if (size.dataset.pct !== pct) size.dataset.pct = pct;
+    if (pill.classList.contains('busy') !== busy) pill.classList.toggle('busy', busy);
+    if (!chrome.pw || chrome.pct !== pct || chrome.busy !== busy) {
+      measureChrome();
+      chrome.pct = pct;
+      chrome.busy = busy;
     }
-    alpha(gb, fade(time, 0.96, 1.08, 7.1, 7.5));
-    box(gb, r);
     var glide = ease(seg(time, 0.1, 0.7)),
-      start = bounds(boxes[from], 1, 0, 0);
-    var cx = mix(start[0] + start[2] + 18, start[0] + start[2] * 0.56, glide),
-      cy = mix(start[1] + start[3] * 0.6 - 30, start[1] + start[3] * 0.6, glide);
-    var press = 1 - 0.12 * Math.min(ease(seg(time, 0.9, 0.96)), 1 - ease(seg(time, 0.96, 1.02)));
-    if (time > 1.3) {
-      cx = r[0] + r[2] * 0.56;
-      cy = r[1] + r[3] * 0.6;
-    }
+      tipX = mix(x + bw + W * 0.02, x + bw * 0.62, glide),
+      tipY = mix(y + bh * 0.42, y + bh * 0.55, glide);
+    if (time > 1.3) { tipX = x + bw * 0.62; tipY = y + bh * 0.55; }
     if (time > 2.45) {
-      var v = ease(seg(time, 2.45, 2.8));
-      cx = mix(r[0] + r[2] * 0.56, r[0] + r[2], v);
-      cy = mix(r[1] + r[3] * 0.6, r[1] + r[3], v);
+      var toHandle = ease(seg(time, 2.45, 2.8));
+      tipX = mix(x + bw * 0.62, box.x + box.w, toHandle);
+      tipY = mix(y + bh * 0.55, box.y + box.h, toHandle);
     }
-    var pillX = 150,
-      pillY = 594;
+    var pillH = chrome.ph || W * 34 / 1536,
+      pillW = chrome.pw || W * 120 / 1536,
+      pillX = Math.min(Math.max(box.x + box.w / 2, pillW / 2 + 8), W - pillW / 2 - 8),
+      pillY = Math.min(box.y + box.h + 8 + pillH / 2, H - 8 - pillH / 2);
     if (time > 3.6) {
-      var v = ease(seg(time, 3.6, 3.95));
-      cx = mix(r[0] + r[2], pillX + 24, v);
-      cy = mix(r[1] + r[3], pillY, v);
+      var toPill = ease(seg(time, 3.6, 3.95));
+      tipX = mix(box.x + box.w, pillX, toPill);
+      tipY = mix(box.y + box.h, pillY, toPill);
     }
-    if (time > 4.2) {
-      var v = ease(seg(time, 4.2, 4.7));
-      cx = mix(pillX + 24, Math.min(518, r[0] + r[2] + 22), v);
-      cy = mix(pillY, r[1] + r[3] * 0.65, v);
+    if (time > 3.95) {
+      tipX = pillX;
+      tipY = pillY;
     }
-    point(cur, cx, cy, press);
-    alpha(cur, fade(time, 0.1, 0.35, 6.8, 7.2));
-    cur.classList.toggle('rsz', time > 2.6 && time < 3.6);
-    pill.style.transform = 'translate(' + pillX + 'px,' + pillY + 'px) translate(-50%,-50%) scale(' + U + ')';
-    alpha(pill, fade(time, 3.5, 3.75, 6.4, 6.7));
-    pill.classList.toggle('busy', time > 4 && time < 5.95);
-    point(size, from === 0 ? r[0] + r[2] - 55 * U : r[0] + r[2] + 10, r[1] + 10 * U);
-    size.textContent = Math.round(k * 100) + '%';
-    alpha(size, fade(time, 2.7, 2.85, 3.55, 3.8));
+    var press = 1 - 0.12 * Math.min(ease(seg(time, 0.9, 0.96)), 1 - ease(seg(time, 0.96, 1.02)));
+    press = Math.min(press, 1 - 0.12 * Math.min(ease(seg(time, 3.98, 4.06)), 1 - ease(seg(time, 4.06, 4.14))));
+    cur.style.transform = 'translate(' + tipX.toFixed(2) + 'px,' + tipY.toFixed(2) + 'px) scale(' + press.toFixed(3) + ')';
+    alpha(cur, reduce ? 0 : fade(time, 0.1, 0.35, 6.8, 7.2));
+    cur.classList.toggle('rsz', time > 2.8 && time < 3.6);
+    pill.style.transform = 'translate(' + pillX.toFixed(2) + 'px,' + pillY.toFixed(2) + 'px) translate(-50%,-50%)';
+    alpha(pill, reduce ? 0 : fade(time, 3.5, 3.75, 6.4, 6.7));
+    var sizeX = Math.min(Math.max(6, box.x + box.w - chrome.sw - 6), Math.max(6, W - chrome.sw - 6)),
+      sizeY = Math.min(Math.max(6, box.y - chrome.sh - 6), Math.max(6, H - chrome.sh - 6));
+    size.style.transform = 'translate(' + sizeX.toFixed(2) + 'px,' + sizeY.toFixed(2) + 'px)';
+    alpha(size, reduce ? 0 : fade(time, 2.6, 2.72, 3.55, 3.8));
     hs.dataset.time = time.toFixed(3);
-    hs.dataset.iteration = iteration;
+    hs.dataset.iteration = String(it);
   }
-  function scale() {
-    var k = hs.clientWidth / 500;
-    U = Math.min(1.4, Math.max(0.85, 1 / k));
-    hs.style.setProperty('--k', k);
-    hs.style.setProperty('--u', U);
-  }
-  scale();
-  new ResizeObserver(scale).observe(hs);
   function frame(now) {
     var dt = last ? Math.min((now - last) / 1000, 0.05) : 0;
     last = now;
@@ -336,8 +312,14 @@
       t -= T;
       it++;
     }
-    render(t, it);
+    render(t);
     raf = requestAnimationFrame(frame);
+  }
+  function arm() {
+    if (ready) return;
+    ready = true;
+    render(0);
+    run();
   }
   function run() {
     var on = ready && vis && !document.hidden && !reduce;
@@ -349,22 +331,53 @@
       raf = 0;
     }
   }
-  new IntersectionObserver(function (en) {
-    vis = en[0].isIntersecting;
+  new IntersectionObserver(function (entries) {
+    vis = entries[0].isIntersecting;
     run();
   }).observe(hs);
   document.addEventListener('visibilitychange', run);
-  var loading = [].map.call(hs.querySelectorAll('[data-scene]'), function (im) {
-    imgs[im.dataset.scene] = im;
-    return im.decode();
-  });
-  Promise.all(loading).then(function () {
-    ready = true;
-    render(reduce ? 3.85 : 0, 0);
+  motion.addEventListener('change', function () {
+    reduce = motion.matches;
+    if (reduce) {
+      t = 0;
+      it = 0;
+      render(0);
+    } else loadNext();
     run();
   });
-  if (reduce) {
-    scene.style.transform = 'none';
-    render(3.85, 0);
-  } else render(0, 0);
+  function loadNext() {
+    if (next) return;
+    var img = document.createElement('img');
+    img.className = 'hero-kettle-next';
+    img.alt = '';
+    img.width = 1014;
+    img.height = 782;
+    img.decoding = 'async';
+    img.setAttribute('aria-hidden', 'true');
+    img.sizes = '(max-width:700px) 40vw, 438px';
+    if (hs.dataset.kettleNextSrcset) img.srcset = hs.dataset.kettleNextSrcset;
+    img.src = hs.dataset.kettleNext;
+    kettle.insertAdjacentElement('afterend', img);
+    next = img;
+    var done = img.decode ? img.decode() : Promise.resolve();
+    done.then(function () {}, function () {});
+  }
+  function boot() {
+    arm();
+    if (reduce) return;
+    var started = false;
+    function later() {
+      if (started) return;
+      started = true;
+      loadNext();
+    }
+    try {
+      new PerformanceObserver(function (list) {
+        if (list.getEntries().length) later();
+      }).observe({ type: 'largest-contentful-paint', buffered: true });
+    } catch (e) {}
+    setTimeout(later, 1500);
+  }
+  if (plate && plate.decode) plate.decode().then(boot, boot);
+  else boot();
 })();

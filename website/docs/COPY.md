@@ -46,14 +46,14 @@ EN
 ### EN
 
 ```text
-AI design for graphic designers. Every layer stays editable.
-
-Get a layered file back. Retype and swap images in the same file.
+AI design for graphic designers.
+Every layer stays editable.
 
 Stillwater Clay
 Everyday objects / 01
 
-Time, well spent.
+Time,
+well spent.
 
 MATERIAL
 Stoneware
@@ -63,9 +63,9 @@ MADE
 Hand-finished
 
 For the slower moments.
+
 Object study · 2026
 
-100%
 Regenerate
 ```
 
@@ -75,12 +75,11 @@ Regenerate
 给平面设计师的 AI 设计工具。
 每一层都能接着改。
 
-拿回一份分层设计稿，改字换图都在同一份里。
-
 Stillwater Clay
 日常器物 / 01
 
-留一点时间，慢慢来。
+留一点时间，
+慢慢来。
 
 材质
 粗陶
@@ -90,9 +89,9 @@ Stillwater Clay
 手工修坯
 
 让日常慢下来。
+
 器物研究 · 2026
 
-100%
 重新生成
 ```
 
@@ -406,30 +405,6 @@ A brew guide for a fictional coffee roaster, 1080 × 2400, in five modules you c
 虚构咖啡品牌的冲煮指南，1080 × 2400。分成五个模块，每块都能单独改。
 ```
 
-## releases
-
-### EN
-
-```text
-Recent updates
-All releases →
-v0.1.1
-2026-10-17
-v0.1.0
-2026-10-15
-```
-
-### 中文
-
-```text
-最近更新
-全部版本 →
-v0.1.1
-2026-10-17
-v0.1.0
-2026-10-15
-```
-
 ## models
 
 ### EN
@@ -647,7 +622,7 @@ GitHub
 | EN | 中文 |
 |---|---|
 | Molly Design | Molly Design |
-| Illustration: the kettle in a product photo is clicked to select, moved and resized, then regenerated into a sage-green mug. Background and text stay in place. The mug is image-generated; cutouts and the repaired background are crafted for this illustration. | 示意动画：产品照片中的茶壶被单击选中、移动和缩放，再重新生成一个鼠尾草绿马克杯。背景和文字保持原位。马克杯由图像生成，抠图与背景修补为示意制作。 |
+| Illustration: a landscape frame filled edge to edge. The kettle layer is selected, moved, scaled, then regenerated into a sage stoneware kettle. Headline and specs stay on the left. The regenerated kettle is image-generated; cutouts and the repaired background are crafted for this illustration. Reduced motion keeps this frame still. | 示意：横版画面铺满画幅。茶壶图层被选中、移动、缩放，再点重新生成换成鼠尾草绿炻器茶壶。标题和材质说明留在左侧。重新生成的茶壶由图像生成；抠图与背景修补为示意制作。减少动态效果时保持这一静帧。 |
 | The Pour-over headline text layer selected on a coffee guide. The canvas shows selection handles and a floating toolbar with font and size, while the Layers panel highlights the row with its position and size | 在手冲咖啡长图上选中 Pour-over 标题文字图层：画布上有选框，浮动工具栏显示字体和字号，右侧图层面板高亮这一层并显示位置和尺寸 |
 | A screen recording: on the Molly canvas, the headline of a café poster is selected and changed from “maple oat” to “honey oat” | 一段屏幕录制：在 Molly 画布上选中咖啡海报的标题，把 maple oat 改成 honey oat |
 | Molly’s list of public-domain reference images it checked on Wikimedia Commons, and what it took from each | Molly 列出它在维基共享资源上查过的公版参考图，以及每一张借鉴了什么 |

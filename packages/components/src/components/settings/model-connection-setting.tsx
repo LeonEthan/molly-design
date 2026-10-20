@@ -271,6 +271,8 @@ export function ModelConnectionForm({
   onDiscover,
   onOpenAiAuth,
   onDelete,
+  pinActions = false,
+  grow = true,
 }: {
   stored?: ModelConnection;
   initialProvider?: ProviderPresetId;
@@ -289,6 +291,9 @@ export function ModelConnectionForm({
   /** Main-owned OpenAI sign-in flow; present only where the desktop bridge exists. */
   onOpenAiAuth?: OpenAiAuthFlow;
   onDelete?: () => void;
+  /** Keep Connect/Save visible and scroll the fields above it. */
+  pinActions?: boolean;
+  grow?: boolean;
 }) {
   const { t } = useTranslation();
   const id = useId();
@@ -629,337 +634,362 @@ export function ModelConnectionForm({
     </div>
   ) : null;
   return (
-    <form className="space-y-5 p-5" onSubmit={(event) => void submit(event)}>
-      {provider === '' ? (
-        <div className="space-y-3">
-          <Label>{t('settings.models.chooseProvider')}</Label>
-          <ProviderPicker
-            signIn={onOpenAiAuth !== undefined}
-            disabled={busy}
-            onChange={chooseProvider}
-          />
-        </div>
-      ) : (
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <ProviderMark preset={provider} />
-            <span className="truncate text-sm text-foreground">
-              {signInOnly && planLabel ? t(planLabel) : labelOf(provider)}
-            </span>
+    <form
+      className={
+        pinActions
+          ? grow
+            ? 'flex h-full min-h-0 flex-1 flex-col'
+            : 'flex min-h-0 flex-col'
+          : 'space-y-5 p-5'
+      }
+      onSubmit={(event) => void submit(event)}
+    >
+      <div
+        data-drawer-body={pinActions ? '' : undefined}
+        className={pinActions ? 'min-h-0 flex-1 space-y-5 overflow-y-auto' : 'space-y-5'}
+      >
+        {provider === '' ? (
+          <div className="space-y-3">
+            <Label>{t('settings.models.chooseProvider')}</Label>
+            <ProviderPicker
+              signIn={onOpenAiAuth !== undefined}
+              disabled={busy}
+              onChange={chooseProvider}
+            />
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            disabled={busy}
-            onClick={() => resetDraft({ provider: '', name: '', endpoint: '' }, false)}
-          >
-            {t('settings.models.allProviders')}
-          </Button>
-        </div>
-      )}
-      {provider !== '' ? (
-        <>
-          {oauthProvider && onOpenAiAuth && (stored || signInOnly) ? (
-            <div className="space-y-2">
-              {authFlow.phase === 'waiting' ? (
-                <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2.5">
-                  {authFlow.deviceCode ? (
-                    <div className="space-y-1.5">
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <ProviderMark preset={provider} />
+              <span className="truncate text-sm text-foreground">
+                {signInOnly && planLabel ? t(planLabel) : labelOf(provider)}
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              disabled={busy}
+              onClick={() => resetDraft({ provider: '', name: '', endpoint: '' }, false)}
+            >
+              {t('settings.models.allProviders')}
+            </Button>
+          </div>
+        )}
+        {provider !== '' ? (
+          <>
+            {oauthProvider && onOpenAiAuth && (stored || signInOnly) ? (
+              <div className="space-y-2">
+                {authFlow.phase === 'waiting' ? (
+                  <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2.5">
+                    {authFlow.deviceCode ? (
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.models.oauth.deviceCodePrompt')}
+                        </p>
+                        <p className="select-all font-mono text-lg tracking-widest">
+                          {authFlow.deviceCode.userCode}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            window.open(authFlow.deviceCode!.verificationUri, '_blank')
+                          }
+                        >
+                          {t('settings.models.oauth.openVerification')}
+                        </Button>
+                      </div>
+                    ) : (
                       <p className="text-xs text-muted-foreground">
-                        {t('settings.models.oauth.deviceCodePrompt')}
+                        {t('settings.models.oauth.waiting')}
                       </p>
-                      <p className="select-all font-mono text-lg tracking-widest">
-                        {authFlow.deviceCode.userCode}
-                      </p>
+                    )}
+                    <div className="flex gap-2">
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        onClick={() => window.open(authFlow.deviceCode!.verificationUri, '_blank')}
+                        className="h-7 px-2 text-xs"
+                        onClick={cancelSignIn}
                       >
-                        {t('settings.models.oauth.openVerification')}
+                        {t('common.cancel')}
                       </Button>
                     </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      {t('settings.models.oauth.waiting')}
-                    </p>
-                  )}
-                  <div className="flex gap-2">
+                  </div>
+                ) : isOAuthConnection && stored?.oauth ? (
+                  <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm">
+                          {stored.oauth.email ?? stored.displayName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {stored.oauth.signedOut
+                            ? t('settings.models.oauth.signedOut')
+                            : stored.oauth.denied
+                              ? t('settings.models.oauth.denied')
+                              : stored.oauth.plan
+                                ? t('settings.models.oauth.plan', { plan: stored.oauth.plan })
+                                : t('settings.models.oauth.signedIn')}
+                        </p>
+                      </div>
+                      {stored.oauth.denied || stored.oauth.signedOut ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => void beginSignIn()}
+                        >
+                          {t('settings.models.oauth.signInAgain')}
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => {
+                            if (!onOpenAiAuth || !stored) return;
+                            void onOpenAiAuth
+                              .signOut({ id: stored.id, expectedRevision: stored.revision })
+                              .then(() => onCancel?.())
+                              .catch(() => setAuthFlow({ phase: 'failed', reason: 'unreachable' }));
+                          }}
+                        >
+                          {t('settings.models.oauth.signOut')}
+                        </Button>
+                      )}
+                    </div>
+                    {stored.oauth.denied ? (
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.models.oauth.deniedDetail')}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant={signInOnly ? 'default' : 'outline'}
                       size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={cancelSignIn}
+                      disabled={busy}
+                      onClick={() => void beginSignIn()}
                     >
-                      {t('common.cancel')}
+                      {t('settings.models.oauth.signIn', {
+                        provider: oauthProvider === 'kimi-coding' ? 'Kimi Code' : 'ChatGPT',
+                      })}
                     </Button>
-                  </div>
-                </div>
-              ) : isOAuthConnection && stored?.oauth ? (
-                <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm">{stored.oauth.email ?? stored.displayName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {stored.oauth.signedOut
-                          ? t('settings.models.oauth.signedOut')
-                          : stored.oauth.denied
-                            ? t('settings.models.oauth.denied')
-                            : stored.oauth.plan
-                              ? t('settings.models.oauth.plan', { plan: stored.oauth.plan })
-                              : t('settings.models.oauth.signedIn')}
-                      </p>
-                    </div>
-                    {stored.oauth.denied || stored.oauth.signedOut ? (
+                    {signInOnly ? (
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        disabled={busy}
-                        onClick={() => void beginSignIn()}
-                      >
-                        {t('settings.models.oauth.signInAgain')}
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
+                        className="text-xs text-muted-foreground"
                         disabled={busy}
                         onClick={() => {
-                          if (!onOpenAiAuth || !stored) return;
-                          void onOpenAiAuth
-                            .signOut({ id: stored.id, expectedRevision: stored.revision })
-                            .then(() => onCancel?.())
-                            .catch(() => setAuthFlow({ phase: 'failed', reason: 'unreachable' }));
+                          cancelSignIn();
+                          setSignInMode(false);
                         }}
                       >
-                        {t('settings.models.oauth.signOut')}
+                        {t('settings.models.useKeyInstead')}
                       </Button>
-                    )}
+                    ) : null}
                   </div>
-                  {stored.oauth.denied ? (
-                    <p className="text-xs text-muted-foreground">
-                      {t('settings.models.oauth.deniedDetail')}
-                    </p>
+                )}
+                {authFlow.phase === 'failed' ? (
+                  <p role="alert" className="text-xs text-destructive">
+                    {t(`settings.models.oauth.failed.${authFlow.reason}`)}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {provider === 'openai-compatible' ? (
+              <>
+                <CompatibleConnectionSetup
+                  compatibleApi={compatibleApi}
+                  busy={busy}
+                  onApiChange={(api) => {
+                    setCompatibleApi(api);
+                    setDiscovery({ phase: 'idle' });
+                  }}
+                  onApplyPreset={applyPreset}
+                />
+                {endpointField}
+              </>
+            ) : null}
+            {!(oauthProvider && onOpenAiAuth && isOAuthConnection) && !signInOnly ? (
+              <div className="space-y-2">
+                <Label htmlFor={`${id}-key`}>
+                  {t('settings.models.apiKey')}
+                  {keylessInput ? (
+                    <span className="font-normal text-muted-foreground">
+                      {' · '}
+                      {t('settings.models.optional')}
+                    </span>
                   ) : null}
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2">
+                </Label>
+                <Input
+                  id={`${id}-key`}
+                  type="password"
+                  value={apiKey}
+                  disabled={busy || useNoKey}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={
+                    requiresKey || useNoKey ? undefined : t('settings.models.keyStoredPlaceholder')
+                  }
+                  onChange={(event) => setApiKey(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">{t('settings.models.keyLocalHint')}</p>
+                <ConnectionCheckError state={check} baseUrl={endpoint} />
+                {provider === 'openai-compatible' && stored ? (
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Switch
+                      checked={useNoKey}
+                      disabled={busy}
+                      onCheckedChange={(checked) => {
+                        setUseNoKey(checked);
+                        if (checked) setApiKey('');
+                      }}
+                    />
+                    {t('settings.models.useNoKey')}
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+            {provider !== 'openai-compatible' && !signInOnly ? endpointField : null}
+            {configurationIssue && (
+              <p role="alert" className="text-xs text-destructive">
+                {t(issueKeys[configurationIssue])}
+              </p>
+            )}
+            {provider === 'openai-compatible' && (
+              <>
+                <CompatibleModelFields
+                  models={customModels}
+                  busy={busy}
+                  discovery={discovery}
+                  snapshot={metadataSnapshot}
+                  baseUrl={endpoint}
+                  discoverable={discoverable}
+                  onDiscover={onDiscover ? discover : undefined}
+                  onChange={setCustomModels}
+                />
+                {!parsed.success && (
+                  <p role="status" className="text-xs text-muted-foreground">
+                    {t('settings.models.customModelsInvalid')}
+                  </p>
+                )}
+              </>
+            )}
+            {!signInOnly ? (
+              <Collapsible>
+                <CollapsibleTrigger asChild>
                   <Button
                     type="button"
-                    variant={signInOnly ? 'default' : 'outline'}
+                    variant="ghost"
                     size="sm"
                     disabled={busy}
-                    onClick={() => void beginSignIn()}
+                    className="group gap-1.5 px-0 text-xs text-muted-foreground"
                   >
-                    {t('settings.models.oauth.signIn', {
-                      provider: oauthProvider === 'kimi-coding' ? 'Kimi Code' : 'ChatGPT',
-                    })}
+                    <ChevronDown
+                      aria-hidden
+                      className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
+                    />
+                    {t('settings.models.moreOptions')}
                   </Button>
-                  {signInOnly ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs text-muted-foreground"
-                      disabled={busy}
-                      onClick={() => {
-                        cancelSignIn();
-                        setSignInMode(false);
-                      }}
-                    >
-                      {t('settings.models.useKeyInstead')}
-                    </Button>
-                  ) : null}
-                </div>
-              )}
-              {authFlow.phase === 'failed' ? (
-                <p role="alert" className="text-xs text-destructive">
-                  {t(`settings.models.oauth.failed.${authFlow.reason}`)}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          {provider === 'openai-compatible' ? (
-            <>
-              <CompatibleConnectionSetup
-                compatibleApi={compatibleApi}
-                busy={busy}
-                onApiChange={(api) => {
-                  setCompatibleApi(api);
-                  setDiscovery({ phase: 'idle' });
-                }}
-                onApplyPreset={applyPreset}
-              />
-              {endpointField}
-            </>
-          ) : null}
-          {!(oauthProvider && onOpenAiAuth && isOAuthConnection) && !signInOnly ? (
-            <div className="space-y-2">
-              <Label htmlFor={`${id}-key`}>
-                {t('settings.models.apiKey')}
-                {keylessInput ? (
-                  <span className="font-normal text-muted-foreground">
-                    {' · '}
-                    {t('settings.models.optional')}
-                  </span>
-                ) : null}
-              </Label>
-              <Input
-                id={`${id}-key`}
-                type="password"
-                value={apiKey}
-                disabled={busy || useNoKey}
-                autoComplete="off"
-                spellCheck={false}
-                placeholder={
-                  requiresKey || useNoKey ? undefined : t('settings.models.keyStoredPlaceholder')
-                }
-                onChange={(event) => setApiKey(event.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">{t('settings.models.keyLocalHint')}</p>
-              <ConnectionCheckError state={check} baseUrl={endpoint} />
-              {provider === 'openai-compatible' && stored ? (
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Switch
-                    checked={useNoKey}
-                    disabled={busy}
-                    onCheckedChange={(checked) => {
-                      setUseNoKey(checked);
-                      if (checked) setApiKey('');
-                    }}
-                  />
-                  {t('settings.models.useNoKey')}
-                </label>
-              ) : null}
-            </div>
-          ) : null}
-          {provider !== 'openai-compatible' && !signInOnly ? endpointField : null}
-          {configurationIssue && (
-            <p role="alert" className="text-xs text-destructive">
-              {t(issueKeys[configurationIssue])}
-            </p>
-          )}
-          {provider === 'openai-compatible' && (
-            <>
-              <CompatibleModelFields
-                models={customModels}
-                busy={busy}
-                discovery={discovery}
-                snapshot={metadataSnapshot}
-                baseUrl={endpoint}
-                discoverable={discoverable}
-                onDiscover={onDiscover ? discover : undefined}
-                onChange={setCustomModels}
-              />
-              {!parsed.success && (
-                <p role="status" className="text-xs text-muted-foreground">
-                  {t('settings.models.customModelsInvalid')}
-                </p>
-              )}
-            </>
-          )}
-          {!signInOnly ? (
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  className="group gap-1.5 px-0 text-xs text-muted-foreground"
-                >
-                  <ChevronDown
-                    aria-hidden
-                    className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
-                  />
-                  {t('settings.models.moreOptions')}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-5 pt-3">
-                {!showEndpointField && defaultEndpoint ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="min-w-0 break-all text-xs text-muted-foreground">
-                      {t('settings.models.endpointDefault', { url: defaultEndpoint })}
-                    </p>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      disabled={busy}
-                      onClick={() => setCustomEndpointOpen(true)}
-                    >
-                      {t('settings.models.useCustomEndpoint')}
-                    </Button>
-                  </div>
-                ) : null}
-                {native && (providerModels || stored?.models) ? (
-                  <div className="space-y-2">
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-5 pt-3">
+                  {!showEndpointField && defaultEndpoint ? (
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <Label>{t('settings.models.picker.title')}</Label>
-                      {providerModels ? (
-                        <SegmentedControl
-                          ariaLabel={t('settings.models.picker.title')}
-                          size="sm"
-                          value={chooseModels ? 'choose' : 'all'}
+                      <p className="min-w-0 break-all text-xs text-muted-foreground">
+                        {t('settings.models.endpointDefault', { url: defaultEndpoint })}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={busy}
+                        onClick={() => setCustomEndpointOpen(true)}
+                      >
+                        {t('settings.models.useCustomEndpoint')}
+                      </Button>
+                    </div>
+                  ) : null}
+                  {native && (providerModels || stored?.models) ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Label>{t('settings.models.picker.title')}</Label>
+                        {providerModels ? (
+                          <SegmentedControl
+                            ariaLabel={t('settings.models.picker.title')}
+                            size="sm"
+                            value={chooseModels ? 'choose' : 'all'}
+                            disabled={busy}
+                            options={[
+                              {
+                                value: 'all',
+                                label: t('settings.models.picker.all', {
+                                  count: providerModels.length,
+                                }),
+                              },
+                              { value: 'choose', label: t('settings.models.picker.choose') },
+                            ]}
+                            onChange={(value) =>
+                              value === 'all' ? setChooseModels(false) : startChoosing()
+                            }
+                          />
+                        ) : null}
+                      </div>
+                      {providerModels && chooseModels ? (
+                        <ModelChecklist
+                          models={providerModels}
+                          selected={selectedModels}
+                          listed={listed}
                           disabled={busy}
-                          options={[
-                            {
-                              value: 'all',
-                              label: t('settings.models.picker.all', {
-                                count: providerModels.length,
-                              }),
-                            },
-                            { value: 'choose', label: t('settings.models.picker.choose') },
-                          ]}
-                          onChange={(value) =>
-                            value === 'all' ? setChooseModels(false) : startChoosing()
-                          }
+                          onChange={setSelectedModels}
                         />
                       ) : null}
+                      {!providerModels ? (
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.models.picker.unavailable')}
+                        </p>
+                      ) : chooseModels && models?.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.models.picker.chooseOne')}
+                        </p>
+                      ) : null}
                     </div>
-                    {providerModels && chooseModels ? (
-                      <ModelChecklist
-                        models={providerModels}
-                        selected={selectedModels}
-                        listed={listed}
-                        disabled={busy}
-                        onChange={setSelectedModels}
-                      />
-                    ) : null}
-                    {!providerModels ? (
-                      <p className="text-xs text-muted-foreground">
-                        {t('settings.models.picker.unavailable')}
-                      </p>
-                    ) : chooseModels && models?.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        {t('settings.models.picker.chooseOne')}
-                      </p>
-                    ) : null}
+                  ) : null}
+                  <div className="space-y-2">
+                    <Label htmlFor={`${id}-name`}>{t('settings.models.name')}</Label>
+                    <Input
+                      id={`${id}-name`}
+                      value={name}
+                      disabled={busy}
+                      maxLength={120}
+                      onChange={(event) => setName(event.target.value)}
+                    />
                   </div>
-                ) : null}
-                <div className="space-y-2">
-                  <Label htmlFor={`${id}-name`}>{t('settings.models.name')}</Label>
-                  <Input
-                    id={`${id}-name`}
-                    value={name}
-                    disabled={busy}
-                    maxLength={120}
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          ) : null}
-        </>
-      ) : null}
-      <div className="flex flex-wrap items-center gap-2">
+                </CollapsibleContent>
+              </Collapsible>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+      <div
+        data-drawer-footer={pinActions ? '' : undefined}
+        className={
+          pinActions
+            ? 'mt-5 flex shrink-0 flex-wrap items-center gap-2 border-t border-border/40 pt-4'
+            : 'flex flex-wrap items-center gap-2'
+        }
+      >
         {onDelete ? (
           <Button
             type="button"
@@ -992,6 +1022,24 @@ export function ModelConnectionForm({
 type Editing = ModelConnection | { kind: 'new'; provider?: ProviderPresetId } | null;
 const isNew = (editing: Editing): editing is { kind: 'new'; provider?: ProviderPresetId } =>
   editing !== null && 'kind' in editing;
+
+const PANEL_LIST = 'divide-y divide-border/40 border-t border-border/40 empty:border-t-0';
+
+const panelListClass = (variant: 'section' | 'panel', editing: Editing): string => {
+  if (variant !== 'panel') return PANEL_LIST;
+  if (editing !== null && !isNew(editing))
+    return `flex min-h-0 flex-1 flex-col overflow-hidden ${PANEL_LIST}`;
+  if (isNew(editing)) return `min-h-0 max-h-16 shrink-0 overflow-y-auto ${PANEL_LIST}`;
+  return `min-h-0 max-h-full shrink overflow-y-auto ${PANEL_LIST}`;
+};
+
+const panelSiblingListClass = 'min-h-0 max-h-16 shrink-0 overflow-y-auto divide-y divide-border/40';
+
+const panelFormSlotClass = (variant: 'section' | 'panel', extra = ''): string => {
+  const tone = extra ? `${extra} bg-foreground/[0.015]` : 'bg-foreground/[0.015]';
+  if (variant !== 'panel') return tone;
+  return `flex min-h-48 grow shrink-0 basis-0 flex-col overflow-hidden ${tone}`;
+};
 
 export function ModelConnectionSetting({
   onConnectionsChange,
@@ -1162,6 +1210,29 @@ export function ModelConnectionSetting({
     const entry = checks[connection.id];
     return entry && entry.revision === connection.revision ? entry.state : undefined;
   };
+  const connectionRow = (connection: ModelConnection) => (
+    <ModelConnectionRow
+      key={connection.id}
+      connection={connection}
+      check={rowCheck(connection)}
+      catalogCount={
+        connection.providerPresetId === 'openai-compatible'
+          ? undefined
+          : catalog?.filter((model) => model.providerPresetId === connection.providerPresetId)
+              .length
+      }
+      busy={busy}
+      onEdit={() => setEditing(connection)}
+      onToggle={(input) => void persist(input)}
+      onCheck={() => checkRow(connection)}
+      onDelete={() => void remove(connection)}
+    />
+  );
+  const editingPanelConnection =
+    variant === 'panel' && editing !== null && !isNew(editing) ? editing : null;
+  const editingPanelIndex = editingPanelConnection
+    ? connections.findIndex((connection) => connection.id === editingPanelConnection.id)
+    : -1;
   const body = (
     <>
       {!available ? (
@@ -1183,13 +1254,19 @@ export function ModelConnectionSetting({
               {t('settings.models.loading')}
             </p>
           )}
-          <div className="divide-y divide-border/40 border-t border-border/40 empty:border-t-0">
-            {connections.map((connection) =>
-              !isNew(editing) && editing?.id === connection.id ? (
-                <div key={connection.id} className="bg-foreground/[0.015]">
+          <div data-connection-list="" className={panelListClass(variant, editing)}>
+            {editingPanelConnection && editingPanelIndex >= 0 ? (
+              <>
+                {connections.slice(0, editingPanelIndex).length > 0 ? (
+                  <div data-saved-connection-list="" className={panelSiblingListClass}>
+                    {connections.slice(0, editingPanelIndex).map(connectionRow)}
+                  </div>
+                ) : null}
+                <div className={panelFormSlotClass(variant)}>
                   <ModelConnectionForm
-                    key={`${editing.id}:${editing.revision}`}
-                    stored={editing}
+                    key={`${editingPanelConnection.id}:${editingPanelConnection.revision}`}
+                    pinActions
+                    stored={editingPanelConnection}
                     catalog={catalog}
                     metadataSnapshot={metadataSnapshot}
                     busy={busy}
@@ -1198,34 +1275,45 @@ export function ModelConnectionSetting({
                     onCheck={onCheck}
                     onDiscover={onDiscover}
                     onOpenAiAuth={onOpenAiAuth}
-                    onDelete={() => void remove(connection)}
+                    onDelete={() => void remove(editingPanelConnection)}
                   />
                 </div>
-              ) : (
-                <ModelConnectionRow
-                  key={connection.id}
-                  connection={connection}
-                  check={rowCheck(connection)}
-                  catalogCount={
-                    connection.providerPresetId === 'openai-compatible'
-                      ? undefined
-                      : catalog?.filter(
-                          (model) => model.providerPresetId === connection.providerPresetId
-                        ).length
-                  }
-                  busy={busy}
-                  onEdit={() => setEditing(connection)}
-                  onToggle={(input) => void persist(input)}
-                  onCheck={() => checkRow(connection)}
-                  onDelete={() => void remove(connection)}
-                />
+                {connections.slice(editingPanelIndex + 1).length > 0 ? (
+                  <div data-saved-connection-list="" className={panelSiblingListClass}>
+                    {connections.slice(editingPanelIndex + 1).map(connectionRow)}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              connections.map((connection) =>
+                !isNew(editing) && editing?.id === connection.id ? (
+                  <div key={connection.id} className={panelFormSlotClass(variant)}>
+                    <ModelConnectionForm
+                      key={`${editing.id}:${editing.revision}`}
+                      pinActions={variant === 'panel'}
+                      stored={editing}
+                      catalog={catalog}
+                      metadataSnapshot={metadataSnapshot}
+                      busy={busy}
+                      onSave={save}
+                      onCancel={() => setEditing(null)}
+                      onCheck={onCheck}
+                      onDiscover={onDiscover}
+                      onOpenAiAuth={onOpenAiAuth}
+                      onDelete={() => void remove(connection)}
+                    />
+                  </div>
+                ) : (
+                  connectionRow(connection)
+                )
               )
             )}
           </div>
           {isNew(editing) ? (
-            <div className="border-t border-border/40 bg-foreground/[0.015]">
+            <div className={panelFormSlotClass(variant, 'border-t border-border/40')}>
               <ModelConnectionForm
                 key={`new:${editing.provider ?? ''}`}
+                pinActions={variant === 'panel'}
                 initialProvider={editing.provider}
                 catalog={catalog}
                 metadataSnapshot={metadataSnapshot}
@@ -1240,6 +1328,8 @@ export function ModelConnectionSetting({
           ) : ready && connections.length === 0 ? (
             <ModelConnectionForm
               key="first"
+              grow={false}
+              pinActions={variant === 'panel'}
               catalog={catalog}
               metadataSnapshot={metadataSnapshot}
               busy={busy}
@@ -1267,7 +1357,7 @@ export function ModelConnectionSetting({
       )}
     </>
   );
-  if (variant === 'panel') return <div className="-m-5">{body}</div>;
+  if (variant === 'panel') return <div className="flex h-full min-h-0 flex-1 flex-col">{body}</div>;
   return (
     <CompactSection
       title={t('settings.models.title')}

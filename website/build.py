@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Builds the Molly Design website into dist/ (Cloudflare Pages deploy folder)."""
 import hashlib, json, pathlib, re, shutil, sys, urllib.request
-from datetime import datetime
 
 ROOT = pathlib.Path(__file__).resolve().parent
 SRC = ROOT / 'assets'
@@ -21,7 +20,6 @@ GITHUB_LABEL = '[[在 GitHub 上查看 Molly Design||Molly Design on GitHub]]'
 CTA = '[[下载 macOS 版||Download for macOS]]'
 CTA_GH = '[[在 GitHub 看源码||View source on GitHub]]'
 WF_KEYS = ('brief', 'research', 'options', 'layers', 'edit', 'export')
-FALLBACK_RELEASES = [('v0.1.1', '2026-10-17'), ('v0.1.0', '2026-10-15')]
 TITLE_EN = 'Molly Design · AI design for graphic designers, in layers you can edit'
 TITLE_ZH = 'Molly Design · 给平面设计师的 AI 设计工具，分层设计稿可以接着改'
 DESC_EN = (
@@ -83,13 +81,6 @@ def S(name):
     return '[[%s||%s]]' % (v[0], v[1])
 
 
-def release_label(tag):
-    tag = str(tag)
-    if re.fullmatch(r'v?\d+(?:\.\d+)*', tag):
-        return tag if tag.startswith('v') else 'v' + tag
-    return tag
-
-
 def stable_releases(rows):
     """Published releases only. Drafts and prereleases are not site content."""
     stable = []
@@ -112,13 +103,12 @@ def dmg_asset(row):
 
 
 def fetch_github():
-    """Stable release rows plus the newest app DMG. Falls back offline.
+    """Newest stable app DMG. Falls back offline.
 
-    Scans the recent release list, not only the newest entry, so a draft,
+    Scans the release list, not only the newest entry, so a draft,
     prerelease, or non-app release does not hide the current installer.
     """
     global DMG, CFG
-    releases = list(FALLBACK_RELEASES)
     dmg = DMG_FALLBACK
     try:
         req = urllib.request.Request(
@@ -127,15 +117,7 @@ def fetch_github():
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
-        stable = stable_releases(data)
-        rows = []
-        for row in stable:
-            rows.append((release_label(row['tag_name']), row['published_at'][:10]))
-            if len(rows) == 3:
-                break
-        if rows:
-            releases = rows
-        for row in stable:
+        for row in stable_releases(data):
             found = dmg_asset(row)
             if found:
                 dmg = found
@@ -144,13 +126,15 @@ def fetch_github():
         pass
     DMG = dmg
     CFG = json.loads((HERE / 'slots.json').read_text().replace('@@DMG@@', DMG))
-    return releases
 
 
 def hero_h1():
+    def lines(text):
+        parts = [part.strip() for part in re.split(r'<br\s*/?>', text) if part.strip()]
+        return ''.join('<span class="hero-line">%s</span>' % part for part in parts)
+
     zh, en = CFG['text']['h1']
-    zh = zh.replace('接着改。', '<span class="nobr">接着改。</span>')
-    return '[[%s||%s]]' % (zh, en)
+    return '[[%s||%s]]' % (lines(zh), lines(en))
 
 
 def trust_line():
@@ -160,42 +144,25 @@ def trust_line():
     return '[[%s||%s]]' % (zh, en)
 
 
-def scene_asset(key):
-    m = MAN['img'][key]
-    ws = sorted(int(w) for w in m['files'])
-    srcset = ', '.join('@@A:%s@@ %dw' % (m['files'][str(w)], w) for w in ws)
-    return (
-        '<img data-scene="%s" src="@@A:%s@@" srcset="%s" sizes="(max-width:640px) 500px, 800px" width="%d" height="%d" alt="" aria-hidden="true" fetchpriority="low" decoding="async">'
-        % (key, m['files'][str(ws[0])], srcset, m['w'], m['h'])
-    )
-
-
 def hero_stage():
-    assets = ''.join(
-        scene_asset(k)
-        for k in ('scene-plate', 'scene-kettle', 'scene-kettle-shadow', 'scene-mug', 'scene-mug-shadow')
-    )
-    return f'''<div class="stage">
-    <div class="hs" role="img" aria-label="[[示意动画：产品照片中的茶壶被单击选中、移动和缩放，再重新生成一个鼠尾草绿马克杯。背景和文字保持原位。马克杯由图像生成，抠图与背景修补为示意制作。||Illustration: the kettle in a product photo is clicked to select, moved and resized, then regenerated into a sage-green mug. Background and text stay in place. The mug is image-generated; cutouts and the repaired background are crafted for this illustration.]]">
-      <div class="hs-fit"><div class="hs-scene">
-        <div class="hs-board">
-          <canvas class="hs-photo" width="1000" height="1080" aria-hidden="true"></canvas>
-          <div class="hs-assets" hidden>{assets}</div>
-          <div class="hs-tone"></div>
-          <p class="hs-mast"><span>Stillwater Clay</span><span>[[日常器物 / 01||Everyday objects / 01]]</span></p>
-          <p class="hs-head">[[留一点时间，慢慢来。||Time, well spent.]]</p>
-          <dl class="hs-spec"><div><dt>[[材质||Material]]</dt><dd>[[粗陶||Stoneware]]</dd></div><div><dt>[[表面||Finish]]</dt><dd>[[自然釉||Natural glaze]]</dd></div><div><dt>[[工艺||Made]]</dt><dd>[[手工修坯||Hand-finished]]</dd></div></dl>
-          <p class="hs-cap"><span>[[让日常慢下来。||For the slower moments.]]</span><small>[[器物研究 · 2026||Object study · 2026]]</small></p>
-        </div>
-        <div class="hs-ui" aria-hidden="true">
-          <span class="hs-gb"><i></i><i></i><i></i><i></i></span>
-          <span class="hs-size"></span>
-          <span class="hs-pill"><em class="a">[[重新生成||Regenerate]]</em><em class="b">[[生成中…||Regenerating…]]</em></span>
-          <span class="hs-cur"><svg class="ar" viewBox="0 0 24 24"><path d="M5 3l14 8.2-6.1 1.5 3.6 6.6-2.7 1.4-3.5-6.6L5 18.5z"/></svg><svg class="rs" viewBox="0 0 24 24"><path d="M5 5h6l-2.2 2.2 8.4 8.4L19.4 13.4V19h-5.6l2.2-2.2-8.4-8.4L5.4 10.6z"/></svg></span>
-        </div>
-      </div></div>
+    return f'''<div class="stage hs" data-kettle-next="@@A:img/hero-kettle-next.webp@@" data-kettle-next-srcset="@@A:img/hero-kettle-next-480.webp@@ 480w, @@A:img/hero-kettle-next.webp@@ 1014w"><div class="stage-fit" role="img" aria-label="[[示意：横版画面铺满画幅。茶壶图层被选中、移动、缩放，再点重新生成换成鼠尾草绿炻器茶壶。标题和材质说明留在左侧。重新生成的茶壶由图像生成；抠图与背景修补为示意制作。减少动态效果时保持这一静帧。||Illustration: a landscape frame filled edge to edge. The kettle layer is selected, moved, scaled, then regenerated into a sage stoneware kettle. Headline and specs stay on the left. The regenerated kettle is image-generated; cutouts and the repaired background are crafted for this illustration. Reduced motion keeps this frame still.]]">
+    <img class="hero-plate" src="@@A:img/hero-plate.webp@@" srcset="@@A:img/hero-plate-768.webp@@ 768w, @@A:img/hero-plate.webp@@ 1536w" sizes="(max-width:700px) calc(100vw - 40px), (max-width:1224px) calc(100vw - 64px), 1096px" width="1536" height="864" alt="" aria-hidden="true" fetchpriority="high" decoding="sync">
+    <img class="hero-kettle" src="@@A:img/hero-kettle.webp@@" srcset="@@A:img/hero-kettle-480.webp@@ 480w, @@A:img/hero-kettle.webp@@ 1014w" sizes="(max-width:700px) 40vw, 438px" width="1014" height="782" alt="" aria-hidden="true">
+    <div class="hero-copy">
+      <p class="hs-mast"><span>Stillwater Clay</span><span>[[日常器物 / 01||Everyday objects / 01]]</span></p>
+      <p class="hs-head">[[留一点时间，<br>慢慢来。||Time,<br>well spent.]]</p>
+      <dl class="hs-spec"><div><dt>[[材质||Material]]</dt><dd>[[粗陶||Stoneware]]</dd></div><div><dt>[[表面||Finish]]</dt><dd>[[自然釉||Natural glaze]]</dd></div><div><dt>[[工艺||Made]]</dt><dd>[[手工修坯||Hand-finished]]</dd></div></dl>
+      <p class="hs-tag">[[让日常慢下来。||For the slower moments.]]</p>
     </div>
-  </div>'''
+    <p class="hs-study">[[器物研究 · 2026||Object study · 2026]]</p>
+    <div class="hs-ui" aria-hidden="true">
+      <span class="hs-clip"><span class="hs-sweep"></span></span>
+      <span class="hs-gb"><i></i><i></i><i></i><i></i></span>
+      <span class="hs-size" data-pct="100%"></span>
+      <span class="hs-pill"><em class="a">[[重新生成||Regenerate]]</em><em class="b">[[生成中…||Regenerating…]]</em></span>
+      <span class="hs-cur"><svg class="ar" viewBox="0 0 24 24"><path d="M5 3l14 8.2-6.1 1.5 3.6 6.6-2.7 1.4-3.5-6.6L5 18.5z"/></svg><svg class="rs" viewBox="0 0 24 24"><path d="M5 5h6l-2.2 2.2 8.4 8.4L19.4 13.4V19h-5.6l2.2-2.2-8.4-8.4L5.4 10.6z"/></svg></span>
+    </div>
+  </div></div>'''
 
 
 ICON = {
@@ -324,6 +291,7 @@ def head():
 <link rel="icon" href="@@R:favicon.svg@@" type="image/svg+xml">
 <link rel="apple-touch-icon" href="@@R:apple-touch-icon.png@@">
 <link rel="manifest" href="@@R:site.webmanifest@@">
+<link rel="preload" as="image" href="@@A:img/hero-plate-768.webp@@" imagesrcset="@@A:img/hero-plate-768.webp@@ 768w, @@A:img/hero-plate.webp@@ 1536w" imagesizes="(max-width:700px) calc(100vw - 40px), (max-width:1224px) calc(100vw - 64px), 1096px" fetchpriority="high">
 <link rel="preload" href="@@A:fonts/inter.woff2@@" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="@@A:fonts/instrument-serif.woff2@@" as="font" type="font/woff2" crossorigin>
 <meta property="og:type" content="website">
@@ -351,14 +319,9 @@ def head():
 '''
 
 
-def body(releases):
+def body():
     demo = CFG['demo'][0]
     bullets = ''.join('<li>%s</li>' % S('p1_b%d' % i) for i in (1, 2, 3))
-    rel_rows = ''.join(
-        '<a class="rel-row" href="%s/tag/%s"><b><s></s>%s</b><span class="mono">%s</span></a>'
-        % (RELEASES, tag, tag, date)
-        for tag, date in releases
-    )
 
     def wall_tile(w, cls=''):
         return (
@@ -422,7 +385,7 @@ def body(releases):
       <a href="#demo">[[演示||Demo]]</a>
       <a href="#workflow">[[工作流程||Workflow]]</a>
       <a href="#work">[[作品||Work]]</a>
-      <a href="#releases">[[更新||Releases]]</a>
+      <a href="{RELEASES}">[[更新||Releases]]</a>
       <a href="#faq">[[常见问题||FAQ]]</a>
     </nav>
     <span class="sp"></span>
@@ -447,7 +410,6 @@ def body(releases):
 <header class="hero">
   <div class="wrap hero-in">
     <h1 class="serif">{hero_h1()}</h1>
-    <p class="hero-sub">[[拿回一份分层设计稿，改字换图都在同一份里。||Get a layered file back. Retype and swap images in the same file.]]</p>
     {hero_stage()}
   </div>
 </header>
@@ -509,13 +471,6 @@ def body(releases):
   </div>
 </section>
 
-<section class="feat" id="releases" aria-labelledby="rel-h">
-  <div class="wrap">
-    <div class="fh fh-rel"><div><h2 class="serif" id="rel-h">[[最近更新||Recent updates]]</h2></div><a class="more" href="{RELEASES}">[[全部版本 →||All releases →]]</a></div>
-    <div class="rel">{rel_rows}</div>
-  </div>
-</section>
-
 <section class="feat" id="models" aria-labelledby="m-h">
   <div class="wrap">
     <div class="fh"><div><h2 class="serif" id="m-h">[[用你自己的模型||Bring your own models]]</h2></div><p>{S('m_lead')}</p></div>
@@ -551,7 +506,7 @@ def body(releases):
     <div class="wrap ft">
       <div><img src="@@A:brand/molly-wordmark.svg@@" width="79" height="26" alt="Molly Design" loading="lazy"><p class="ft-copy">© 2026 Molly Design</p></div>
       <div><p class="ft-h">[[产品||Product]]</p><a href="#demo">[[图层||Layers]]</a><a href="#directions">[[方向||Directions]]</a><a href="#export">[[导出||Export]]</a></div>
-      <div><p class="ft-h">[[资源||Resources]]</p><a href="#releases">[[更新||Releases]]</a><a href="#faq">[[常见问题||FAQ]]</a></div>
+      <div><p class="ft-h">[[资源||Resources]]</p><a href="{RELEASES}">[[更新||Releases]]</a><a href="#faq">[[常见问题||FAQ]]</a></div>
       <div><p class="ft-h">[[社区||Community]]</p><a class="footer-github" href="{GH}" target="_blank" rel="noopener noreferrer">{GITHUB_MARK}<span>GitHub</span></a></div>
     </div>
   </footer>
@@ -566,8 +521,8 @@ def body(releases):
 
 
 def build():
-    releases = fetch_github()
-    html = pairs(head() + body(releases))
+    fetch_github()
+    html = pairs(head() + body())
     if re.search(r'ph-tag|ph-block|placeholder|占位', html, re.I):
         sys.exit('placeholder markup left in page')
     used = sorted(set(re.findall(r'@@A:([^@]+)@@', html)))

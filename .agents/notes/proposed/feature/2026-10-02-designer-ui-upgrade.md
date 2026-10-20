@@ -151,7 +151,9 @@ Phase 2 merged as PR #63; the owner then authorised phase 3.
   limit needs them. The honesty rules are unchanged: previews are Agent review, and
   the turn does not claim the save that Molly's collection performs afterwards.
 - **Design-aware naming:** built-in Molly names a session after the first sentence of
-  the prompt, which is why sidebar rows such as “Design a modern, minimal…” look alike.
+  the prompt (superseded 2026-10-20: the selected model now generates a short
+  title — [auto-naming note](../../implemented/bug-fix/2026-10-20-design-auto-naming.md)),
+  which is why sidebar rows such as “Design a modern, minimal…” look alike.
   The Skill now asks the Agent to name the artwork in the existing `design.yaml`
   `title` (two to five words, subject and format). When collection commits that
   artwork, the daemon passes the title through the existing title sanitiser and

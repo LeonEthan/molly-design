@@ -43,8 +43,13 @@ Index and rationale: [README.md](README.md).
 
 - Custom canvas dimensions enter both artwork creation and the durable first-turn
   text from one submission snapshot. Auto adds no fixed-size instruction; retries
-  rebuild from the untouched draft. A new design's draft title is "Untitled design",
-  never the prompt; the committed artwork `title` renames it.
+  rebuild from the untouched draft. Create as "Untitled design". The first user
+  message of a draft-sourced session asks the currently selected model for a short
+  title — never the raw prompt or first sentence, no title worker, custom-size/internal
+  scaffolding excluded from that prompt. Before it lands or on failure/empty/timeout,
+  the exact "Untitled design" string stays and the turn never fails; the write passes
+  `setTitleIfSourceIn(..., 'generated', ['draft'])`, replacing only the draft name.
+  A committed artwork `title` renames draft or generated. A user rename stays.
   Presets use the same custom dimensions; custom popover edits apply only on confirmation.
 
 - The chat-route URL declares selection, never one-shot event nonces. Once it names
@@ -86,8 +91,8 @@ Index and rationale: [README.md](README.md).
   selections (`event.preventDefault`).
 - Desktop landing's machine/project menus always open upward with collision
   flipping disabled. Their top-row labels and glyphs, share the same neutral foreground level.
-- The ACP provider cycle command uses the same single-machine scope as the visible
-  provider menu. Never cycle all workspace configs while retaining the old machine id.
+- `session.cycleProvider` cycles the visible connection providers in menu order,
+  on the landing and in a session. It does not cycle agent config ids.
 - Keep raw local Git, Machine RPC, and Streams failures out of landing status copy;
   retain them for submit blocking, telemetry, logging, and scoped retry. Status copy
   is for actionable validation and selected-machine project guidance.

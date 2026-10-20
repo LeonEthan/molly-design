@@ -402,6 +402,8 @@ export const ElectronAuthCallbackSessionSchema = z
 
 export type ElectronAuthCallbackSession = z.infer<typeof ElectronAuthCallbackSessionSchema>;
 
+export const UPDATE_CHECK_UNANSWERED = 'update_check_unanswered';
+
 export type ElectronUpdaterPhase =
   | 'idle'
   | 'checking'

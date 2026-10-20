@@ -75,5 +75,11 @@ make an inherited draft live. A newly frozen turn baseline with elements becomes
 `before-agent` entry unless history already holds its exact content; it never moves
 the selected base, and failure is logged without blocking the turn. See [history](README.md#design-history).
 
-Only a just-committed `design.yaml` `title` may rename the Session, and only over
-`draft`/`generated` sources; never override a user rename or request a title model.
+A just-committed `design.yaml` `title` may rename the Session over `draft` or
+`generated` sources. On the first user message of a draft-sourced Session, the
+currently selected model generates a short title through the session's embedded
+harness — never the raw prompt or first sentence; the write passes
+`setTitleIfSourceIn(..., 'generated', ['draft'])`, replacing only a `draft`
+name. Before it lands or on failure/empty/timeout, the exact "Untitled design"
+string stays and the turn never fails; custom-size/internal scaffolding stays
+out of the title prompt. Never override a user rename.

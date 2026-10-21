@@ -3,6 +3,7 @@
 Status: implemented
 Translation: pending
 Issue: https://github.com/LeonEthan/molly-design/issues/171
+PR: https://github.com/LeonEthan/molly-design/pull/215
 
 ## Abstract
 

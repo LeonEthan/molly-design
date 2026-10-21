@@ -55,6 +55,13 @@ and literal RFC1918 IPv4 HTTP for trusted local image services; the help tip exp
 that HTTP sends keys and images without TLS. Public HTTP and named LAN HTTP fail
 at the address field. Model, OAuth and MCP endpoint restrictions are unchanged.
 
+Language-model snapshot failures have their own localized error and manual Retry,
+using the image card's existing inline layout. Retry reads the saved connections
+again; it does not repeat catalog reads, save credentials or check a model.
+Only a successful snapshot reports connection readiness, allowing onboarding to
+recover without remounting the settings panel. Save/delete errors remain separate.
+See the [snapshot recovery record](../../../../.agents/notes/implemented/bug-fix/2026-10-20-model-snapshot-retry.md).
+
 ## Settings explanations
 
 General settings name concrete actions and keep privacy/data destinations beside

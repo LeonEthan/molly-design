@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import React, { act, type ReactNode } from 'react';
+import React, { act, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentConfigId, AgentConfigMeta, MachineId } from '@molly/shared';
@@ -57,6 +57,19 @@ import {
 } from '../src/components/onboarding/screens/providers-screen';
 import { getOnboardingMollyConfigs } from '../src/components/onboarding/onboarding-agent';
 import { initI18n } from '../src/i18n';
+import { ModelConnectionSetting } from '../src/components/settings/model-connection-setting';
+import { getReadyModelConnections } from '../src/lib/design-model-readiness';
+
+const { snapshotIpc } = vi.hoisted(() => ({ snapshotIpc: vi.fn() }));
+vi.mock('../src/lib/electron-ipc-client', () => ({
+  getIpcServices: () => ({
+    modelConnections: {
+      getSnapshot: snapshotIpc,
+      getModelCatalog: async () => ({ models: [] }),
+      getModelMetadataSnapshot: async () => null,
+    },
+  }),
+}));
 
 const machineId = 'machine-1' as MachineId;
 
@@ -243,6 +256,50 @@ describe('ProvidersScreenView', () => {
     );
     await act(async () => findButton(container, 'Retry').click());
     expect(retries).toBe(1);
+  });
+
+  it('enables Finish after the language panel snapshot recovers without remount', async () => {
+    const connection: ModelConnection = {
+      schemaVersion: 1,
+      id: '00000000-0000-4000-8000-000000000171',
+      revision: 1,
+      providerPresetId: 'openai',
+      displayName: 'Synthetic language connection',
+      baseUrl: 'https://example.invalid/v1',
+      enabled: true,
+      credentialRef: 'synthetic-private-reference',
+    };
+    snapshotIpc
+      .mockRejectedValueOnce(new Error('Synthetic snapshot failure'))
+      .mockResolvedValue({ connections: [connection] });
+    let completed = false;
+    function ConnectedSetup() {
+      const [connections, setConnections] = useState<readonly ModelConnection[]>();
+      return (
+        <ProvidersScreenView
+          languageReady={getReadyModelConnections(connections ?? []).length > 0}
+          imageReady
+          modelReady
+          mollyAvailable
+          languagePanel={() => (
+            <ModelConnectionSetting variant="panel" onConnectionsChange={setConnections} />
+          )}
+          onBack={() => undefined}
+          onSkip={() => undefined}
+          onNext={() => {
+            completed = true;
+          }}
+        />
+      );
+    }
+    await act(async () => root?.render(<ConnectedSetup />));
+    expect(findButton(container, 'Finish').disabled).toBe(true);
+    await act(async () => findButton(container, 'Language model').click());
+    await act(async () => findButton(container, 'Retry').click());
+    expect(container.textContent).toContain(connection.displayName);
+    expect(findButton(container, 'Finish').disabled).toBe(false);
+    await act(async () => findButton(container, 'Finish').click());
+    expect(completed).toBe(true);
   });
 
   it('wires Skip and Back without requiring readiness', async () => {

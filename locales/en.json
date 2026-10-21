@@ -177,6 +177,7 @@
   "settings.models.unavailable": "This surface cannot access the local encrypted credential service.",
   "settings.models.error": "The connection could not be read or saved. Check system credential storage; reopen settings after a concurrent edit. No plaintext fallback is used.",
   "settings.models.loading": "Loading local connections…",
+  "settings.models.loadFailed": "Could not read saved language model connections. Please retry.",
   "settings.models.add": "Add model connection",
   "settings.models.useConnection": "Use {{name}}",
   "settings.models.keyStoredPlaceholder": "Stored — leave empty to keep",

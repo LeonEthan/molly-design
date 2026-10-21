@@ -5,6 +5,36 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { WorkSessionFixture } from './work-session-fixture.js';
 
+void test('keeps artwork naming requests out of the browser journey', async () => {
+  const fixture = await WorkSessionFixture.create();
+  try {
+    await fixture.startModelServer();
+    const response = await fetch(`http://127.0.0.1:${fixture.modelServerPort}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'e2e-deterministic',
+        stream: true,
+        messages: [
+          {
+            role: 'system',
+            content: 'Generate a short artwork title in the language of the user brief.',
+          },
+          { role: 'user', content: 'Visit a local page [E2E:BROWSER:LOCAL]' },
+        ],
+      }),
+    });
+    const output = await response.text();
+    assert.ok(output.includes('Synthetic session title'), output);
+    assert.equal(
+      fixture.readEvents().some((event) => event.event === 'browser-tool-missing'),
+      false
+    );
+  } finally {
+    fixture.dispose();
+  }
+});
+
 void test('keeps the lifecycle fixture clean for helpers but exposes authored design files', async () => {
   const fixture = await WorkSessionFixture.create();
   try {
@@ -26,7 +56,10 @@ void test('keeps the lifecycle fixture clean for helpers but exposes authored de
       cwd: fixture.projectRoot,
       encoding: 'utf8',
     });
-    assert.deepEqual(status.trimEnd().split('\n'), authoredFiles.map((file) => `?? ${file}`));
+    assert.deepEqual(
+      status.trimEnd().split('\n'),
+      authoredFiles.map((file) => `?? ${file}`)
+    );
   } finally {
     fixture.dispose();
   }

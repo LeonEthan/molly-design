@@ -49,7 +49,10 @@ website, user service or fixed port is used. The model fixture follows this publ
 adapter interface; individual MCP tools need not appear as direct model tools.
 Background personal-preference extraction receives an empty `changes` response,
 identified by its system instruction before interpreting journey markers in the
-quoted user text. It must not dispatch another browser probe or held response.
+quoted user text. Artwork-title requests are likewise identified by their system
+or developer instruction and receive a synthetic title before journey markers
+are interpreted. Neither background request may dispatch another browser probe
+or held response.
 
 On macOS, the harness passes `-ApplePersistenceIgnoreState YES` for its own
 process. The OS can otherwise block `app.whenReady` behind a post-crash window

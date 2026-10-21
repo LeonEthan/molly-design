@@ -99,9 +99,17 @@ async function handleRequest(req, res) {
         'Extract only explicitly stated durable personal preferences from the current user text.'
       )
   );
+  const generatesArtworkTitle = body?.messages?.some(
+    (message) =>
+      (message?.role === 'system' || message?.role === 'developer') &&
+      typeof message.content === 'string' &&
+      message.content.startsWith(
+        'Generate a short artwork title in the language of the user brief.'
+      )
+  );
   const mode = extractsPreferences
     ? 'memory'
-    : text.includes('You generate titles for')
+    : generatesArtworkTitle || text.includes('You generate titles for')
       ? 'title'
       : text.includes('[E2E:BROWSER:LOCAL]')
         ? 'browser-local'

@@ -242,7 +242,7 @@
   "settings.readiness.keyMissing": "Key missing",
   "settings.readiness.moreConnections": "{{name}} +{{count}}",
   "settings.readiness.notSignedIn": "Not signed in",
-  "settings.readiness.signInNotVerified": "Sign-in not verified",
+  "settings.readiness.importedCheckInBrowser": "Imported · check in Molly's browser",
   "sessions.activity.retrying": "Retrying…",
   "sessions.subagentTasks.cancelFailed": "Failed to stop the subtask",
   "sessions.subagentTasks.cancelNamed": "Stop {{name}}",

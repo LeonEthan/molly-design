@@ -77,7 +77,9 @@ and profile share one picker; the curated design/commerce website list starts
 collapsed and fully selected. One Import action reads and writes without a preview
 step. Source errors, pending authorization, cancellation and retained/skipped
 counts remain in this dialog. `PublicBrowserSurface` hides under covering dialogs.
-Cookie counts describe local data, not verified sign-in. Human takeover and MFA
+Cookie counts describe local data, not verified sign-in; with cookies present the
+Pinterest chip says "Imported · check in Molly's browser" and stays unticked, and
+clicking it reopens the same import dialog. Human takeover and MFA
 remain available on ordinary pages; the dedicated sign-in dialog is retired.
 A browser-file access denial returns the dialog to its ready state silently,
 keeping the browser, profile and website selections for an explicit retry.

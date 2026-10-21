@@ -1,7 +1,7 @@
 # Website research in Molly
 
-[The main Skill](../SKILL.md#2-inspect-references-and-research) owns the research
-requirement, its exception and the gate that must hold before design options.
+[The design-research Skill](../SKILL.md) owns the research requirement, its
+exception and the gate that must hold before design options.
 Use this reference for the technique of required research or of inspecting a
 user-specified website.
 
@@ -19,13 +19,19 @@ search is too narrow; widen it once.
 Make a few queries, then move on to choosing. If the results stay thin, take the
 gate's shortfall exit rather than browsing without end.
 
+Keep research shallow: one site, the searches you planned, the results you
+opened. Do not crawl a site's structure — sitemaps, category or tag listings,
+API endpoints — to map what exists; the gate needs inspected images, not a map
+of the site. A search that returned nothing useful is evidence to widen or stop,
+not to dig into the site's machinery.
+
 ## Inspect and keep sources
 
 Open relevant results individually and use screenshots or image reading to judge
 their appearance; the gate says what counts as inspection. A directly opened
 and inspected image can provide evidence even when its source page is
-unavailable. Report that provenance gap and follow
-[Reporting](../SKILL.md#reporting) for inspected URLs and confirmed saved paths.
+unavailable. Report that provenance gap and follow the `graphic-design` skill's
+Reporting section for inspected URLs and confirmed saved paths.
 Briefly connect the observed choices to the design.
 Save the inspiration images the gate requires, plus any supplied asset or
 prescribed template, using the gate's persistence rule; observation alone does
@@ -49,7 +55,8 @@ drawn from only one or two references reads as a blend of them: before building,
 check that the chosen direction is not recognizably one source with new copy.
 A saved inspiration image can be an `edit` input for a design option, with the
 prompt naming the quality it lends and forbidding its objects, text and logos
-([Design options](layered-workflow.md#design-options)).
+(the design-options recipe in the `design-replication` skill's
+`references/layered-workflow.md`).
 Respect source artwork and asset permissions; being legal is not the same as
 being fair to the original designer. When the user prescribes a template to
 reproduce, following it is their decision.

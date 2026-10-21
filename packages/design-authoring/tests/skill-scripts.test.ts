@@ -1,8 +1,8 @@
 /**
  * Skill script tests: run the materialized scripts (finalize, render-preview,
- * reference-pack) against synthetic fixtures. The scripts import the esbuild
- * bundle under skills/graphic-design/scripts/lib, which `pnpm test` rebuilds
- * first via scripts/build.mjs.
+ * format, reference-pack, font-prepare) against synthetic fixtures. Validator
+ * scripts import the esbuild bundle under each skill's scripts/lib, which
+ * `pnpm test` rebuilds first via scripts/build.mjs.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -18,6 +18,20 @@ const skillDir = path.join(
   '..',
   'skills',
   'graphic-design'
+);
+
+const replicationSkillDir = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'skills',
+  'design-replication'
+);
+
+const textSkillDir = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'skills',
+  'design-text'
 );
 
 function pngDims(bytes: Buffer): { width: number; height: number } {
@@ -115,15 +129,15 @@ function encodeTestPng(
   ]);
 }
 
-function run(script: string, args: string[]) {
-  return spawnSync(process.execPath, [path.join(skillDir, 'scripts', script), ...args], {
+function run(script: string, args: string[], fromSkillDir = skillDir) {
+  return spawnSync(process.execPath, [path.join(fromSkillDir, 'scripts', script), ...args], {
     encoding: 'utf8',
   });
 }
 
 describe('font-prepare.mjs', () => {
   it('exposes isolated setup and complete-font conversion without installing on help', () => {
-    const result = run('font-prepare.mjs', ['--help']);
+    const result = run('font-prepare.mjs', ['--help'], textSkillDir);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('setup <environment-dir>');
     expect(result.stdout).toContain('including all glyphs');
@@ -137,7 +151,7 @@ describe('font-prepare.mjs', () => {
   ])(
     'rejects unsupported or ambiguous preparation arguments before running Python: %j',
     (...args) => {
-      const result = run('font-prepare.mjs', args);
+      const result = run('font-prepare.mjs', args, textSkillDir);
       expect(result.status).toBe(1);
       expect(result.stderr).toMatch(/font-prepare|Select a face/);
       expect(result.stderr).not.toContain('ENOENT');
@@ -315,7 +329,7 @@ describe('reference-pack.mjs', () => {
     const ref = path.join(dir, 'ref.png');
     writeFileSync(ref, syntheticPng(120, 240, [10, 20, 30]));
     const out = path.join(dir, 'inspect');
-    const result = run('reference-pack.mjs', ['pack', ref, out]);
+    const result = run('reference-pack.mjs', ['pack', ref, out], replicationSkillDir);
     expect(result.status).toBe(0);
 
     const meta = JSON.parse(readFileSync(path.join(out, 'meta.json'), 'utf8')) as {
@@ -349,7 +363,7 @@ describe('reference-pack.mjs', () => {
     const ref = path.join(dir, 'ref.png');
     writeFileSync(ref, syntheticPng(64, 64, [1, 2, 3]));
     const out = path.join(dir, 'out.png');
-    const result = run('reference-pack.mjs', ['crop', ref, '4,8,16,24', out]);
+    const result = run('reference-pack.mjs', ['crop', ref, '4,8,16,24', out], replicationSkillDir);
     expect(result.status).toBe(0);
     expect(pngDims(readFileSync(out))).toEqual({ width: 16, height: 24 });
   });
@@ -358,12 +372,11 @@ describe('reference-pack.mjs', () => {
     const dir = workdir();
     const ref = path.join(dir, 'ref.png');
     writeFileSync(ref, syntheticPng(64, 64, [1, 2, 3]));
-    const result = run('reference-pack.mjs', [
-      'crop',
-      ref,
-      '60,60,16,16',
-      path.join(dir, 'out.png'),
-    ]);
+    const result = run(
+      'reference-pack.mjs',
+      ['crop', ref, '60,60,16,16', path.join(dir, 'out.png')],
+      replicationSkillDir
+    );
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('outside image');
   });
@@ -385,7 +398,7 @@ describe('reference-pack.mjs layer helpers', () => {
 
   it('alpha reports counts and bounds, with threshold bounds only on request', () => {
     const { file } = writeLayer(workdir());
-    const plain = run('reference-pack.mjs', ['alpha', file]);
+    const plain = run('reference-pack.mjs', ['alpha', file], replicationSkillDir);
     expect(plain.status).toBe(0);
     const report = JSON.parse(plain.stdout);
     expect(report).toMatchObject({
@@ -399,7 +412,7 @@ describe('reference-pack.mjs layer helpers', () => {
     });
     expect(report).not.toHaveProperty('thresholdBounds');
     const threshold = JSON.parse(
-      run('reference-pack.mjs', ['alpha', file, '--threshold', '128']).stdout
+      run('reference-pack.mjs', ['alpha', file, '--threshold', '128'], replicationSkillDir).stdout
     );
     expect(threshold.thresholdBounds).toEqual({ x: 5, y: 3, width: 6, height: 4 });
   });
@@ -408,7 +421,7 @@ describe('reference-pack.mjs layer helpers', () => {
     const dir = workdir();
     const { file, bytes } = writeLayer(dir);
     const out = path.join(dir, 'trimmed.png');
-    const result = run('reference-pack.mjs', ['trim', file, out]);
+    const result = run('reference-pack.mjs', ['trim', file, out], replicationSkillDir);
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({
       sourceWidth: 20,
@@ -428,15 +441,11 @@ describe('reference-pack.mjs layer helpers', () => {
     const dir = workdir();
     const { file } = writeLayer(dir);
     const out = path.join(dir, 'guarded.png');
-    const result = run('reference-pack.mjs', [
-      'trim',
-      file,
-      out,
-      '--alpha-above',
-      '128',
-      '--margin',
-      '1',
-    ]);
+    const result = run(
+      'reference-pack.mjs',
+      ['trim', file, out, '--alpha-above', '128', '--margin', '1'],
+      replicationSkillDir
+    );
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({ x: 4, y: 2, width: 8, height: 6 });
     const guarded = decodeTestPng(readFileSync(out));
@@ -447,17 +456,15 @@ describe('reference-pack.mjs layer helpers', () => {
   it('trim refuses to overwrite its source, orphan options and empty layers', () => {
     const dir = workdir();
     const { file, bytes } = writeLayer(dir);
-    const overwrite = run('reference-pack.mjs', ['trim', file, file]);
+    const overwrite = run('reference-pack.mjs', ['trim', file, file], replicationSkillDir);
     expect(overwrite.status).toBe(1);
     expect(overwrite.stderr).toContain('must not overwrite');
     expect(readFileSync(file)).toEqual(bytes);
-    const orphan = run('reference-pack.mjs', [
-      'trim',
-      file,
-      path.join(dir, 'o.png'),
-      '--margin',
-      '2',
-    ]);
+    const orphan = run(
+      'reference-pack.mjs',
+      ['trim', file, path.join(dir, 'o.png'), '--margin', '2'],
+      replicationSkillDir
+    );
     expect(orphan.status).toBe(1);
     expect(orphan.stderr).toContain('--margin applies only with --alpha-above');
     const empty = path.join(dir, 'empty.png');
@@ -465,7 +472,11 @@ describe('reference-pack.mjs layer helpers', () => {
       empty,
       rgbaPng(4, 4, () => [0, 0, 0, 0])
     );
-    const nothing = run('reference-pack.mjs', ['trim', empty, path.join(dir, 'e.png')]);
+    const nothing = run(
+      'reference-pack.mjs',
+      ['trim', empty, path.join(dir, 'e.png')],
+      replicationSkillDir
+    );
     expect(nothing.status).toBe(1);
     expect(nothing.stderr).toContain('nothing to keep');
   });
@@ -479,7 +490,7 @@ describe('reference-pack.mjs layer helpers', () => {
       rgbaPng(20, 12, () => [0, 255, 0, 255])
     );
     const out = path.join(dir, 'compare');
-    const result = run('reference-pack.mjs', ['compare', file, other, out]);
+    const result = run('reference-pack.mjs', ['compare', file, other, out], replicationSkillDir);
     expect(result.status).toBe(0);
     expect(pngDims(readFileSync(path.join(out, 'side-by-side.png')))).toEqual({
       width: 48,
@@ -498,7 +509,11 @@ describe('reference-pack.mjs layer helpers', () => {
       small,
       rgbaPng(4, 4, () => [0, 0, 0, 255])
     );
-    const mismatch = run('reference-pack.mjs', ['compare', file, small, path.join(dir, 'x')]);
+    const mismatch = run(
+      'reference-pack.mjs',
+      ['compare', file, small, path.join(dir, 'x')],
+      replicationSkillDir
+    );
     expect(mismatch.status).toBe(1);
     expect(mismatch.stderr).toContain('same-size');
   });

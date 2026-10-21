@@ -25,7 +25,7 @@ import {
 
 const png = new Uint8Array(
   readFileSync(
-    new URL('../skills/graphic-design/examples/minimal/media/swatch.png', import.meta.url)
+    new URL('../skills/design-replication/examples/minimal/media/swatch.png', import.meta.url)
   )
 );
 const digest = createHash('sha256').update(png).digest('hex');

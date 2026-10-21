@@ -260,7 +260,7 @@ describe('bundled examples', () => {
     path.dirname(fileURLToPath(import.meta.url)),
     '..',
     'skills',
-    'graphic-design',
+    'design-replication',
     'examples'
   );
 

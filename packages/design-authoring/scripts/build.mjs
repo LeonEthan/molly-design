@@ -12,7 +12,9 @@
  *    truth — and the v1.json bytes must match it, fail-closed.
  * 3. Bundles the skill script support library with esbuild into
  *    skills/graphic-design/scripts/lib/molly-authoring.mjs so the materialized
- *    skill directory is self-contained (no repo checkout, no node_modules).
+ *    core skill directory is self-contained (no repo checkout, no
+ *    node_modules); the build then copies the same bundle into the sibling
+ *    skill script dirs that need it (design-text).
  *    Live helper, Folio wording, rewritten skills, and PPTD catalogues must
  *    not remain named after the retired format or pinned as live ALD upstream.
  *
@@ -44,6 +46,9 @@ const manifestText = JSON.stringify(manifest);
 if (/\bFolio\b/.test(manifestText)) fail('source-manifest still contains Folio wording');
 const unpinnedLiveRows = [
   'skills/graphic-design/SKILL.md',
+  'skills/design-research/SKILL.md',
+  'skills/design-replication/SKILL.md',
+  'skills/design-text/SKILL.md',
   'skills/graphic-design/scripts/finalize.mjs',
   'skills/graphic-design/scripts/render-preview.mjs',
   'skills/graphic-design/references/pptd-authoring.md',
@@ -150,5 +155,14 @@ const helper = readFileSync(helperOut, 'utf8');
 if (helper.split('fontFamily: "MiSans",').length !== 2)
   fail('Pinned text font default changed; review the Inter adaptation');
 writeFileSync(helperOut, helper.replace('fontFamily: "MiSans",', 'fontFamily: "Inter",'));
+
+// Sibling skill script dirs that import the same bundled library get an exact
+// copy, so every materialized skill directory stays self-contained.
+for (const siblingOut of [
+  path.join(packageRoot, 'skills', 'design-text', 'scripts', 'lib', 'molly-authoring.mjs'),
+]) {
+  mkdirSync(path.dirname(siblingOut), { recursive: true });
+  writeFileSync(siblingOut, readFileSync(helperOut));
+}
 
 console.log('design-authoring build: ok');

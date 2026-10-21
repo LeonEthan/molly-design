@@ -1,9 +1,9 @@
 # Layered design techniques
 
 Techniques for design options, reproducing the chosen design as layers, and
-visual comparison.
-[The main Skill workflow](../SKILL.md#required-workflow) owns stage order, task
-branches, research, review and reporting.
+visual comparison. The `graphic-design` Skill owns branches and reporting; the
+`design-research` Skill owns research, options and direction handling; this
+file supplies the methods at those points.
 
 ## Design options
 
@@ -44,7 +44,7 @@ Make the options genuinely different in concept or composition: subject scale
 and position, where the headline sits, the kind of image, the type treatment.
 Varying the inspiration images between options is one way to get there. Read
 every option with an image-reading tool before showing it. Regenerate one that
-fails the [design defaults](../SKILL.md#design-defaults), drops a delivery asset
+fails the design defaults in the `design-research` Skill, drops a delivery asset
 or reads as an inspiration image with new copy; show the user only options you
 would be willing to build.
 
@@ -89,7 +89,10 @@ a failed layer, so re-extract it or report the departure.
    drifts, now rather than after assembly, or report the departure.
 6. **Assemble and compare.** Place each layer at its measured position, render,
    and compare the render with the chosen design as described under
-   [Comparing native previews](#comparing-native-previews).
+   [Comparing native previews](#comparing-native-previews). Fix and re-render
+   while the comparison finds visible differences; stop when the render matches
+   or you can name what still differs and report it, instead of re-rendering to
+   look again for more.
 
 ## Complete objects and independent layers
 

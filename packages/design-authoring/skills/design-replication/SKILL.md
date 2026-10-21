@@ -1,6 +1,6 @@
 ---
 name: design-replication
-description: 'Use when reproducing a chosen design option or a supplied reference image as faithful editable layers in a Molly YAML artwork: extracting background plates and foreground objects with the image model, measuring geometry, comparing renders, or reconstructing a reference. Also use for the design-option prompting recipe when offering options.'
+description: 'Use when reproducing a chosen design option or a supplied reference image as faithful editable layers in a Molly YAML artwork: extracting background plates and foreground objects with the image model, measuring geometry, comparing renders, or reconstructing a reference.'
 metadata:
   short-description: Reproduce designs as faithful editable layers
 ---
@@ -36,9 +36,7 @@ missing parts.
 
 The full recipe — measuring, plate and object extraction prompts, layer checks,
 positioning and stacking, and render comparison — is
-[references/layered-workflow.md](references/layered-workflow.md); its "Design
-options" section is also the prompting recipe for the options pass in
-`design-research`. For a reconstruction from a supplied reference image, read
+[references/layered-workflow.md](references/layered-workflow.md). For a reconstruction from a supplied reference image, read
 [references/replication.md](references/replication.md).
 
 Field shapes for `design.yaml` copy from
@@ -61,3 +59,7 @@ node scripts/reference-pack.mjs compare <a.png> <b.png> <out-dir>
 Supported non-interlaced 8-bit gray/RGB/RGBA/palette PNG is decoded via
 `node:zlib`; JPEG/GIF/BMP/WEBP report dimensions but raster artifacts require
 PNG. These are optional inspection aids, never gates.
+
+Batch independent measurements: compute several crops, bounds or color samples in one script and print a compact summary, instead of one command per measurement. Look at a detail with `molly_view_image` `region` rather than writing and reading a crop file.
+
+Do not brute-force a fit: never sweep fonts, sizes, tracking or positions in a search loop to match pixels. Measure once, place, render and compare; when the face is not available, use the closest available one and report it.

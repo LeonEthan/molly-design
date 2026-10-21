@@ -13,6 +13,15 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import http from 'node:http';
+import { randomUUID } from 'node:crypto';
+import os from 'node:os';
+import path from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { resolveDesignImageViewScope } from '../src/mcp/design-tools';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { buildMollyMcpServer } from '../src/mcp/molly-mcp-server';
 import {
   IMAGE_CONNECTION_VERSION,
   LocalMachineRpcRequestSchema,
@@ -219,6 +228,82 @@ const readConnection = async (
 };
 
 describe('MessageHandler design/image-connection gate', () => {
+  it.each([
+    { ownerSessionId: DESIGN_SESSION_ID, eligible: true },
+    { ownerSessionId: CODING_SESSION_ID, eligible: false },
+  ])(
+    'lists the viewer only for eligible design scope: $ownerSessionId',
+    async ({ ownerSessionId, eligible }) => {
+      const { handler } = createHandler({
+        sessions: {
+          [DESIGN_SESSION_ID]: { meta: sessionMeta(DESIGN_SESSION_ID, true) },
+          [CODING_SESSION_ID]: { meta: sessionMeta(CODING_SESSION_ID, false) },
+        },
+      });
+      const root = await mkdtemp(path.join(os.tmpdir(), 'daemon-view-'));
+      const socketPath =
+        process.platform === 'win32'
+          ? `\\\\.\\pipe\\daemon-view-${randomUUID()}`
+          : path.join(root, 'control.sock');
+      const answer = await handler.handleLocalMachineRpc(
+        LocalMachineRpcRequestSchema.parse({
+          method: 'design/image-connection',
+          machineId: 'machine-1',
+          workspaceId,
+          ownerSessionId,
+          params: {},
+        })
+      );
+      const rpc = http.createServer((request, response) => {
+        request.resume();
+        request.on('end', () => {
+          response.writeHead(200, { 'content-type': 'application/json' });
+          response.end(JSON.stringify(answer));
+        });
+      });
+      const client = new Client({ name: 'daemon-viewer-test', version: '1.0.0' });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          rpc.once('error', reject);
+          rpc.listen(socketPath, resolve);
+        });
+        const resolved = await resolveDesignImageViewScope({
+          machineId: 'machine-1',
+          workspaceId,
+          sessionId: ownerSessionId,
+          localControlSocketPath: socketPath,
+        });
+        const viewer = buildMollyMcpServer({ imageViewScope: resolved });
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+        try {
+          await viewer.connect(serverTransport);
+          await client.connect(clientTransport);
+          expect(
+            (await client.listTools()).tools.some((tool) => tool.name === 'molly_view_image')
+          ).toBe(eligible);
+          expect(answer).toMatchObject({
+            ok: true,
+            result: {
+              type: 'design/image-connection',
+              connection: null,
+              ready: false,
+              available: false,
+            },
+          });
+          if (eligible) expect(resolved?.workdir).toBe('/synthetic/molly-test-project');
+          else expect(resolved).toBeUndefined();
+        } finally {
+          await client.close();
+          await viewer.close();
+        }
+      } finally {
+        await handler.cleanup();
+        await new Promise<void>((resolve) => rpc.close(() => resolve()));
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  );
+
   it('answers ready using the broker-authorized image lease, not the legacy row', async () => {
     const { handler, getOrCreateSessionDoc, upsertDocMeta, announceImage } = createHandler({
       imageConnection: storedImageConnection(),

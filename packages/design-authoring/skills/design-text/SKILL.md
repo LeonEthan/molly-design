@@ -54,6 +54,8 @@ shapes are in the `graphic-design` skill's `references/artwork-format.md`.
 
 ## Fonts
 
+**Finding fonts.** Look only in the known font directories: on macOS `/System/Library/Fonts`, `/System/Library/Fonts/Supplemental`, `/Library/Fonts` and `~/Library/Fonts`; on Windows `C:\Windows\Fonts`; on Linux `fc-list` or `/usr/share/fonts`. Never search the whole filesystem or home directory (`find /`, `find ~`, unscoped `mdfind`); it can take minutes. If a wanted face is not there, use Inter (the bundled default) or a face you found and say so.
+
 Register real font files as the format reference describes, keep each face's
 complete glyph set, and check Chinese, Japanese or Korean copy against the font
 section there. Render the first usable version early to confirm key fonts load

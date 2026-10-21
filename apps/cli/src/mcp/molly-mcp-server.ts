@@ -1,6 +1,11 @@
 import { readSessionHistory } from '@molly/shared/session-data';
 import { formatDesignAssetFailure } from '@molly/shared/local-machine-rpc';
-import { requestDesignResubmit, resolveDesignResubmit } from './design-tools';
+import {
+  requestDesignResubmit,
+  resolveDesignResubmit,
+  resolveDesignImageViewScope,
+} from './design-tools';
+import { ViewImageInputSchema, viewImage, type DesignImageViewScope } from './view-image';
 import { spawn } from 'child_process';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
@@ -3322,6 +3327,7 @@ export const __mollyMcpServerInternals = {
 export function buildMollyMcpServer(
   config: {
     designResubmit?: boolean;
+    imageViewScope?: DesignImageViewScope;
     /**
      * Whether a Molly desktop is polling this machine (P2.4b). Absent means "no
      * desktop", the honest default: rendering is done by the desktop app, so a
@@ -3337,6 +3343,25 @@ export function buildMollyMcpServer(
     name: 'molly',
     version: '0.1.0',
   });
+
+  if (config.imageViewScope) {
+    const scope = config.imageViewScope;
+    server.registerTool(
+      'molly_view_image',
+      {
+        description:
+          'View one image, one region of an image, or up to nine images as a numbered contact sheet. Returns a bounded JPEG (long edge at most 1280 px) plus the original size and bytes, so viewing never puts a full-size file into context. Use region with original pixel coordinates to inspect detail at native resolution. Read-only; it never changes files. Paths must be inside this design session.',
+        inputSchema: ViewImageInputSchema,
+      },
+      async (input) => {
+        try {
+          return await viewImage(input, scope);
+        } catch (error) {
+          return textResult(formatMcpErrorMessage(error), true);
+        }
+      }
+    );
+  }
 
   // Preview rendering (P2.4b). Registered unconditionally and disabled below
   // unless a Molly desktop is polling this machine, so the agent that cannot
@@ -4026,6 +4051,7 @@ export async function runMollyMcpServer(): Promise<void> {
   const renderHost = await resolveRenderHost(context);
   const designResubmit = await resolveDesignResubmit(context);
   await buildMollyMcpServer({
+    imageViewScope: await resolveDesignImageViewScope(context),
     designResubmit,
     renderHost,
     resolveRenderHost: async () => await resolveRenderHost(context),

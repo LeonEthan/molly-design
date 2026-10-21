@@ -47,6 +47,7 @@ import {
 } from './host-system-prompt';
 import { z } from 'zod';
 import { generateSessionTitle } from './session-title';
+import { retainRecentToolImages } from './image-retention';
 
 const NativeCompletionSchema = z.object({
   execution: z.literal('inference'),
@@ -184,6 +185,10 @@ export class PiAcpHost {
   extension: InlineExtension = {
     name: 'molly-host',
     factory: (pi) => {
+      pi.on('context', (event) => {
+        const messages = retainRecentToolImages(event.messages);
+        return messages ? { messages } : undefined;
+      });
       const validate = (
         _event: unknown,
         ctx: { model?: { provider: string; id: string; baseUrl: string } }

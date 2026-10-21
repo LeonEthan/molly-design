@@ -11,24 +11,19 @@ Build queries from the direction words, their synonyms and the pictures they
 call up, not only from the category: for a quiet herbal brand, "apothecary
 shelf", "morning steam" or "pressed botanicals" find more than "tea poster".
 Choose queries that help decide composition, palette, type treatment or image
-style while preserving the user's direction. Include at least one source outside
-the category and outside current design feeds: historical posters, fine art,
-architecture, packaging from another field. If every result looks alike, the
-search is too narrow; widen it once.
+style while preserving the user's direction. One of the three searches may look outside the category (historical posters, fine art, architecture, packaging from another field) on the same site. If every result looks alike, use a remaining search to widen once.
 
-Make a few queries, then move on to choosing. If the results stay thin, take the
-gate's shortfall exit rather than browsing without end.
+The research budget in the design-research Skill's gate (one site, three searches of two to four screens each, three saved picks) is the ceiling, not a target. Scroll before judging a search, and follow a promising thread with the next search rather than starting over. If the results stay thin, take the gate's shortfall exit.
 
 Keep research shallow: one site, the searches you planned, the results you
 opened. Do not crawl a site's structure — sitemaps, category or tag listings,
 API endpoints — to map what exists; the gate needs inspected images, not a map
 of the site. A search that returned nothing useful is evidence to widen or stop,
-not to dig into the site's machinery.
+not to dig into the site's machinery. Write no scripts that fetch or crawl pages; read the site through the browser tools only.
 
 ## Inspect and keep sources
 
-Open relevant results individually and use screenshots or image reading to judge
-their appearance; the gate says what counts as inspection. A directly opened
+Judge results from the grid screenshot first and look at picks through their saved files; the gate says what counts as inspection. Open a detail page only when a thumbnail leaves a real doubt. A directly opened
 and inspected image can provide evidence even when its source page is
 unavailable. Report that provenance gap and follow the `graphic-design` skill's
 Reporting section for inspected URLs and confirmed saved paths.
@@ -55,8 +50,7 @@ drawn from only one or two references reads as a blend of them: before building,
 check that the chosen direction is not recognizably one source with new copy.
 A saved inspiration image can be an `edit` input for a design option, with the
 prompt naming the quality it lends and forbidding its objects, text and logos
-(the design-options recipe in the `design-replication` skill's
-`references/layered-workflow.md`).
+(the recipe in [design-options.md](design-options.md)).
 Respect source artwork and asset permissions; being legal is not the same as
 being fair to the original designer. When the user prescribes a template to
 reproduce, following it is their decision.

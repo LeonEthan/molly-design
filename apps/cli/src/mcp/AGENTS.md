@@ -42,11 +42,17 @@ Parent instructions apply.
   `packages/shared/AGENTS.md`.
 - `molly_browser`: gate list/call on active local design run and compatible host
   capability/TTL. Bind page/media to Session; validate the strict action union.
-  Preserve untrusted WebMCP summaries on errors and images. Cancel rejects late
+  Preserve untrusted WebMCP summaries on errors and images. Screenshots reach the
+  model as JPEG at most 1280 px on the long edge (quality 70), re-encoded here; an
+  undecodable screenshot fails the call rather than forwarding raw bytes. Cancel rejects late
   results without replay or run-wide freeze. See the browser implementation docs.
 - `molly_render_preview` forwards asset diagnostics only from the validated local
   RPC field, as fixed text and private MCP metadata. Never infer trusted metadata
   from error strings; invalid fields follow the existing refusal path.
+- `molly_view_image` is registered only in design sessions, independently of desktop
+  availability. It is read-only, scopes real paths to the session workdir and preview
+  directory, returns JPEG at most 1280 px and contact sheets of at most nine images,
+  and fails the call on decode failure.
 
 ## Session tool contracts
 

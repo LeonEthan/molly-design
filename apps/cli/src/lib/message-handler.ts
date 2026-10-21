@@ -9,6 +9,7 @@ import { HarnessCredentialBroker } from '@/agent/harness-credential-broker';
 import { EmbeddedHarnessCatalogPublisher } from '@/agent/embedded-harness-catalog';
 import { LegacyImageMigration } from '@/design/legacy-image-migration';
 import { BrowserHost } from '@/browser/browser-host';
+import { normalizeBrowserImage } from '@/browser/save-image';
 import { writeGeneratedImageAsset } from '@/mcp/image-generation';
 import type { AgentBrowserScope } from '@molly/shared/browser-agent-rpc';
 import { DesignAssetFailureSchema } from '@molly/shared/local-machine-rpc';
@@ -5949,15 +5950,13 @@ export class MessageHandler {
         if (outcome.reply.kind === 'asset') {
           try {
             const workspace = await this.resolveActiveDesignContext(sessionId, design.artworkId);
+            const bytes = await normalizeBrowserImage(Buffer.from(outcome.reply.base64, 'base64'));
             if (
               this.executionService.getActiveInvocationContext(sessionId)?.sourceTurnId !== runId
             ) {
               throw new Error('Browser run ended before image publication.');
             }
-            const asset = await writeGeneratedImageAsset(
-              workspace.artifactWorkdir,
-              Buffer.from(outcome.reply.base64, 'base64')
-            );
+            const asset = await writeGeneratedImageAsset(workspace.artifactWorkdir, bytes);
             return {
               type: 'browser/execute' as const,
               ok: true as const,

@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import {
   AgentBrowserCommandSchema,
@@ -15,6 +16,10 @@ import { buildMollyMcpServer } from '@/mcp/molly-mcp-server';
 
 const observationId = '550e8400-e29b-41d4-a716-446655440000';
 const SHA = 'a'.repeat(64);
+const solidJpeg = (width: number, height: number) =>
+  sharp({ create: { width, height, channels: 3, background: '#2a6fdb' } })
+    .jpeg({ quality: 75 })
+    .toBuffer();
 
 const connect = async (config: MollyBrowserMcpServerConfig) => {
   const server = buildMollyBrowserMcpServer(config);
@@ -164,7 +169,47 @@ describe('molly_browser results', () => {
     expect(result.structuredContent).toEqual(saved);
   });
 
-  it('keeps a screenshot as an inline image block', async () => {
+  it('sends a screenshot to the model as a JPEG bounded to 1280 px on the long edge', async () => {
+    const { config } = answering({
+      kind: 'image',
+      mimeType: 'image/jpeg',
+      base64: (await solidJpeg(2560, 2012)).toString('base64'),
+      pageUrl: 'https://example.com/',
+    });
+    const result = await (await connect(config)).callTool({ name: 'screenshot', arguments: {} });
+    const [text, image] = result.content as Array<{
+      type: string;
+      text?: string;
+      data?: string;
+      mimeType?: string;
+    }>;
+    expect(text).toEqual({ type: 'text', text: expect.stringContaining('https://example.com/') });
+    expect(image).toMatchObject({ type: 'image', mimeType: 'image/jpeg' });
+    expect(await sharp(Buffer.from(image.data!, 'base64')).metadata()).toMatchObject({
+      format: 'jpeg',
+      width: 1280,
+      height: 1006,
+    });
+    expect(result.structuredContent).toBeUndefined();
+  });
+
+  it('does not enlarge a screenshot already within the bound', async () => {
+    const { config } = answering({
+      kind: 'image',
+      mimeType: 'image/jpeg',
+      base64: (await solidJpeg(800, 600)).toString('base64'),
+      pageUrl: 'https://example.com/',
+    });
+    const result = await (await connect(config)).callTool({ name: 'screenshot', arguments: {} });
+    const image = (result.content as Array<{ type: string; data?: string }>)[1];
+    expect(await sharp(Buffer.from(image.data!, 'base64')).metadata()).toMatchObject({
+      format: 'jpeg',
+      width: 800,
+      height: 600,
+    });
+  });
+
+  it('fails closed instead of forwarding an undecodable screenshot', async () => {
     const { config } = answering({
       kind: 'image',
       mimeType: 'image/jpeg',
@@ -172,11 +217,8 @@ describe('molly_browser results', () => {
       pageUrl: 'https://example.com/',
     });
     const result = await (await connect(config)).callTool({ name: 'screenshot', arguments: {} });
-    expect(result.content).toEqual([
-      { type: 'text', text: expect.stringContaining('https://example.com/') },
-      { type: 'image', mimeType: 'image/jpeg', data: '/9j/AA==' },
-    ]);
-    expect(result.structuredContent).toBeUndefined();
+    expect(result.isError).toBe(true);
+    expect(result.content).not.toContainEqual(expect.objectContaining({ type: 'image' }));
   });
 
   it('refuses without dispatch when the desktop disconnected after registration', async () => {

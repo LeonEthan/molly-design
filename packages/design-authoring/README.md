@@ -64,7 +64,8 @@ reads only when the task reaches their ground. `skills/graphic-design/` is the
 core entry — definition, task branches, recommended flow, reporting and
 boundaries — with the format reference (`references/artwork-format.md`) and the
 artwork-level helpers. `skills/design-research/` owns new-direction work
-(intent, bounded website research, image-model design options, design defaults,
+(intent, bounded website research, image-model design options with the recipe
+in `references/design-options.md`, design defaults,
 rejection handling). `skills/design-replication/` owns faithful reproduction of
 a chosen design or reference as editable layers, the bundled examples and the
 reference-pack helpers. `skills/design-text/` owns copy representation: native

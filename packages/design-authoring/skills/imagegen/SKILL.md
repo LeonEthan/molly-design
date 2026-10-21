@@ -39,7 +39,7 @@ already have consumed budget. Useful inputs include exact text, subject,
 composition, intended use, and constraints.
 Both tools write returned bytes under `media/` in the supplied design authoring
 directory and return a typed result (`structuredContent`) with the artwork-relative
-`path`, `absolutePath`, `sha256`, `mimeType`, `width`, `height` and `bytes`. Reference the relative path from that directory's `design.yaml`. Open outputs with an actual image-reading tool to
+`path`, `absolutePath`, `sha256`, `mimeType`, `width`, `height` and `bytes`. Reference the relative path from that directory's `design.yaml`. Open outputs with `molly_view_image` (or another image-reading tool when that is absent); use `paths` to view several options together, to
 judge the result and decide whether further changes are useful. To show an output
 in your reply, embed it with Markdown image syntax using its `absolutePath`, for
 example `![Draft A](/abs/media/a.png)`; a path named only in text is not displayed

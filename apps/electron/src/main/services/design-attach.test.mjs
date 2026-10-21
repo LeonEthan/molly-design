@@ -28,7 +28,7 @@ const compiled = await build({
   )
 })
 
-function fixture() {
+function fixture(hooks = {}) {
   const loading = Promise.withResolvers()
   const loadStarted = Promise.withResolvers()
   const apiReady = Promise.withResolvers()
@@ -61,6 +61,10 @@ function fixture() {
         }
         scripts.push({ ready, script, retired: leases.at(-1)?.disposed ?? false })
         if (!ready) throw new Error('Canvas API not ready')
+        if (hooks.execute) {
+          const result = await hooks.execute(script)
+          if (result !== undefined) return result
+        }
         return true
       }
     }
@@ -92,11 +96,17 @@ function fixture() {
     module,
     module.exports,
     (name) => {
-      if (name === 'electron') return { app: { getAppPath: () => '/synthetic' }, WebContentsView }
+      if (name === 'electron')
+        return {
+          app: { getAppPath: () => '/synthetic' },
+          WebContentsView,
+          BrowserWindow: { getAllWindows: () => [] }
+        }
       if (name === './design-worker')
         return {
           DesignWorker: class {
-            async request() {
+            async request(request) {
+              if (hooks.request) return hooks.request(request)
               return { association: { sessionId: 'artwork' }, revisionId: 'revision' }
             }
           }
@@ -380,3 +390,57 @@ void test('closing the window asks its canvases to publish unsent notes before d
   assert.equal(flush?.retired, false)
   assert.equal(lease.disposed, true)
 })
+
+for (const edit of ['background', 'dimensions']) {
+  void test(`a turn changing only canvas ${edit} prepares the historical compare render`, async () => {
+    const before = {
+      doc: {
+        schemaVersion: 4,
+        canvas: { width: 800, height: 600 },
+        diagnostics: [],
+        background: { type: 'solid', color: '#ffffff' },
+        elements: [{ id: 'text' }]
+      },
+      assets: {}
+    }
+    const after = structuredClone(before)
+    if (edit === 'background') after.doc.background.color = '#000000'
+    else after.doc.canvas.width = 1200
+    let current = { ...before, association: { sessionId: 'artwork' }, revisionId: 'before' }
+    const historyRead = Promise.withResolvers()
+    const f = fixture({
+      execute: (script) => {
+        if (script === 'window.molly?.state()')
+          return { dirty: false, saving: false, composing: false }
+        if (script.includes('window.molly.snapshot()'))
+          return { ...before, doc: Object.fromEntries(Object.entries(before.doc).reverse()) }
+        return undefined
+      },
+      request: async (request) => {
+        if (request.operation === 'history-list')
+          return [
+            {
+              commitId: 'saved',
+              sourceRevisionId: 'before',
+              contentDigest: createHash('sha256').update(JSON.stringify(before)).digest('hex')
+            }
+          ]
+        if (request.operation === 'history-read') {
+          historyRead.resolve(request.commitId)
+          return current
+        }
+        return current
+      }
+    })
+    const opening = f.attachDesign(f.owner, 'artwork', { x: 0, y: 0, width: 800, height: 600 })
+    await f.loadStarted.promise
+    f.loading.resolve()
+    await f.readyStarted.promise
+    f.apiReady.resolve()
+    await opening
+    current = { ...current, ...after, revisionId: 'after' }
+    const changes = await f.syncDesignCanvasFromStore('artwork', 'artwork', { compare: true })
+    assert.deepEqual(changes, { changed: [], removed: [] })
+    assert.equal(await historyRead.promise, 'saved')
+  })
+}

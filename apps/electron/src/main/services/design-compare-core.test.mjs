@@ -1,31 +1,55 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import test from 'node:test'
 import { findDesignCompareSource } from './design-compare-core.ts'
 
-const version = (commitId, sourceRevisionId, kind = 'saved') => ({
+const contentDigest = (content) =>
+  createHash('sha256')
+    .update(
+      JSON.stringify({
+        doc: content.doc,
+        assets: Object.fromEntries(
+          Object.keys(content.assets)
+            .sort()
+            .map((key) => [key, content.assets[key]])
+        )
+      })
+    )
+    .digest('hex')
+const baseline = {
+  doc: { canvas: { background: '#ffffff' }, elements: [{ id: 'text' }] },
+  assets: { z: 'last', a: 'first' }
+}
+const version = (commitId, content, sourceRevisionId = 'original-envelope') => ({
   commitId,
-  number: 1,
-  createdAt: '2026-10-20T00:00:00.000Z',
-  kind,
-  ...(sourceRevisionId ? { sourceRevisionId } : {})
+  contentDigest: contentDigest(content),
+  sourceRevisionId
 })
 
-void test('the compare source is the newest entry holding the superseded content', () => {
+void test('compare finds deduplicated content after Save Version or restore rebases its envelope', () => {
   const versions = [
-    version('aaaa', 'rev-1', 'saved'),
-    version('bbbb', 'rev-2', 'before-agent'),
-    version('cccc', 'rev-1', 'before-restore')
+    version('saved', baseline),
+    version('other', { ...baseline, doc: { elements: [] } })
   ]
-  assert.equal(findDesignCompareSource(versions, 'rev-1')?.commitId, 'cccc')
-  assert.equal(findDesignCompareSource(versions, 'rev-2')?.commitId, 'bbbb')
+  assert.equal(findDesignCompareSource(versions, baseline)?.commitId, 'saved')
 })
 
-void test('entries without a source revision never match', () => {
-  const versions = [version('aaaa')]
-  assert.equal(findDesignCompareSource(versions, 'rev-1'), undefined)
+void test('compare chooses the newest matching document and assets regardless of asset insertion order', () => {
+  const versions = [
+    version('old', baseline),
+    version('new', { ...baseline, assets: { a: 'first', z: 'last' } })
+  ]
+  assert.equal(findDesignCompareSource(versions, baseline)?.commitId, 'new')
+  assert.equal(
+    findDesignCompareSource(versions, { ...baseline, assets: { a: 'different', z: 'last' } }),
+    undefined
+  )
 })
 
-void test('no matching content means no compare source', () => {
-  const versions = [version('aaaa', 'rev-1')]
-  assert.equal(findDesignCompareSource(versions, 'rev-9'), undefined)
+void test('no matching content never falls back to an envelope revision', () => {
+  assert.equal(
+    findDesignCompareSource([version('other', { ...baseline, doc: {} })], baseline),
+    undefined
+  )
+  assert.equal(findDesignCompareSource([{ commitId: 'legacy' }], baseline), undefined)
 })

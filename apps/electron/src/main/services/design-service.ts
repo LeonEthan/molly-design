@@ -83,6 +83,7 @@ type RecordEntry = {
   owner: BrowserWindow
   dispose(): void
   revisionId: string
+  savedContent(): DesignPayload
 }
 export const designCanvasAccess = new DesignCanvasAccess()
 export function notifyDesignState(artworkId?: string) {
@@ -184,7 +185,14 @@ export async function holdDesignCompare(
       .catch(() => false)) === true
   )
 }
-async function prepareDesignCompare(id: string, preTurnRevisionId: string) {
+async function prepareDesignCompare(
+  id: string,
+  before: {
+    doc: { elements: { id: string }[] }
+    assets: Record<string, string>
+    revisionId: string
+  }
+) {
   const generation = (compareGenerations.get(id) ?? 0) + 1
   compareGenerations.set(id, generation)
   compareFrames.delete(id)
@@ -195,7 +203,7 @@ async function prepareDesignCompare(id: string, preTurnRevisionId: string) {
       sessionId: id
     })
     if (stale()) return
-    const source = findDesignCompareSource(versions, preTurnRevisionId)
+    const source = findDesignCompareSource(versions, before)
     if (!source) return
     const payload = await designRequest<DesignPayload>({
       operation: 'history-read',
@@ -215,7 +223,7 @@ async function prepareDesignCompare(id: string, preTurnRevisionId: string) {
     if (stale()) return
     compareFrames.set(id, {
       src: 'data:image/png;base64,' + image.toPNG().toString('base64'),
-      preTurnRevisionId
+      preTurnRevisionId: before.revisionId
     })
     notifyDesignCompare(id)
   } catch {
@@ -490,7 +498,8 @@ export async function surface(
       isolated,
       url: origin + '/editor.html?ws=' + id + (editable || preview ? '&autosave=1&molly=1' : ''),
       own: lease.own,
-      dispose: lease.dispose
+      dispose: lease.dispose,
+      savedContent: () => payload
     }
   } catch (error) {
     lease.dispose()
@@ -590,6 +599,7 @@ export async function attachDesign(
             view,
             owner,
             dispose: source.dispose,
+            savedContent: source.savedContent,
             revisionId: payload.revisionId
           }
           records.set(hostId, entry)
@@ -1115,11 +1125,7 @@ async function syncDesignCanvasFromStoreOnce(
   const after = saved.doc as { elements?: unknown } | null
   if (!before || !Array.isArray(after?.elements)) return null
   const changes = diffDesignElements(before.doc, after as { elements: { id: string }[] })
-  // Hold-to-compare prepares from the superseded revision while it is still
-  // known here. Turn-driven syncs only: restores and renames stay out, and any
-  // reload without a new frame supersedes the old one.
-  if (options?.compare && (changes.changed.length > 0 || changes.removed.length > 0))
-    void prepareDesignCompare(id, before.revisionId)
+  if (options?.compare) void prepareDesignCompare(id, before)
   else invalidateDesignCompare(id)
   return changes
 }
@@ -1127,7 +1133,11 @@ async function syncDesignCanvasFromStoreOnce(
 async function reloadDesignCanvas(
   id: string,
   hostId?: string
-): Promise<{ doc: { elements: { id: string }[] }; revisionId: string } | null> {
+): Promise<{
+  doc: { elements: { id: string }[] }
+  assets: Record<string, string>
+  revisionId: string
+} | null> {
   const entries = [...records].filter(([, record]) => record.artworkId === id)
   // Check every instance before destroying any: exceptional dirty content is never discarded.
   for (const [, record] of entries) {
@@ -1137,19 +1147,19 @@ async function reloadDesignCanvas(
   }
   const baseline = selectChangeBaseline(entries, hosts, id, hostId)
   const baselineRevisionId = baseline?.[1].revisionId
-  const before = baseline
-    ? await baseline[1].view.webContents
-        .executeJavaScript('window.molly.snapshot().then((value) => value.doc)')
-        .catch(() => null)
-    : null
+  const before = baseline?.[1].savedContent()
   for (const [key, record] of entries) {
     const visible = hosts.has(key)
     const bounds = record.view.getBounds()
     await retireDesignInstance(key)
     if (visible) await attachDesign(record.owner, id, bounds, key, false)
   }
-  return Array.isArray(before?.elements) && baselineRevisionId
-    ? { doc: before as { elements: { id: string }[] }, revisionId: baselineRevisionId }
+  return Array.isArray(before?.doc?.elements) && before.assets && baselineRevisionId
+    ? {
+        doc: before.doc as { elements: { id: string }[] },
+        assets: before.assets,
+        revisionId: baselineRevisionId
+      }
     : null
 }
 

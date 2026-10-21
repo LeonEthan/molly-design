@@ -75,10 +75,9 @@ no non-mutating render of a history entry existed.
   composer's image cap: when the attachments do not fit, nothing is staged and
   the tray reports the failure.
 - **Hold-to-compare.** When a committed turn reloads an open canvas and the
-  element diff is non-empty, main asynchronously renders the history entry whose
-  `sourceRevisionId` matches the superseded canvas revision (`history-read` is
-  read-only; `sourceRevisionId` is a content hash, so a deduplicated older entry
-  is equivalent) through the same offscreen renderer, downscales to ≤2048 px and
+  saved revision changed, main asynchronously renders the history entry whose
+  `contentDigest` matches the superseded canvas document and assets (`history-read`
+  is read-only; metadata-only rebases do not change this content identity) through the same offscreen renderer, downscales to ≤2048 px and
   keeps one PNG data URL per artwork in memory. A turn start, teardown or a
   newer preparation invalidates it. The shell learns availability over
   `design.compare`; holding `\` in the shell or the canvas — the canvas posts
@@ -128,9 +127,37 @@ no non-mutating render of a history entry existed.
 - The compare frame is prepared only when a committed turn reloads an open
   canvas; a turn that finishes while the canvas is closed has no frame, like
   the post-turn outlines.
-- A turn that changed no element (for example a background-only edit) prepares
-  no frame, because the trigger is the element diff.
 - Turns sent from a staged chip show the plain working outline while running;
   the numbered run badges stay tied to the tray's direct send.
 - Hold-to-compare targets the pre-turn content as a whole-artwork image; it
   cannot diff individual elements, which the post-turn outlines already cover.
+
+## PR review correction
+
+The first implementation incorrectly described `sourceRevisionId` as the artwork's
+content hash. It hashes the whole saved envelope; Save Version and restore can
+change editing metadata while history deduplication retains an older entry with
+identical document and assets. Bento snapshots reorder document keys, so hashing a live snapshot also fails
+against history's validated saved bytes. The existing surface payload closure now
+supplies the superseded saved content without retaining another copy. Compare
+now matches the existing `contentDigest`
+using the canonical content serialization from `store.ts` (document plus assets
+sorted by key), preserving the existing history reader and offscreen renderer.
+The serializer pattern is adapted locally in the Node-only compare helper;
+importing the CLI store at runtime would pull storage and validation into Electron,
+and a new cross-runtime API or stored mapping is unnecessary for this lookup.
+Compare preparation also runs for every turn-driven revision reload, including
+background-only and canvas-size changes; the element diff still drives outlines.
+These are implementation corrections to the existing whole-artwork comparison
+intent; the Spec remains draft.
+
+Regression tests exercise background-only and size-only reloads through the real
+service, and content-based selection after envelope rebases, asset-order stability,
+and refusal to select different content. Both failures reproduced before the fix.
+Native Electron verification launched through computer-use used an isolated
+synthetic fixture with production save/version/restore, history read, offscreen
+render and compare APIs. Screenshots confirmed the pre-change background appears
+and release returns to the current background; after restore, a size-only change
+also prepared and displayed the matching older frame. The fixture used temporary
+show/release controls, not a paid Agent turn or the full chat dispatch path. Final
+check and independent review results are recorded in the PR.

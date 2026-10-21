@@ -85,10 +85,10 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
   daemon import RPC. Verify `EnableCookieEncryption` before signing. Cookie writes
   do not prove sign-in.
 - Image preview export (`services/image-export-service.ts`) keeps the native
-  menu, clipboard, and save dialog here because the renderer holds the only copy
-  of the image (a `blob:` URL main cannot download). Bytes cross once, after the
-  menu selection. Naming/filter logic stays in `image-export-core.ts` so it runs
-  under `node --test` without the `electron` runtime.
+  menu, clipboard, and save dialog here; the renderer reads original asset bytes
+  only after menu selection. Its CSP must allow `blob:`, `data:` and `molly-resource:`
+  reads as well as image display. Naming/filter logic stays in `image-export-core.ts`
+  so it runs under `node --test` without the `electron` runtime.
 
 ## Local file resources
 

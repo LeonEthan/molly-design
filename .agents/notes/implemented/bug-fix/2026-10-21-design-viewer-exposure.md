@@ -66,7 +66,7 @@ changing Accept cannot override an already selected AVIF URL. That would change
 the current explicit-refusal behavior and needs separate implementation scope.
 The owning publication seam is `message-handler.ts:5957`, before calling
 `writeGeneratedImageAsset`; keep generated-image intake strict. No browser code
-was changed in the initial exposure commit `956f72bd`; the owner-approved
+was changed in the initial exposure commit `09c3da64`; the owner-approved
 follow-up below implements this separate scope.
 
 ## Validation

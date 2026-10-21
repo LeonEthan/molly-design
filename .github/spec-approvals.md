@@ -119,3 +119,17 @@ Keychain access in the same implementation. This supersedes the preview-token
 and deferred-Keychain steps in the original proposal. Conditional grant retention
 and unverified website compatibility remain explicit; unrelated Spec drafts and
 runtime acceptance are not approved by this decision.
+
+## 2026-10-21 two-step research and you-choose path
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-21, after reviewing the #199
+plans and the round-4 acceptance runs on branch `perf/browser-screenshot-199`
+(commits `b7b9d5c2` and `813a75c1`). The revision bounds inspiration research
+to one design site and at most three searches of two to four scrolled screens,
+allows one search to extend along a promising thread, surveys the result grid
+before saving at most three picks that are each viewed, and no longer opens
+detail pages for rejected candidates. Options are exactly three; when the user
+asks the Agent to decide, it creates one recommended option and continues
+reproducing it in the same turn. `graphic-design-platform` stays draft because
+its current draft also carries unrelated revisions awaiting separate approval.

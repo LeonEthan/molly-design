@@ -82,6 +82,24 @@ In RPC mode Pi binds select/confirm/input/editor/notify to the existing ACP form
 ([session.ts](src/session.ts), [extension-ui.ts](src/extension-ui.ts)). Terminal components,
 widgets, footers and autocomplete are unavailable.
 
+## Request-level image retention
+
+The managed host uses Pi 1.3.0's public `context` hook to replace older tool-result
+images with stable text placeholders for each model request ([#199](https://github.com/LeonEthan/molly-design/issues/199)).
+Up to eight tool images pass through unchanged. Above eight, the boundary advances
+in batches of four, retaining the latest four to seven tool images. User images
+are never replaced. Placeholders retain the MIME type, PNG/JPEG header dimensions
+when available, tool name and the matching call's path argument, so the agent can
+read a file again. Other content stays intact; native history and files are unchanged.
+Images without a recorded path may require a new screenshot. No resizing, extra
+inference, settings or storage is involved.
+Pi's `dist/core/extensions/types.d.ts:673–681` defines the pre-inference event;
+`dist/core/extensions/runner.js:1006–1032` deep-copies messages, restores system/tool
+state and reports hook exceptions through its extension error channel. The transformed
+list is local to inference in `pi-agent-core/dist/agent-loop.js:260–267`, without
+writing back to history. The transform builds a new list, so a failure leaves the
+original request intact.
+
 ## Credentials and models
 
 The host grants the selected connection's key over the private fd-3 pipe for each run.

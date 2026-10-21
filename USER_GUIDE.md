@@ -83,8 +83,8 @@ The row at the top of Settings → AI models summarises Models, Image generation
 Pinterest; click an item to reach its setting (Pinterest opens the browser-account
 import dialog again). A tick means a saved, switched-on
 setup, not a tested one. Pinterest never shows a tick, because stored cookies do
-not prove you are signed in; once imported, it reads "Imported · open Pinterest
-to check".
+not prove you are signed in; once imported, it reads "Imported · check in
+Molly's browser".
 
 Settings → Advanced → System → Engine details lists the Pi engine and every bundled
 add-on (helper agents, skills, questions for you, skill mentions, fast file search

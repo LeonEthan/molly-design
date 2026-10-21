@@ -71,7 +71,7 @@ collapsed and fully selected. One Import action reads and writes without a previ
 step. Source errors, pending authorization, cancellation and retained/skipped
 counts remain in this dialog. `PublicBrowserSurface` hides under covering dialogs.
 Cookie counts describe local data, not verified sign-in; with cookies present the
-Pinterest chip says "Imported · open Pinterest to check" and stays unticked, and
+Pinterest chip says "Imported · check in Molly's browser" and stays unticked, and
 clicking it reopens the same import dialog. Human takeover and MFA
 remain available on ordinary pages; the dedicated sign-in dialog is retired.
 A browser-file access denial returns the dialog to its ready state silently,

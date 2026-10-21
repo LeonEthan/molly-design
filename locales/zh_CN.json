@@ -240,7 +240,7 @@
   "settings.readiness.keyMissing": "缺少密钥",
   "settings.readiness.moreConnections": "{{name}} +{{count}}",
   "settings.readiness.notSignedIn": "未登录",
-  "settings.readiness.importedOpenToCheck": "已导入 · 打开 Pinterest 确认",
+  "settings.readiness.importedCheckInBrowser": "已导入 · 请在 Molly 浏览器中确认",
   "sessions.activity.retrying": "正在重试…",
   "sessions.subagentTasks.cancelFailed": "无法停止子任务",
   "sessions.subagentTasks.cancelNamed": "停止 {{name}}",

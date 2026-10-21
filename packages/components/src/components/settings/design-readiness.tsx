@@ -83,7 +83,7 @@ export function DesignReadinessView({
     Object.assign(
       pinterest,
       pinterestCookieCount > 0
-        ? { state: 'unverified', value: t('settings.readiness.importedOpenToCheck') }
+        ? { state: 'unverified', value: t('settings.readiness.importedCheckInBrowser') }
         : { state: 'unset', value: t('settings.readiness.notSignedIn') }
     );
   }

@@ -6,7 +6,7 @@ Previous approval: [2026-10-08 sign-in-first website accounts](../.github/spec-a
 Previous approval: [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
 Previous approval: [2026-09-15](../.github/spec-approvals.md#2026-09-15-and-2026-09-16-design-revisions)
 Previous approval: [2026-09-16](../.github/spec-approvals.md#2026-09-15-and-2026-09-16-design-revisions)
-Translation: current
+Translation: pending
 
 [English](graphic-design-platform.md)
 
@@ -116,6 +116,8 @@ P1 支持宽高各 1–4096 像素的单画布。任何调整画布尺寸的实�
 [生成式分层设计任务](generative-layered-design-workflow.zh.md) 定义已批准的九步创作流程及其支撑改动，具体方法与创作取舍由 Agent 负责。
 
 Agent 可调用已有 `molly_render_preview` 渲染 YAML 画稿投影，再用实际可用的图片读取工具查看并继续修改。应用不要求通过结果卡取图，也不把渲染成功等同模型已读取图片；预览工具缺席时，仅说明该能力不可用，不替 Agent 判定全部视觉 review 失败。可选 finalize 脚本不构成必经写入顺序或文件发布事务。
+
+设计会话另提供只读 `molly_view_image`，无需桌面在线即可查看会话工作目录或渲染预览目录内的单张图片、原图像素区域或最多九张编号拼图，返回长边不超过 1280 px 的 JPEG 及原图尺寸、字节数与坐标换算信息；路径在 realpath 后校验，拒绝符号链接逃逸，解码失败即失败，不改变源文件。
 
 ## 内置图像工具
 

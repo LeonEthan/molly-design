@@ -49,6 +49,10 @@ Parent instructions apply.
 - `molly_render_preview` forwards asset diagnostics only from the validated local
   RPC field, as fixed text and private MCP metadata. Never infer trusted metadata
   from error strings; invalid fields follow the existing refusal path.
+- `molly_view_image` is registered only in design sessions, independently of desktop
+  availability. It is read-only, scopes real paths to the session workdir and preview
+  directory, returns JPEG at most 1280 px and contact sheets of at most nine images,
+  and fails the call on decode failure.
 
 ## Session tool contracts
 

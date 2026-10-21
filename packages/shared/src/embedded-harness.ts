@@ -86,6 +86,7 @@ export const MOLLY_BUILTIN_MCP_DESCRIPTION =
 /** The render → read loop passes pixels the model must see, so the preview tool is declared directly. */
 export const MOLLY_BUILTIN_MCP_TOOL_EXPOSURE: readonly McpToolExposureRule[] = [
   { pattern: 'molly_render_preview', exposure: 'direct' },
+  { pattern: 'molly_view_image', exposure: 'direct' },
 ];
 export const MOLLY_BUILTIN_IMAGE_MCP_DESCRIPTION =
   'Generate or edit raster assets with the user’s image connection (each call may be billed)';

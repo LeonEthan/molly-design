@@ -38,33 +38,41 @@
       "derivation": "adapted",
       "upstreamSha256": "05be0c2e37269422e9e0386564f6760efac8c65d8d0cdbf7c48d300c7e6df72b"
     },
-    "skills/graphic-design/references/general-poster.md": {
+    "skills/design-research/references/general-poster.md": {
+      "upstreamPath": "skills/graphic-design/references/general-poster.md",
       "derivation": "original"
     },
-    "skills/graphic-design/references/layered-workflow.md": {
+    "skills/design-research/references/design-options.md": {
       "derivation": "original"
     },
-    "skills/graphic-design/references/replication.md": {
+    "skills/design-replication/references/layered-workflow.md": {
+      "upstreamPath": "skills/graphic-design/references/layered-workflow.md",
+      "derivation": "original"
+    },
+    "skills/design-replication/references/replication.md": {
+      "upstreamPath": "skills/graphic-design/references/replication.md",
       "derivation": "original"
     },
     "skills/graphic-design/references/artwork-format.md": {
       "derivation": "original"
     },
-    "skills/graphic-design/scripts/reference-pack.mjs": {
+    "skills/design-replication/scripts/reference-pack.mjs": {
       "upstreamPath": "skills/graphic-design/scripts/reference-pack.py",
       "derivation": "ported",
       "upstreamSha256": "3e66820f30ffe793d10813e2ecb32b5034791c50e31691dec80cf87c6e70c9e2"
     },
-    "skills/graphic-design/examples/minimal/design.yaml": {
+    "skills/design-replication/examples/minimal/design.yaml": {
+      "upstreamPath": "skills/graphic-design/examples/minimal/design.yaml",
       "derivation": "original"
     },
-    "skills/graphic-design/examples/minimal/media/swatch.png": {
+    "skills/design-replication/examples/minimal/media/swatch.png": {
       "upstreamPath": "skills/graphic-design/examples/minimal/media/swatch.png",
       "derivation": "verbatim",
       "upstreamSha256": "922bc87ec53020f538d101e622731de31eb835e4d3b8f14aecc6dca88cb06249",
       "sha256": "922bc87ec53020f538d101e622731de31eb835e4d3b8f14aecc6dca88cb06249"
     },
-    "skills/graphic-design/examples/layered/design.yaml": {
+    "skills/design-replication/examples/layered/design.yaml": {
+      "upstreamPath": "skills/graphic-design/examples/layered/design.yaml",
       "derivation": "original"
     },
     "skills/imagegen/LICENSE.txt": {
@@ -84,10 +92,12 @@
       "upstreamSha256": "be54f1ced28a7ac1d68670eb2d560d1491d7e0efe38972d9ba3309110f7d45e4",
       "sha256": "be54f1ced28a7ac1d68670eb2d560d1491d7e0efe38972d9ba3309110f7d45e4"
     },
-    "skills/graphic-design/scripts/font-prepare.mjs": {
+    "skills/design-text/scripts/font-prepare.mjs": {
+      "upstreamPath": "skills/graphic-design/scripts/font-prepare.mjs",
       "derivation": "original"
     },
-    "skills/graphic-design/references/font-preparation.md": {
+    "skills/design-text/references/font-preparation.md": {
+      "upstreamPath": "skills/graphic-design/references/font-preparation.md",
       "derivation": "original"
     }
   },
@@ -102,7 +112,7 @@
     "packages/authoring/src/workspace.ts (CAS workspace persistence)",
     "skills/graphic-design/references/pptd.md (upstream PPTD catalogue; not a live pin)",
     "skills/graphic-design/references/pptd-authoring.md and examples/minimal PPTD files (not live upstream pins)",
-    "rewritten graphic-design/imagegen SKILL.md and helper scripts (Molly Design-local; not live upstream pins)",
+    "rewritten graphic-design/imagegen and sibling SKILL.md files plus helper scripts (Molly Design-local; not live upstream pins)",
     "skills/graphic-design/scripts/reference-pack.py superseded by the ported .mjs",
     "skills/graphic-design/VENDOR.lock (runtime per-file freezing replaced by this build-time manifest)",
     "skills/imagegen/scripts/image_gen.py, references/cli.md, references/codex-network.md, references/image-api.md (old CLI/deployment specifics)",
@@ -114,19 +124,20 @@
   "localAdaptations": {
     "src/asset-admission.ts": "Shared original per-asset 16 MiB and existing sniffed-MIME admission for authoring, preview and canonical storage, with typed relative-path diagnostics",
     "src/collect-authoring.ts": "Existing bounded semantic observations report typed per-asset size failures; full-tree and digest-only collection retain existing size behavior",
-    "skills/graphic-design/scripts/reference-pack.mjs": "Ported inspection plus Molly-local alpha, trim and compare layer helpers",
-    "skills/graphic-design/references/general-poster.md": "Original composition guide for the YAML canvas",
-    "skills/graphic-design/references/layered-workflow.md": "Original generative layered workflow guide",
-    "skills/graphic-design/references/replication.md": "Original reconstruction guide for the YAML canvas",
+    "skills/design-replication/scripts/reference-pack.mjs": "Ported inspection plus Molly-local alpha, trim and compare layer helpers (moved from skills/graphic-design in the 2026-10 skill split)",
+    "skills/design-research/references/general-poster.md": "Original composition guide for the YAML canvas (moved from skills/graphic-design in the 2026-10 skill split)",
+    "skills/design-research/references/design-options.md": "Original design-options prompting recipe (moved from skills/design-replication/references/layered-workflow.md in the #199 tuning round)",
+    "skills/design-replication/references/layered-workflow.md": "Original generative layered workflow guide (moved from skills/graphic-design in the 2026-10 skill split)",
+    "skills/design-replication/references/replication.md": "Original reconstruction guide for the YAML canvas (moved from skills/graphic-design in the 2026-10 skill split)",
     "skills/graphic-design/references/artwork-format.md": "Original YAML artwork format guide",
-    "skills/graphic-design/examples/minimal/design.yaml": "Original YAML manifest example admitted by intake",
-    "skills/graphic-design/examples/layered/design.yaml": "Original layered YAML example (background, transparent subject, scrim, grouped text) admitted by intake",
+    "skills/design-replication/examples/minimal/design.yaml": "Original YAML manifest example admitted by intake (moved from skills/graphic-design in the 2026-10 skill split)",
+    "skills/design-replication/examples/layered/design.yaml": "Original layered YAML example (background, transparent subject, scrim, grouped text) admitted by intake (moved from skills/graphic-design in the 2026-10 skill split)",
     "skills/imagegen/references/prompting.md": "T09: model-neutral prompting and generate/edit capability description",
     "src/projection-capabilities.ts": "Derived YAML representation mapping for every active row of the unchanged frozen v1 matrix",
     "src/validate.ts": "YAML file/snapshot boundary; unused PPTD v2 validator removed",
     "src/semantic-assets.ts": "Native structured asset fields only; legacy theme traversal removed",
     "src/canvas-format.ts": "Single molly-canvas/1 YAML projection using literal Bento editable fields and kernel validation",
-    "skills/graphic-design/scripts/font-prepare.mjs": "Optional explicit isolated pinned FontTools setup and lossless complete-face WOFF preparation; no intake mutation or current-copy subsetting"
+    "skills/design-text/scripts/font-prepare.mjs": "Optional explicit isolated pinned FontTools setup and lossless complete-face WOFF preparation; no intake mutation or current-copy subsetting (moved from skills/graphic-design in the 2026-10 skill split)"
   },
   "adapterLicense": {
     "spdx": "Apache-2.0",

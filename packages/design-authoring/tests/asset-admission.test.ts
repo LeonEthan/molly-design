@@ -5,7 +5,7 @@ import { afterEach, expect, it } from 'vitest';
 import { digestAuthoring, intakeAuthoring, validate } from '../src/index.ts';
 
 const png = readFileSync(
-  new URL('../skills/graphic-design/examples/minimal/media/swatch.png', import.meta.url)
+  new URL('../skills/design-replication/examples/minimal/media/swatch.png', import.meta.url)
 );
 const sample = JSON.parse(
   readFileSync(new URL('../../design-bento/sample.json', import.meta.url), 'utf8')

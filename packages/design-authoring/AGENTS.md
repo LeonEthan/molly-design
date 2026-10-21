@@ -13,19 +13,22 @@
 - Upstream-adapted files (`.prettierignore` lists them) stay close to the pinned
   upstream for reviewable diffs; `source-manifest.json` records every migration
   and is enforced by the build.
-- The main graphic-design Skill owns the required workflow, task branches,
-  research exception and completion claims; references supply techniques, not
-  competing workflows. The Agent follows stage dependencies and repair loops,
-  choosing methods and iterations within user constraints. The application never
-  enforces creative stages, analysis methods, review counts or finalize gates.
-  Missing tools do not imply the absence of other Agent visual capabilities.
+- The graphic-design Skill family is decentralized: the core `graphic-design`
+  Skill owns the definition, task branches, required workflow, format pointer
+  and reporting; sibling skills (`design-research`, `design-replication`,
+  `design-text`) own situational guidance and are read only when the task
+  reaches their ground. References supply techniques, not competing workflows.
+  The Agent follows task dependencies and repair loops, choosing methods and
+  iterations within user constraints. The application never enforces creative
+  stages, analysis methods, review counts or finalize gates. Missing tools do
+  not imply the absence of other Agent visual capabilities.
 - Skill directories must be self-contained after materialization: scripts may
-  import only `node:*` builtins or the bundled `scripts/lib/molly-authoring.mjs`.
+  import only `node:*` builtins or their own bundled `scripts/lib/molly-authoring.mjs`.
   Optional font conversion may explicitly prepare pinned FontTools in an isolated
   Python environment outside the collected artwork. No global install, automatic
   intake conversion or current-copy subsetting; preserve source files and glyphs.
-- `src/generated/` and `skills/graphic-design/scripts/lib/` are build outputs;
-  never edit them by hand.
+- `src/generated/` and each skill's `scripts/lib/` are build outputs; never
+  edit them by hand.
 
 - The snapshot contract admits only the YAML artwork projection (`design.yaml` with `format: molly-canvas/1`, `media/`). Read legacy `geon-canvas/1` with identical
   validation; writes use the new format and reads never rewrite source bytes. Leftover `.pptd` and PPTD v2 syntax fail

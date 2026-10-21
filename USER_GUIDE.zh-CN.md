@@ -96,7 +96,7 @@ z.ai）。此路径使用标准 Chat Completions 流式协议，不是 Responses
 
 若 macOS 未允许访问浏览器数据，弹窗不显示错误，直接回到可导入状态并保留浏览器、配置与网站选择；再次点击 **导入** 即可重试。Molly 不会自动重试被拒绝的请求，且 macOS 拒绝一次后可能不再弹窗——请先自行在 **系统设置 → 隐私与安全性 → 应用数据** 中允许 Molly。从终端启动开发版时，macOS 可能把数据访问归属到该终端，而非 Electron。此流程不要求完全磁盘访问。Keychain 授权与此相互独立，读取失败不代表不存在浏览器用户配置。
 
-首期交付以 Pinterest 为准：已在本机 Apple Development 签名包中验证 Chrome 账号导入、登录后搜索和详情浏览、保存 JPEG、同一应用重启后保留登录态及清理。Agent 可将当前页选中的 PNG/JPEG/GIF 图片保存到本次设计的 `media/`，再在 YAML 中引用返回路径。WebP/AVIF 和网页下载流程暂不支持；Amazon 账号导入、商品问答及 Safari、Firefox 或其他系统的导入留待后续；其他 Chromium 浏览器与 Chrome 共用同一读取路径，但尚未用真实用户配置验证。网站仍可能要求重新登录或验证。该本地验收不代表 Developer ID 分发、公证及升级已验证。
+首期交付以 Pinterest 为准：已在本机 Apple Development 签名包中验证 Chrome 账号导入、登录后搜索和详情浏览、保存 JPEG、同一应用重启后保留登录态及清理。Agent 可将当前页选中的 PNG/JPEG/GIF 图片保存到本次设计的 `media/`，再在 YAML 中引用返回路径。浏览器保存 WebP/AVIF 时会在相同图像限制内转换为 PNG；网页下载流程暂不支持；Amazon 账号导入、商品问答及 Safari、Firefox 或其他系统的导入留待后续；其他 Chromium 浏览器与 Chrome 共用同一读取路径，但尚未用真实用户配置验证。网站仍可能要求重新登录或验证。该本地验收不代表 Developer ID 分发、公证及升级已验证。
 
 ## 持续创作、预览与恢复
 

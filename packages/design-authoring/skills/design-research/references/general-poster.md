@@ -72,7 +72,8 @@ editable in Molly.
 - Spacing changes expression: tight letter and line spacing makes words read as
   dense lines, loose spacing makes them airy. Set it deliberately for headlines.
 - For CJK copy, check the face covers the language's punctuation and characters,
-  as [artwork-format.md](artwork-format.md#fonts) describes.
+  as the `graphic-design` skill's `references/artwork-format.md` ("Fonts")
+  describes.
 
 ## Keep facts and images honest
 

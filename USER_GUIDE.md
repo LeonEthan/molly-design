@@ -190,7 +190,7 @@ Developer ID distribution/upgrades remain unverified. Safari, Firefox and import
 on other operating systems are unsupported.
 
 Agent image saving accepts decoded PNG/JPEG/GIF into the current design's `media/`.
-WebP/AVIF remain unsupported by that asset path. Native page downloads remain
+Browser WebP/AVIF saves are converted to PNG within the same image limits. Native page downloads remain
 separate and do not automatically become design assets.
 
 ## Continue, preview and recover

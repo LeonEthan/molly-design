@@ -28,9 +28,12 @@ elements:
 
 describe('live PPTD/Kimi fingerprints', () => {
   it('ships molly-authoring.mjs and does not keep a pre-rename helper', () => {
-    expect(existsSync(path.join(helperDir, 'lib', 'geon-pptd.mjs'))).toBe(false);
-    expect(existsSync(path.join(helperDir, 'lib', 'geon-authoring.mjs'))).toBe(false);
-    expect(existsSync(path.join(helperDir, 'lib', 'molly-authoring.mjs'))).toBe(true);
+    const textHelperDir = path.join(packageRoot, 'skills', 'design-text', 'scripts');
+    for (const dir of [helperDir, textHelperDir]) {
+      expect(existsSync(path.join(dir, 'lib', 'geon-pptd.mjs'))).toBe(false);
+      expect(existsSync(path.join(dir, 'lib', 'geon-authoring.mjs'))).toBe(false);
+      expect(existsSync(path.join(dir, 'lib', 'molly-authoring.mjs'))).toBe(true);
+    }
     const finalize = readFileSync(path.join(helperDir, 'finalize.mjs'), 'utf8');
     const preview = readFileSync(path.join(helperDir, 'render-preview.mjs'), 'utf8');
     expect(finalize).toContain('./lib/molly-authoring.mjs');
@@ -90,6 +93,9 @@ describe('live PPTD/Kimi fingerprints', () => {
     expect(serialized).not.toMatch(/Folio/);
     const blocked = [
       'skills/graphic-design/SKILL.md',
+      'skills/design-research/SKILL.md',
+      'skills/design-replication/SKILL.md',
+      'skills/design-text/SKILL.md',
       'skills/graphic-design/scripts/finalize.mjs',
       'skills/graphic-design/scripts/render-preview.mjs',
       'skills/graphic-design/references/pptd-authoring.md',

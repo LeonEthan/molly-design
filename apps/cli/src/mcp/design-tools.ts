@@ -50,6 +50,9 @@ import {
 } from '@molly/shared';
 import { makeLocalControlClientAuto } from '@molly/shared/node/local-ipc';
 import { Effect } from 'effect';
+import path from 'node:path';
+import { DESIGN_PREVIEW_DIRNAME } from '@/design/render-preview';
+import type { DesignImageViewScope } from './view-image';
 
 /** How long the gate lookup may take before it is treated as "no capability". */
 export const DESIGN_GATE_TIMEOUT_MS = 10_000;
@@ -192,6 +195,25 @@ export async function resolveDesignGate(
     );
   }
   return gate;
+}
+
+export async function resolveDesignImageViewScope(
+  ctx: DesignGateContext
+): Promise<DesignImageViewScope | undefined> {
+  const answer = await callDesignRpc(ctx, undefined, 'design/image-connection', {});
+  if (!answer.ok) return undefined;
+  const parsed = ImageConnectionRpcResultSchema.safeParse(answer.result);
+  if (
+    !parsed.success ||
+    parsed.data.type !== 'design/image-connection' ||
+    !parsed.data.artworkWorkdir ||
+    !parsed.data.workspaceRoot
+  )
+    return undefined;
+  return {
+    workdir: parsed.data.workspaceRoot,
+    previewDirectory: path.join(parsed.data.artworkWorkdir, DESIGN_PREVIEW_DIRNAME),
+  };
 }
 
 /**

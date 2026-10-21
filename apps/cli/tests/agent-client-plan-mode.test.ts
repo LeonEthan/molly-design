@@ -201,7 +201,10 @@ describe('AgentClient plan mode permission restoration', () => {
       ]);
       expect(servers[0]?._meta).toMatchObject({
         mollyMcpDescription: MOLLY_BUILTIN_MCP_DESCRIPTION,
-        mollyMcpToolExposure: [{ pattern: 'molly_render_preview', exposure: 'direct' }],
+        mollyMcpToolExposure: [
+          { pattern: 'molly_render_preview', exposure: 'direct' },
+          { pattern: 'molly_view_image', exposure: 'direct' },
+        ],
       });
       expect(servers[1]?._meta).toEqual({
         mollyConnection: { id: 'molly:builtin', revision: 1 },

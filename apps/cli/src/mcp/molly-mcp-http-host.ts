@@ -13,7 +13,12 @@ import {
 } from './molly-mcp-server';
 import { buildMollyImageMcpServer } from './molly-image-mcp-server';
 import { buildMollyBrowserMcpServer } from './molly-browser-mcp-server';
-import { resolveDesignResubmit, resolveDesignGate, resolveRenderHost } from './design-tools';
+import {
+  resolveDesignResubmit,
+  resolveDesignGate,
+  resolveRenderHost,
+  resolveDesignImageViewScope,
+} from './design-tools';
 import { resolveBrowserHost } from './browser-tools';
 import { canReadProcNetTcp, lookupLoopbackPeerUid } from './loopback-peer-uid';
 import {
@@ -327,6 +332,7 @@ async function handleRequest(
             resolveBrowserHost: async () => await resolveBrowserHost(context),
           })
         : buildMollyMcpServer({
+            imageViewScope: await resolveDesignImageViewScope(context),
             designResubmit: await resolveDesignResubmit(context),
             renderHost: await resolveRenderHost(context, logger),
             resolveRenderHost: async () => await resolveRenderHost(context, logger),

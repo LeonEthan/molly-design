@@ -8,7 +8,7 @@ src/semantic-assets.ts
 src/validate.ts
 # Build outputs are regenerated, never hand-edited.
 src/generated/
-skills/graphic-design/scripts/lib/
+skills/*/scripts/lib/
 # Preserve upstream imagegen reference layouts; provenance is in source-manifest.json.
 skills/imagegen/references/
 node_modules/

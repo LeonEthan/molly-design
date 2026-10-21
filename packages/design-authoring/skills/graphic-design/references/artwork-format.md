@@ -157,7 +157,7 @@ elements:
 Check the font's actual format and bytes; renaming the extension does not convert
 it. Keep the face's complete glyph set, because subsetting to today's copy breaks
 the user's next edit; to convert or compress a face, read
-[font-preparation.md](font-preparation.md). A file's presence or a passing
+the `design-text` skill's `references/font-preparation.md`. A file's presence or a passing
 validation does not prove Chromium can load it, and copying a macOS system font
 carries the same doubt, so render the first usable draft with its key fonts. A
 native preview font error points to that registration, not to a missing renderer.
@@ -180,9 +180,11 @@ punctuation; adjust the break or the box width in the render.
 
 ## Examples
 
-- [../examples/minimal/design.yaml](../examples/minimal/design.yaml): a solid
+The `design-replication` skill carries the copyable examples:
+
+- `examples/minimal/design.yaml`: a solid
   background, a `rect` band, structured text and an image with `fit: cover`.
-- [../examples/layered/design.yaml](../examples/layered/design.yaml): the layered
+- `examples/layered/design.yaml`: the layered
   structure most designs need: an opaque background image, a transparent subject
   with a shadow, a gradient scrim and two grouped text elements, back to front.
 

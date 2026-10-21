@@ -32,14 +32,14 @@ Never ask the user to paste an API key in chat; keys live in the app's settings 
 
 ## Using generated assets
 
-For editable artwork, follow the `graphic-design` Skill's required workflow and
-task branches. Choose image prompting and inspection techniques within that
-workflow. Each call may be billed; an unknown result may
+For editable artwork, follow the `graphic-design` Skill's task branches and
+required workflow. Choose image prompting and inspection techniques within that
+flow. Each call may be billed; an unknown result may
 already have consumed budget. Useful inputs include exact text, subject,
 composition, intended use, and constraints.
 Both tools write returned bytes under `media/` in the supplied design authoring
 directory and return a typed result (`structuredContent`) with the artwork-relative
-`path`, `absolutePath`, `sha256`, `mimeType`, `width`, `height` and `bytes`. Reference the relative path from that directory's `design.yaml`. Open outputs with an actual image-reading tool to
+`path`, `absolutePath`, `sha256`, `mimeType`, `width`, `height` and `bytes`. Reference the relative path from that directory's `design.yaml`. Open outputs with `molly_view_image` (or another image-reading tool when that is absent); use `paths` to view several options together, to
 judge the result and decide whether further changes are useful. To show an output
 in your reply, embed it with Markdown image syntax using its `absolutePath`, for
 example `![Draft A](/abs/media/a.png)`; a path named only in text is not displayed

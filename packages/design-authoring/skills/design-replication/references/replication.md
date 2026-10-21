@@ -2,12 +2,12 @@
 
 Read this when the user supplies an image and asks for a reconstruction. The goal
 is a high-fidelity editable rebuild, not a promise of pixel identity, and never
-the source image pasted back as a background. The reconstruction branch and
-research rule are in [the main Skill](../SKILL.md#required-workflow); the
+the source image pasted back as a background. The `graphic-design` Skill owns
+the reconstruction branch and the `design-research` Skill the research rule; the
 reference serves as the selected composition. Use
-[layered-workflow.md](layered-workflow.md) for complete raster layers and
-[artwork-format.md](artwork-format.md#what-is-editable-today) for which element
-kinds to use.
+[layered-workflow.md](layered-workflow.md) for complete raster layers and the
+`graphic-design` skill's `references/artwork-format.md` ("What is editable
+today") for which element kinds to use.
 
 ## Establish reference geometry
 
@@ -51,7 +51,7 @@ fidelity limits: preserve what you know and report consequential assumptions.
 
 Rebuild ordinary text as native text. Artistic lettering in the reference
 (calligraphy, 3D or illustrated type) may become an image lettering layer, as
-the main Skill's stage 6 describes. Never use a large crop or layer that bundles
+the `design-text` Skill describes. Never use a large crop or layer that bundles
 ordinary text or flat graphics together to fake editability. If something cannot be rebuilt with the kinds available, report
 it.
 
@@ -66,7 +66,7 @@ Match the observable reference as closely as the evidence permits:
 - borders, shadows, radii and paths.
 
 A faithful reconstruction follows the reference, even where it departs from the
-[design defaults](../SKILL.md#design-defaults). Do not invent off-style decoration
+design defaults in the `design-research` Skill. Do not invent off-style decoration
 to fill uncertain regions. In review, look for stretching, blur, clipping, crop
 drift, unreadable text and missing objects, and keep a short record of material
 deviations for the report.

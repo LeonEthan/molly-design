@@ -1278,6 +1278,72 @@ void test('corruption is preserved and schema/decryption input never appears in 
   assert.deepEqual(await readFile(join(directory, 'model-connections.enc')), corrupted)
 })
 
+void test('explicit recovery backs up unreadable ciphertext and permits new connections', async (t) => {
+  let lostKey = false
+  const { directory, store } = await fixture(t, {
+    ...cipher,
+    decryptString(value) {
+      if (lostKey) throw new Error('synthetic-key-unavailable')
+      return cipher.decryptString(value)
+    }
+  })
+  await store.save(input)
+  await store.saveImage({ enabled: true, baseUrl: legacyImage.baseUrl, model: legacyImage.model })
+  const file = join(directory, 'model-connections.enc')
+  const previous = await readFile(file)
+  lostKey = true
+  await assert.rejects(store.snapshot(), { message: 'credential_storage_unreadable' })
+  await assert.rejects(store.imageSnapshot(), { message: 'credential_storage_unreadable' })
+  const { digest } = await store.prepareRecovery()
+  assert.deepEqual(await readFile(file), previous)
+  const { backupFileName } = await store.recoverUnreadableStorage({ digest })
+  assert.deepEqual(await readFile(join(directory, backupFileName)), previous)
+  assert.equal((await stat(join(directory, backupFileName))).mode & 0o777, 0o600)
+  assert.deepEqual(await store.snapshot(), { connections: [] })
+  assert.deepEqual(await store.imageSnapshot(), { connection: null })
+  lostKey = false
+  const saved = await store.save(input)
+  assert.equal((await store.acquireForRun(saved.id, saved.revision)).apiKey, input.apiKey)
+  assert.deepEqual(await readFile(join(directory, backupFileName)), previous)
+  lostKey = true
+  const retry = await store.prepareRecovery()
+  lostKey = false
+  await assert.rejects(store.recoverUnreadableStorage(retry), {
+    message: 'credential_storage_recovery_not_needed'
+  })
+  assert.deepEqual((await store.snapshot()).connections, [saved])
+})
+
+void test('recovery refuses healthy, missing, changed or unavailable credential storage', async (t) => {
+  const { directory, store } = await fixture(t)
+  await assert.rejects(store.prepareRecovery(), {
+    message: 'credential_storage_recovery_not_needed'
+  })
+  await store.save(input)
+  const file = join(directory, 'model-connections.enc')
+  const healthy = await readFile(file)
+  await assert.rejects(store.prepareRecovery(), {
+    message: 'credential_storage_recovery_not_needed'
+  })
+  await writeFile(file, 'synthetic-corruption')
+  const { digest } = await store.prepareRecovery()
+  await writeFile(file, 'different-synthetic-corruption')
+  await assert.rejects(store.recoverUnreadableStorage({ digest }), {
+    message: 'credential_storage_recovery_conflict'
+  })
+  assert.equal(await readFile(file, 'utf8'), 'different-synthetic-corruption')
+  await writeFile(file, healthy)
+  await assert.rejects(store.recoverUnreadableStorage({ digest }), {
+    message: 'credential_storage_recovery_conflict'
+  })
+  assert.deepEqual(await readFile(file), healthy)
+  const unavailable = new ModelConnectionStore(directory, {
+    ...cipher,
+    isEncryptionAvailable: () => false
+  })
+  await assert.rejects(unavailable.prepareRecovery(), { message: 'credential_storage_unavailable' })
+})
+
 void test('failed encryption preserves the last committed connection', async (t) => {
   let fail = false
   const { directory, store } = await fixture(t, {

@@ -20,6 +20,19 @@ const entry: WorkspaceMcpServerMeta = {
 function fixture() {
   const events: unknown[] = [];
   const writer: NonNullable<Parameters<typeof protectMcpEntry>[2]> = {
+    async getMcpSnapshot() {
+      return {
+        connections: [
+          McpCredentialBindingSchema.parse({
+            workspaceId: 'workspace',
+            serverId: entry.id,
+            ...reference,
+            destination: { transport: 'http', url: 'https://mcp.invalid/mcp' },
+            fieldNames: ['Authorization'],
+          }),
+        ],
+      };
+    },
     async saveMcp(input) {
       events.push(input);
       return McpCredentialBindingSchema.parse({
@@ -39,6 +52,27 @@ function fixture() {
 }
 
 describe('protected MCP settings handoff', () => {
+  it('recreates a missing vault binding only with explicitly entered replacement credentials', async () => {
+    const { writer, events } = fixture();
+    const previous = await protectMcpEntry(entry, undefined, writer);
+    const resetWriter = { ...writer, getMcpSnapshot: async () => ({ connections: [] }) };
+    await protectMcpEntry(entry, previous, resetWriter);
+    expect(events.at(-1)).toMatchObject({
+      expectedRevision: undefined,
+      values: { Authorization: 'Bearer synthetic-secret' },
+    });
+    await expect(
+      protectMcpEntry(entry, previous, {
+        ...writer,
+        getMcpSnapshot: async () => ({
+          connections: (await writer.getMcpSnapshot()).connections.map((binding) => ({
+            ...binding,
+            credentialRef: 'another-binding',
+          })),
+        }),
+      })
+    ).rejects.toThrow('mcp_credential_revision_conflict');
+  });
   it('saves the exact credential to main and returns only a workspace-safe reference', async () => {
     const { writer, events } = fixture();
     const saved = await protectMcpEntry(entry, undefined, writer);

@@ -20,11 +20,15 @@ const meta = {
   beforeEach: ({ name }) => {
     const previous = window.ipc;
     let failed = false;
+    let recovered = false;
     window.ipc = {
       on: () => () => undefined,
       invoke: async (channel: string) => {
         switch (channel) {
           case 'modelConnections.getSnapshot':
+            if (recovered) return { connections: [] };
+            if (name === 'Unreadable Credentials' || name === 'Recovery Failed')
+              throw new Error('credential_storage_unreadable');
             if (name === 'Loading') return new Promise(() => {});
             if (name === 'Read Failed' || !failed) {
               failed = true;
@@ -48,6 +52,12 @@ const meta = {
             return { models: [] };
           case 'modelConnections.getModelMetadataSnapshot':
             return null;
+          case 'modelConnections.prepareStorageRecovery':
+            return { digest: 'a'.repeat(64) };
+          case 'modelConnections.recoverUnreadableStorage':
+            if (name === 'Recovery Failed') throw new Error('credential_storage_recovery_conflict');
+            recovered = true;
+            return { backupFileName: 'synthetic-backup.enc' };
           default:
             throw new Error(`Unexpected story IPC: ${channel}`);
         }
@@ -63,3 +73,5 @@ type Story = StoryObj<typeof meta>;
 export const Loading: Story = {};
 export const ReadFailed: Story = {};
 export const RetryRecovery: Story = {};
+export const UnreadableCredentials: Story = {};
+export const RecoveryFailed: Story = {};

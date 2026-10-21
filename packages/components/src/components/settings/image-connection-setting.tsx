@@ -47,6 +47,11 @@ import { Input } from '@/ui/input';
 import { Switch } from '@/ui/switch';
 import { CompactSection } from './compact-layout';
 import {
+  CredentialStorageRecovery,
+  isUnreadableCredentialStorage,
+  useCredentialStorageRecoveryRevision,
+} from './credential-storage-recovery';
+import {
   ConnectionCheckBadge,
   ConnectionCheckError,
   useConnectionCheck,
@@ -733,6 +738,8 @@ export function ImageConnectionSetting({
   const [ready, setReady] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [storageUnreadable, setStorageUnreadable] = useState(false);
+  const recoveryRevision = useCredentialStorageRecoveryRevision();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
   const [editing, setEditing] = useState(false);
@@ -743,6 +750,13 @@ export function ImageConnectionSetting({
   useEffect(() => {
     if (ready) onConnectionChange?.(stored ?? null);
   }, [onConnectionChange, ready, stored]);
+  useEffect(() => {
+    setReady(false);
+    setLoadFailed(false);
+    setStorageUnreadable(false);
+    setEditing(false);
+    setCheck(undefined);
+  }, [recoveryRevision]);
   useEffect(() => {
     if (!ipc) return undefined;
     let live = true;
@@ -760,13 +774,14 @@ export function ImageConnectionSetting({
         console.error('Failed to read the image connection', error);
         if (live) {
           setLoadFailed(true);
+          setStorageUnreadable(isUnreadableCredentialStorage(error));
           setSaveError(t('settings.models.error'));
         }
       });
     return () => {
       live = false;
     };
-  }, [ipc, loadAttempt, t]);
+  }, [ipc, loadAttempt, recoveryRevision, t]);
   const onCheck = useCallback<ImageConnectionCheck>(
     async (input) => {
       if (!ipc) return { ok: false, reason: 'unreachable' };
@@ -865,8 +880,11 @@ export function ImageConnectionSetting({
       {!ready ? (
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <p role="status" className="min-w-0 flex-1 text-xs text-muted-foreground">
-            {saveError ?? t('settings.models.loading')}
+            {storageUnreadable
+              ? t('settings.credentials.unreadable')
+              : (saveError ?? t('settings.models.loading'))}
           </p>
+          {storageUnreadable ? <CredentialStorageRecovery /> : null}
           {loadFailed ? (
             <Button
               size="sm"

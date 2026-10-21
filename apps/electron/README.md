@@ -277,6 +277,14 @@ uncertain writes; other candidates and replaced sessions are revoked. Sign-out r
 unconfirmed remote revocation. No live provider acceptance is claimed by synthetic tests.
 See the [review correction](../../.agents/notes/implemented/bug-fix/2026-10-11-model-auth-completion.md).
 
+An unreadable credential vault blocks model, image and MCP credentials together. Settings
+offers Retry and, only for an unreadable vault, **Back up and reset**. Confirmation explains
+that every service must be reconnected and remote grants are not revoked. Recovery compares
+the confirmed ciphertext digest and checks that the vault is still unreadable, then moves
+the original encrypted file to `secrets/model-connections.unreadable-<uuid>.enc` before new
+connections can be saved. Artwork and conversations are unaffected. A missing encryption key
+cannot be reconstructed by resetting; the backup preserves the original ciphertext.
+
 ## Browser driver build and verification
 
 Install Rust 1.99.0 and the native target, then run

@@ -15,6 +15,8 @@ recovery remains a separate verification step.
 
 ## Evidence and responsibility
 
+Implementation: [PR #224](https://github.com/LeonEthan/molly-design/pull/224).
+
 [Daily run 39556928402](https://github.com/LeonEthan/molly-design/actions/runs/39556928402)
 failed at `BrowserNavigationPage.expectLocalPageWithoutPrompt`'s assertion that
 no `browser-tool-missing` event exists. The macOS artifact records one missing-tool

@@ -32,7 +32,7 @@ const formatBridgeError = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 const openDialogSelector =
-  '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]';
+  '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], .molly-photo-slider.PhotoView-Portal';
 
 /** Radix portals stacked dialogs to body in opening order, so only later dialogs cover the host's own. */
 function isCoveredByOpenDialog(host: HTMLElement | null): boolean {

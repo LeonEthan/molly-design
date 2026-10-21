@@ -233,3 +233,9 @@ GitHub project creation and PR tabs, badges and actions are retired. Stored PR
 side-panel selections fall back to Files without dropping the selected session
 or file viewer state. Historical project metadata, Files and old turn diffs
 remain readable.
+
+The public browser hides its native view while a covering Radix dialog or the shared
+image lightbox is mounted, then restores the retained page on close. The lightbox's
+`react-photo-view` portal has no Radix `data-state`, so its mounted
+`.molly-photo-slider.PhotoView-Portal` is recognized separately. Agent-controlled
+pages use the existing hidden browser host during this transition.

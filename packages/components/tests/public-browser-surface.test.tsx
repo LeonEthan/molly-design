@@ -4,6 +4,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ElectronPublicBrowserState } from '@molly/shared';
+import { ZoomableImageViewer } from '../src/components/shared/zoomable-image-viewer';
 import { PublicBrowserSurface } from '../src/components/sessions/public-browser-surface';
 
 vi.mock('react-i18next', () => ({
@@ -28,6 +29,7 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
   window.__MOLLY_ELECTRON__ = true;
   visibility.length = 0;
+  state.agentControl = 'human';
   resolveBounds = undefined;
   window.ipc = {
     invoke: async (channel, ...args) => {
@@ -116,3 +118,41 @@ it('stays visible inside its own dialog above earlier dialogs and hides under a 
   settingsDialog.remove();
   signInDialog.remove();
 });
+
+it.each(['human', 'agent'] as const)(
+  'hides the %s-controlled browser under the real image lightbox and restores it on close',
+  async (agentControl) => {
+    state.agentControl = agentControl;
+    const onStateChange = () => {};
+    const images = [{ key: 'synthetic-image', src: undefined }];
+    const render = (open: boolean) =>
+      root.render(
+        createElement(
+          'div',
+          null,
+          createElement(PublicBrowserSurface, {
+            browserId: state.browserId,
+            url: state.url!,
+            navigationRequestId: null,
+            active: true,
+            onStateChange,
+          }),
+          createElement(ZoomableImageViewer, {
+            open,
+            onClose: () => {},
+            images,
+            index: 0,
+          })
+        )
+      );
+
+    await act(async () => render(false));
+    expect(visibility.at(-1)).toBe(true);
+    await act(async () => render(true));
+    expect(document.querySelector('.molly-photo-slider.PhotoView-Portal')).not.toBeNull();
+    expect(visibility.at(-1)).toBe(false);
+    await act(async () => render(false));
+    expect(document.querySelector('.molly-photo-slider.PhotoView-Portal')).toBeNull();
+    expect(visibility.at(-1)).toBe(true);
+  }
+);

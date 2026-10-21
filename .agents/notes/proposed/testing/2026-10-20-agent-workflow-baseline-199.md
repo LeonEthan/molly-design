@@ -181,3 +181,133 @@ The measurement harness used for this note is retained locally under
 - Limits: one run per case; one machine and local proxy; a live public website
   that can change; no human judgment of the resulting artwork. The timeouts and
   tool counts describe this sample, not a distribution.
+
+## After (PR #219, 52a21ffd)
+
+Status: proposed
+Measured: `52a21ffd` (PR #219 head, skill split), 2026-10-20
+Model: `deepseek-flash`, reasoning `high`
+Runs: case A twice, case C twice, two isolated desktops in parallel; case B was
+not rerun per the owner's instruction.
+
+The owner's 20-minute rule is applied here: any run longer than 20 minutes is a
+failure regardless of whether it eventually commits. Every case used the same
+prompts, synthetic fixtures, local proxy, image model, public research site and
+40-minute harness cap as the baseline.
+
+| Case / run             | 20-min rule | Completed               | First valid `design.yaml` | First `molly_render_preview` | Total wall time | Tool calls | Longest single tool call | Skill/ref files |  Bytes | Preview iterations |
+| ---------------------- | ----------- | ----------------------- | ------------------------: | ---------------------------: | --------------: | ---------: | ------------------------ | --------------: | -----: | -----------------: |
+| A baseline (`10f7f77`) | Fail        | No, active at cap       |                 1,271.5 s |                    1,294.8 s |       2,401.0 s |        105 | `bash` 389.8 s           |               6 | 56,392 |                  7 |
+| A after run 1          | Fail        | No, stopped at 25.1 min |                      none |                         none |       1,504.2 s |         45 | `codemode` 9.5 s         |               6 | 53,288 |                  0 |
+| A after run 2          | Fail        | No, stopped at 23.7 min |                      none |                         none |       1,421.1 s |         51 | `codemode` 22.1 s        |               9 | 52,059 |                  0 |
+| B baseline             | Pass        | Yes                     |                    11.3 s |                       12.3 s |          20.1 s |          8 | preview 2.2 s            |               1 | 24,052 |                  1 |
+| C baseline             | Pass        | Yes                     |                   325.0 s |                      330.5 s |         458.1 s |         84 | `bash` 33.9 s            |               5 | 39,945 |                  5 |
+| C after run 1          | Pass        | Yes                     |                   152.4 s |                      153.9 s |         315.4 s |         68 | preview 3.7 s            |               8 | 35,374 |                  3 |
+| C after run 2          | Pass        | Yes                     |                   422.2 s |                      424.0 s |         664.2 s |         89 | `bash` 272.8 s           |               8 | 35,374 |                  6 |
+
+Baseline skill-file counts in this table were re-extracted with the same
+read-tool plus `cat`/`sed` extractor used for the after runs; the first baseline
+table above counted only the `read` tool, which is why its A row differs. Helper
+`scripts/` files are excluded from both sides; partial-file reads count the whole
+file.
+
+### Side-by-side
+
+| Case                      | Baseline `10f7f77`              | After `52a21ffd`                                      | Change                                                                            |
+| ------------------------- | ------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------- |
+| A                         | No preview by 40 min; no commit | No preview by 25.1 / 23.7 min; no commit              | Still unacceptable; research still consumed the whole budget                      |
+| A research before options | about 14.6 min                  | 22.5 min (run 2) or never (run 1)                     | Worse                                                                             |
+| C total                   | 458.1 s                         | 315.4 s / 664.2 s                                     | 31% faster / 45% slower; variance dominates                                       |
+| C first preview           | 330.5 s                         | 153.9 s / 424.0 s                                     | 53% faster / 28% slower                                                           |
+| C tool calls              | 84                              | 68 / 89                                               | 19% fewer / 6% more                                                               |
+| C skill bytes             | 39,945                          | 35,374                                                | 11% fewer bytes, but 8 files across 3 directories instead of 5 files in 1         |
+| C skill directories       | `graphic-design` only           | `graphic-design`, `design-replication`, `design-text` | Siblings loaded only on the reconstruction path; `design-research` was not loaded |
+| C 20-min rule             | Pass                            | Pass / Pass                                           | Both completed under 20 min                                                       |
+
+Case C's after mean total is 489.8 s versus 458.1 s baseline, and its after mean
+first preview is 289.0 s versus 330.5 s. With two samples, the direction is not
+established; the 272.8 s `find /` call in C run 2 alone accounts for most of that
+run's regression.
+
+### Case A time breakdown
+
+The retained partials were identified from their session start times and artwork
+ids: run 1 is `ce45e1a0` (started 05:14:08.561Z) and run 2 is `32cf201a`
+(started 05:14:10.158Z); the owner copied their data roots before stopping them.
+
+| A run       | Research / preparation |                       Options | Layer / compose |      Review |      Total |
+| ----------- | ---------------------: | ----------------------------: | --------------: | ----------: | ---------: |
+| Baseline    |             0–14.6 min | 14.6–17.6 min (3 image calls) |   17.6–21.2 min | 21.6–40 min | 40 min cap |
+| After run 1 |             0–25.1 min |                             0 |               0 |           0 |   25.1 min |
+| After run 2 |             0–22.5 min |  22.5–23.7 min (1 image call) |               0 |           0 |   23.7 min |
+
+Past 20 minutes, after run 1 was still researching: it read a downloaded
+reference at 20.4 min, checked the browser for a login overlay at 22.3 min, and
+navigated to the site archive at 25.0 min. After run 2 grepped the format helper
+at 21.5 min, started its first image option at 22.5 min (a 22.1 s call), and was
+reading the generated image when stopped at 23.7 min. Neither run reached
+`design.yaml` or a preview.
+
+### Case A stop investigation
+
+The baseline skipped the option-choice stop; neither after run reached it. The
+decisive input is the synthetic prompt itself: it says "You choose the strongest
+direction and finish the editable design in this turn; do not stop to ask me to
+choose between options."
+
+- Baseline: 105 tool calls, none named `ask_user_question`; the Agent generated
+  three image options, selected one, wrote `design.yaml` at 21.2 min and
+  continued into review. Its reasoning cites the prompt's "You choose ... do not
+  stop" sentence and plans to create options and continue. No question reached
+  the harness.
+- After run 1: 45 tool calls (2 `read`, 8 `bash`, 35 `codemode`), no
+  `ask_user_question`, no options, no stop point reached.
+- After run 2: 51 tool calls (3 `read`, 17 `bash`, 31 `codemode`), no
+  `ask_user_question`; one image option at 22.5 min, no stop point reached.
+
+No question was emitted, so the harness auto-answer or missing-responder path
+was not exercised. The baseline stop was overridden by the prompt, not by the
+harness.
+
+### Pass thresholds
+
+- A: both after runs fail. No run reached a preview under 8 minutes, and neither
+  ended at an option-choice point.
+- C: run 1 reached first preview at 2.57 min (pass) but used 68 tool calls (fail
+  against <50). Run 2 reached first preview at 7.07 min and used 89 tool calls,
+  so it fails both. Neither run meets both thresholds.
+
+### Recommendations, ranked by expected time saved
+
+1. Put a hard time and call budget in `design-research` (for example one focused
+   pass, a few minutes, no recursive sitemap or `curl` loops). Both A after runs
+   spent 22–25 minutes before the first design artifact. Expected saving on A:
+   8–12 minutes; this can bring A under 20 minutes but not necessarily under 8.
+2. Add a choose-one fast path to the core skill: when the prompt says "you
+   choose" or "do not stop", generate one option instead of three, or skip the
+   option round when the brief is already concrete. Baseline options took about
+   3 minutes and three image calls; after run 2 spent 1.2 minutes before stop.
+   Expected saving: 2–4 minutes and two paid image calls.
+3. Remove filesystem-wide font searches from the replication/text path and give
+   the Agent a font inventory (app-side or a skill helper). C run 2 lost 272.8 s
+   to one `find /` command. Expected saving: up to 4.5 minutes on that path.
+4. Ship a small measurement helper for the common crop, bounding-box, contrast
+   and text-fit checks in `design-replication`. C used 47–60 `bash` calls per run,
+   mostly pixel measurement. Expected saving: 2–3 minutes per reconstruction.
+5. Surface elapsed turn time and a soft research budget to the Agent
+   (app-side). It cannot currently see that it has crossed 20 minutes; a visible
+   budget would let it stop researching and produce a first preview. Expected
+   saving: prevents 20-minute failures rather than making the same work faster.
+6. For eval only, add an option-choice responder to the harness so the
+   "offer options and stop" branch can be measured without a prompt that says
+   "you choose". This does not change product speed, but it would separate the
+   skill's default branch from the prompt override.
+
+### Limits
+
+Two runs per case, two desktops in parallel, one machine, one local proxy, one
+live public research site; the two A runs were stopped at 25.1 and 23.7 minutes
+by the owner and never reached a design artifact. C run 2's 272.8 s `find /`
+call is a single-command outlier. These numbers show direction and failure
+modes, not a stable distribution, and no human review of the resulting artwork
+was performed.

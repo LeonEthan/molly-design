@@ -57,3 +57,14 @@ The connection probe checks `/models` only, not image endpoint support; provider
 rejections remain visible without automatic paid retries or model fallback.
 Attachments, image reading, preview rendering and existing artwork editing/export
 remain independent.
+
+## Design image viewing
+
+Eligible design sessions expose `molly_view_image` in MCP `tools/list` using the
+Session roots returned by `design/image-connection`, including when `connection`
+is null and both image readiness flags are false. Coding or unknown sessions
+receive no scope and no viewer. The embedded Agent declares the viewer directly
+alongside `molly_render_preview` through the existing per-tool MCP exposure rules;
+it does not require discovering the general Molly codemode namespace first.
+See the [discovery regression record](../../.agents/notes/implemented/bug-fix/2026-10-21-design-viewer-exposure.md)
+for evidence and verification limits.

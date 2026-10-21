@@ -42,6 +42,9 @@
       "upstreamPath": "skills/graphic-design/references/general-poster.md",
       "derivation": "original"
     },
+    "skills/design-research/references/design-options.md": {
+      "derivation": "original"
+    },
     "skills/design-replication/references/layered-workflow.md": {
       "upstreamPath": "skills/graphic-design/references/layered-workflow.md",
       "derivation": "original"
@@ -123,6 +126,7 @@
     "src/collect-authoring.ts": "Existing bounded semantic observations report typed per-asset size failures; full-tree and digest-only collection retain existing size behavior",
     "skills/design-replication/scripts/reference-pack.mjs": "Ported inspection plus Molly-local alpha, trim and compare layer helpers (moved from skills/graphic-design in the 2026-10 skill split)",
     "skills/design-research/references/general-poster.md": "Original composition guide for the YAML canvas (moved from skills/graphic-design in the 2026-10 skill split)",
+    "skills/design-research/references/design-options.md": "Original design-options prompting recipe (moved from skills/design-replication/references/layered-workflow.md in the #199 tuning round)",
     "skills/design-replication/references/layered-workflow.md": "Original generative layered workflow guide (moved from skills/graphic-design in the 2026-10 skill split)",
     "skills/design-replication/references/replication.md": "Original reconstruction guide for the YAML canvas (moved from skills/graphic-design in the 2026-10 skill split)",
     "skills/graphic-design/references/artwork-format.md": "Original YAML artwork format guide",

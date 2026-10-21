@@ -1,13 +1,13 @@
 # Generative layered design: task and plan
 
-Status: approved
-Approval: [2026-10-09 user-chosen designs approval](../.github/spec-approvals.md#2026-10-09-user-chosen-designs)
+Status: draft
+Previous approval: [2026-10-09 user-chosen designs approval](../.github/spec-approvals.md#2026-10-09-user-chosen-designs)
 Previous approval: [2026-10-09 owner approval](../.github/spec-approvals.md#2026-10-09-graphic-design-skill-refresh)
 Previous approval: [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
 Previous revision approval: [2026-09-26 closeout approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-closeout)
 Previous workflow approval: [2026-09-26 workflow rewrite approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-workflow-rewrite)
 Previous approval: [2026-09-25 owner approval](../.github/spec-approvals.md#2026-09-25-generative-layered-design)
-Translation: current
+Translation: stale
 
 [中文](generative-layered-design-workflow.zh.md)
 

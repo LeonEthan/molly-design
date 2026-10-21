@@ -68,37 +68,18 @@ new designs, reconstructions and edits.
 | A topic, style word, logo, product photo or your own idea   | Yes                      |
 | An attachment you have not opened                           | Yes                      |
 
-**Research gate.** When research applies, do not create design options until
-all of these hold:
+**Research gate.** When research applies, do not create design options until all of these hold:
 
-- you read [references/browser-research.md](references/browser-research.md) in
-  full;
-- you made one focused browser pass on a design site that meets the user's
-  source constraints. Use their requested site; otherwise prefer Pinterest
-  when it is allowed and you observe it signed in (references visible without
-  a login overlay), or another accessible allowed design source. Imported
-  cookies alone are not access
-  ([Sign-in](references/browser-research.md#sign-in));
-- you opened and inspected individual images; result grids, search snippets and
-  page titles do not count;
-- you stayed inside one focused research session: a few searches, one site, and
-  only the references the gate keeps. Do not crawl a site, probe its structure
-  (sitemaps, category listings, API endpoints) or repeat a search that already
-  answered the direction;
-- you persisted one to three inspected inspiration images for the options. Prefer
-  `save_image` when it can save the inspected asset. If it is absent or cannot
-  save that asset (including a rejected format), use an equivalent available
-  visual tool to inspect and persist the same image to a local path the options
-  can use;
-- you kept three to six references, each with one named quality (palette, type,
-  crop and light, layout structure) and none taken as literal objects or finished
-  layout. When one widened pass still yields fewer than three relevant ones, keep
-  the ones you inspected (at least one) and name the shortfall in the options
-  report; never pad with uninspected results.
+- you read [references/browser-research.md](references/browser-research.md) in full;
+- you researched on one design site that meets the user's source constraints. Use their requested site; otherwise prefer Pinterest when it is allowed and you observe it signed in (references visible without a login overlay), or another accessible allowed design source. Imported cookies alone are not access ([Sign-in](references/browser-research.md#sign-in));
+- you did it in **two steps within the research budget** — one site, at most **three searches**:
+  1. **Survey.** Browse each search like a designer, not just its first screen: screenshot the result grid, then scroll and screenshot again, for **two to four screens** per search, taking one snapshot for image refs on the screen you pick from. Stop scrolling early only when two clear candidates are already on screen. Judge the thumbnails against the direction words and pick candidates from the grid; do not open detail pages to decide what to drop.
+     **Extend.** When the first search shows a promising thread (a strong thumbnail, a recurring designer, style or term), spend the next search following it — the site's related or "more like this" results, that designer, or the term you saw — instead of rephrasing the original query. Extending counts as one of the three searches.
+  2. **Pick.** Save at most **three** picked images with `save_image` in one `codemode` script, then look at them together with `molly_view_image` `paths` (one contact sheet). Use `path` with `region`, or open one detail page, only for a pick whose thumbnail left a real doubt.
+     Do not write scripts that fetch pages in loops, call `curl`/`fetch` on a site, read sitemaps, category listings or API endpoints, or repeat a search that already answered the direction;
+- you kept two or three of the saved images as references, each with one named quality (palette, type, crop and light, layout structure) and none taken as literal objects or finished layout. If `save_image` cannot save a pick (including a rejected format), use an equivalent available visual tool to persist the same image to a local path the options can use. When the budget yields fewer than two relevant ones, keep the ones you saved and looked at (at least one) and name the shortfall in the options report; never pad with images you did not look at.
 
-When the direction is clear — two or three kept references each answer the
-direction words — stop researching and create the options; more browsing does
-not improve them.
+Stop researching as soon as two kept references answer the direction words, even if budget remains; more browsing does not improve the options. If `molly_view_image` is absent, read each saved image with the image-reading tool you have instead.
 
 When the user forbids networking, keep prompts and assets local: report the gap
 and stop before any network call, including `molly_image` generation or editing.
@@ -109,8 +90,8 @@ separate from inspiration research. The user's own direction stays the basis.
 
 ## Offer designs and let the user choose
 
-Check each kept reference's quality against the direction words, then create at
-least three complete **design options** with the image model, each a finished
+Check each kept reference's quality against the direction words, then create
+three complete **design options** (one on the you-choose path below) with the image model, each a finished
 poster at the canvas ratio: composition, imagery, light, the headline and key
 copy drawn in, and the finish you intend. They are the design, not sketches, so
 judge each against the [design defaults](#design-defaults) before showing it,
@@ -128,17 +109,13 @@ palette") and that its objects, text and logos are not to be copied. Different
 options may use different inspiration images. Stay within the connection's
 input limit in the `imagegen` Skill. An option that is recognizably one
 reference with new copy fails. A rendered blockout can steer an option's layout
-when words are not enough. Prompting and option techniques are in the
-`design-replication` skill's `references/layered-workflow.md` ("Design
-options"), because the same file then carries the reproduction recipe.
+when words are not enough. Prompting and option techniques are in [references/design-options.md](references/design-options.md).
 
 Show the options and **end the turn** so the user can choose, as the
 `graphic-design` Reporting section describes. Never ask for the choice with
 `ask_user_question`; the reply shows the options at full size. Do not write or
 change `design.yaml` in that turn. Continue in the turn where the user names an
-option; reproduce it with the `design-replication` skill. If the user asked you
-to decide ("just pick one", "you choose"), take your recommendation and
-continue in the same turn.
+option; reproduce it with the `design-replication` skill. **You-choose path.** When the user tells you to decide or not to stop for a choice ("just pick one", "you choose", "do not ask me to choose", "你来定"), create exactly **one** design option — your recommendation — judge it against the design defaults, regenerate it at most once if it fails, and continue in the same turn by reproducing it. Create no alternative options on this path.
 
 For a template, reconstruction or bounded edit, the prescribed artwork is the
 chosen design; do not offer options.

@@ -27,12 +27,12 @@ Pick the branch; it decides how much process the task needs. Match effort to
 the request: a bounded edit can reach a first preview in one write and one
 render, while an open brief earns research and user-chosen options.
 
-| Task                                       | Design and layer baseline                                                                                                                         |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| New design from an open brief              | Read the `design-research` skill, offer at least three design options and stop for the user's choice; reproduce the chosen one.                   |
-| Redesign of a supplied or open artwork     | A new design: the source supplies content, copy and delivery assets, not the composition. Offer options as for an open brief.                     |
-| User-prescribed template or reconstruction | Inspect the specified reference and use it as the chosen design; reproduce the needed editable elements.                                          |
-| Bounded edit to an existing artwork        | Read the prescribed current artwork, preserve unaffected elements and use it as the design and layer baseline. Only named, local changes qualify. |
+| Task                                       | Design and layer baseline                                                                                                                                                            |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| New design from an open brief              | Read the `design-research` skill, offer three design options and stop for the user's choice — or one option and no stop when the user tells you to choose; reproduce the chosen one. |
+| Redesign of a supplied or open artwork     | A new design: the source supplies content, copy and delivery assets, not the composition. Offer options as for an open brief.                                                        |
+| User-prescribed template or reconstruction | Inspect the specified reference and use it as the chosen design; reproduce the needed editable elements.                                                                             |
+| Bounded edit to an existing artwork        | Read the prescribed current artwork, preserve unaffected elements and use it as the design and layer baseline. Only named, local changes qualify.                                    |
 
 "Redesign", "optimize" or "重新设计" asks for new options even when the user
 also asks to keep a face, a product, the colors or the size; those are delivery
@@ -83,7 +83,7 @@ helper scripts are optional methods, never gates.
    `design.yaml` for an edit, the prescribed reference for a reconstruction.
    Only for a new direction, write a short direction note and do the research
    and options pass in `design-research`, ending that turn for the user's
-   choice.
+   choice unless the user told you to choose.
 2. **Layers.** Edit or reproduce toward the baseline. New raster layers and
    faithful extraction follow `design-replication`; a bounded edit reuses
    existing layers and changes only what was named.
@@ -99,13 +99,13 @@ helper scripts are optional methods, never gates.
    renderable draft before refining: assemble a close-enough version of the
    whole canvas, render it, then improve what the render shows.
 4. **Render and read.** Render the project with `molly_render_preview` and open
-   the PNG with an actual image-reading tool, once the draft can render at all
+   it with `molly_view_image` (or another image-reading tool when that is absent), once the draft can render at all
    and again after visual changes. In one pass compare against the baseline
    design, the brief's copy and facts, and the skill's design habits; fix at
    the step that caused a difference and render again. One read per render,
    and stop when the render matches or you can name what still differs:
    successive renders exist to confirm named fixes, not to look again for new
-   flaws. If `molly_render_preview` is
+   flaws. To compare the render with the chosen design, view both in one `molly_view_image` `paths` call instead of two separate reads. If `molly_render_preview` is
    absent, only that tool is unavailable: use the rendering and image-reading
    tools you do have, and report that Molly's renderer was not checked.
 

@@ -527,7 +527,7 @@ customModels”的 UI 与校验。
 ### 附录：邻近键族（仅键名）
 
 - `settings.readiness.*`：configured / keyMissing / label / moreConnections / needsFix /
-  notConnected / notSignedIn / off / optional / signInNotVerified。
+  notConnected / notSignedIn / off / optional / importedOpenToCheck。
 - `settings.engine.*`：addonsTitle、addons.{fileSearch,mentions,questions,safetyNet,skills}
   .{title,description}、description、pi.{title,description}、technicalDetails。
 - `settings.imageConnection.*`：apiKey、apiKeyPlaceholderStored、baseUrl、baseUrlHint、

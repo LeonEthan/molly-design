@@ -132,7 +132,7 @@ describe('design setup strip', () => {
     expect(chips()).toEqual([
       'set: Models· Configured: DeepSeek +1',
       'set: Image generation· Configured: synthetic-image-model',
-      'unverified: Pinterest (optional)· Sign-in not verified',
+      'unverified: Pinterest (optional)· Imported · open Pinterest to check',
     ]);
   });
 

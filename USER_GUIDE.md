@@ -80,10 +80,11 @@ that journey.
    A stdio server runs local code: configure only commands and servers you trust.
 
 The row at the top of Settings → AI models summarises Models, Image generation and
-Pinterest; click an item to reach its setting (Pinterest opens its sign-in page
-inside Molly). A tick means a saved, switched-on
+Pinterest; click an item to reach its setting (Pinterest opens the browser-account
+import dialog again). A tick means a saved, switched-on
 setup, not a tested one. Pinterest never shows a tick, because stored cookies do
-not prove you are signed in.
+not prove you are signed in; once imported, it reads "Imported · open Pinterest
+to check".
 
 Settings → Advanced → System → Engine details lists the Pi engine and every bundled
 add-on (helper agents, skills, questions for you, skill mentions, fast file search

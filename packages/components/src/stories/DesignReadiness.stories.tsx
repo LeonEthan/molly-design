@@ -55,6 +55,9 @@ export const SeveralConnections: Story = {
 export const NothingSetUp: Story = {
   args: { connections: [], imageConnection: null, pinterestCookieCount: 0 },
 };
+export const PinterestImported: Story = {
+  args: { pinterestCookieCount: 14 },
+};
 export const ConnectionsOff: Story = {
   args: {
     connections: [{ ...deepseek, enabled: false }],

@@ -3,6 +3,7 @@ import {
   DESIGN_MARKED_IMAGE_MAX_BYTES,
   DESIGN_NOTE_COORDINATE_DECIMALS,
   DESIGN_NOTES_MAX,
+  type DesignAnnotatedSnapshot,
   type DesignMarkedImage,
   type DesignNote,
   type DesignToolbarPresentation,
@@ -12,12 +13,15 @@ import { arrowUpIcon, renderUiIconSvg, xIcon } from '@molly/shared/ui-icons';
 import type { HighlightGroup } from './element-highlight';
 import {
   appendStrokePoint,
+  drawNoteAnnotations,
   drawNoteRegions,
   imageGeometry,
+  noteBadgeRadius,
   paintRegion,
   REGION_COLOR,
   regionAnchor,
   regionFromPoints,
+  regionOutline,
   strokeRegion,
   svgOverlay,
   toImage,
@@ -71,7 +75,9 @@ const moved = (origin: { x: number; y: number }, event: { clientX: number; clien
  */
 export function createNotePins(options: {
   request(input: DesignToolbarRequest): Promise<{ ok: boolean; error?: string }>;
-  publish?(notes: DesignNote[], keepalive: boolean): Promise<unknown>;
+  publish?(notes: DesignNote[], epoch: number, instance: string, keepalive: boolean): Promise<unknown>;
+  /** The current whole-artwork render for the annotated snapshot, fetched by main. */
+  snapshotImage?(): Promise<{ image: HTMLImageElement; release(): void }>;
   selectedIds(): readonly string[];
   elements(): readonly { id: string; kind: string }[];
   highlight?: { show(groups: readonly HighlightGroup[]): void };
@@ -80,6 +86,9 @@ export function createNotePins(options: {
 }) {
   let pins: Pin[] = [];
   let epoch = 0;
+  /** Identity of this canvas page load: epochs restart on recreation, so a
+   * staged draft settles only against the page that produced it. */
+  const instance = crypto.randomUUID();
   let readonly = true;
   let presentation: DesignToolbarPresentation | undefined;
   let busy = false;
@@ -140,6 +149,23 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
   for (const node of [layer, tray])
     for (const type of ['pointerdown', 'mousedown', 'dblclick', 'keydown', 'keyup', 'wheel'])
       node.addEventListener(type, (event) => event.stopPropagation(), { signal });
+  // The tray's Send stages in the composer; ⌘/Ctrl+Enter from the tray sends at
+  // once, the same chord the note editor has always had.
+  tray.addEventListener(
+    'keydown',
+    (event) => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key === 'Enter' &&
+        !event.isComposing &&
+        event.keyCode !== 229
+      ) {
+        event.preventDefault();
+        void sendAll(false);
+      }
+    },
+    { signal }
+  );
 
   const nodeFor = (id: string) =>
     document.querySelector<HTMLElement>(`.ed-stage-scale [data-el-id="${CSS.escape(id)}"]`);
@@ -164,7 +190,8 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     if (!publish || !unpublished || (busy && !force)) return;
     unpublished = false;
     const notes = snapshot();
-    const sending = (async () => publish(notes, keepalive))().then(
+    const notesEpoch = epoch;
+    const sending = (async () => publish(notes, notesEpoch, instance, keepalive))().then(
       () => undefined,
       () => {
         unpublished = true;
@@ -341,8 +368,9 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
       const labelNode = document.createElement('span');
       labelNode.textContent = count;
       tray.append(labelNode);
-      const send = button(tray, label('notesSend', 'Send'), () => void sendAll(), 'send');
+      const send = button(tray, label('notesSend', 'Send'), () => void sendAll(true), 'send');
       send.disabled = busy || !presentation?.actionsEnabled;
+      send.title = label('notesSendTitle', 'Stage in the composer · ⌘↵ sends now');
       const clearLabel = label('notesClear', 'Clear all notes');
       const clear = document.createElement('button');
       clear.type = 'button';
@@ -373,7 +401,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     frame = 0;
     position();
   }
-  async function sendAll() {
+  async function sendAll(stage: boolean) {
     if (readonly || busy || !pins.length) return;
     closeEditor(false);
     busy = true;
@@ -381,7 +409,11 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
     let failure = '';
     try {
       await flush(true);
-      const result = await options.request({ type: 'notes', notesEpoch: epoch });
+      const result = await options.request({
+        type: 'notes',
+        notesEpoch: epoch,
+        ...(stage ? { stage: true } : {}),
+      });
       if (!result.ok) failure = result.error ?? 'Canvas request failed';
     } catch (cause) {
       failure = String(cause);
@@ -463,7 +495,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
           event.preventDefault();
           if (event.metaKey || event.ctrlKey) {
             closeEditor(false);
-            void sendAll();
+            void sendAll(false);
           } else closeEditor(true);
         }
       },
@@ -640,6 +672,22 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
   window.addEventListener('resize', () => editing && placeEditor(), { signal });
 
   const sentNotes = () => pins.filter((pin) => pin.text.trim());
+  /** PNG, or JPEG composited on white when the PNG passes the composer's image budget. */
+  const encodeCopy = (
+    canvas: HTMLCanvasElement,
+    context: CanvasRenderingContext2D
+  ): { mimeType: 'image/png' | 'image/jpeg'; data: string } => {
+    let mimeType: 'image/png' | 'image/jpeg' = 'image/png';
+    let url = canvas.toDataURL(mimeType);
+    if (((url.length - url.indexOf(',') - 1) * 3) / 4 > DESIGN_MARKED_IMAGE_MAX_BYTES) {
+      context.globalCompositeOperation = 'destination-over';
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      mimeType = 'image/jpeg';
+      url = canvas.toDataURL(mimeType, 0.9);
+    }
+    return { mimeType, data: url.slice(url.indexOf(',') + 1) };
+  };
   const roundCoordinate = (value: number) => Number(value.toFixed(DESIGN_NOTE_COORDINATE_DECIMALS));
   const roundPoint = ([x, y]: NormalizedPoint): NormalizedPoint => [roundCoordinate(x), roundCoordinate(y)];
   const roundRegion = (region: NoteRegion): NoteRegion =>
@@ -659,7 +707,7 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
       if (prune()) render();
       if (expected !== undefined && expected !== epoch)
         throw Error('Notes changed; send them again');
-      return { epoch, notes: sentNotes().map(toNote) };
+      return { epoch, instance, notes: sentNotes().map(toNote) };
     },
     async marked(expected: number): Promise<DesignMarkedImage | null> {
       if (expected !== epoch) throw Error('Notes changed; send them again');
@@ -682,16 +730,82 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
       if (!context) throw Error('Marked image could not be drawn');
       context.drawImage(source, 0, 0, canvas.width, canvas.height);
       drawNoteRegions(context, regions, canvas.width, canvas.height);
-      let mimeType: DesignMarkedImage['mimeType'] = 'image/png';
-      let url = canvas.toDataURL(mimeType);
-      if (((url.length - url.indexOf(',') - 1) * 3) / 4 > DESIGN_MARKED_IMAGE_MAX_BYTES) {
-        context.globalCompositeOperation = 'destination-over';
-        context.fillStyle = '#ffffff';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        mimeType = 'image/jpeg';
-        url = canvas.toDataURL(mimeType, 0.9);
+      return { elementId, ...encodeCopy(canvas, context) };
+    },
+    /**
+     * The whole artwork with every note's number drawn where it sits: pins at
+     * their points, region outlines around their marks. Screen geometry is
+     * projected through the stage's current rect, so zoom and pan do not move
+     * the annotations; the render itself comes from main's saved-artwork image.
+     */
+    async annotate(expected: number): Promise<DesignAnnotatedSnapshot | null> {
+      if (expected !== epoch) throw Error('Notes changed; send them again');
+      const notes = sentNotes();
+      if (!notes.length || !options.snapshotImage) return null;
+      const { image: source, release } = await options.snapshotImage();
+      try {
+        if (expected !== epoch) throw Error('Notes changed; send them again');
+        const stage = document
+          .querySelector('.ed-stage-scale .bento-slide')
+          ?.getBoundingClientRect();
+        if (!stage || !stage.width || !stage.height)
+          throw Error('The artwork is no longer visible');
+        const scale = Math.min(
+          1,
+          COPY_MAX_EDGE / Math.max(source.naturalWidth, source.naturalHeight)
+        );
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(source.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(source.naturalHeight * scale));
+        const context = canvas.getContext('2d');
+        if (!context) throw Error('Annotated snapshot could not be drawn');
+        context.drawImage(source, 0, 0, canvas.width, canvas.height);
+        const project = ([x, y]: NormalizedPoint): NormalizedPoint => [
+          ((x - stage.left) / stage.width) * canvas.width,
+          ((y - stage.top) / stage.height) * canvas.height,
+        ];
+        // Badge centers stay inside the snapshot by their radius, so a note on
+        // an edge-aligned target never loses its number off the frame.
+        const radius = noteBadgeRadius(Math.max(canvas.width, canvas.height));
+        const clampBadge = ([x, y]: NormalizedPoint): NormalizedPoint => [
+          Math.min(Math.max(x, radius), canvas.width - radius),
+          Math.min(Math.max(y, radius), canvas.height - radius),
+        ];
+        const annotations = notes.map((pin, index) => {
+          const badge = index + 1;
+          if (pin.region) {
+            const geo = imageGeometry(pin.elementIds[0]);
+            if (!geo) throw Error('The marked image is no longer visible');
+            return {
+              badge,
+              at: clampBadge(project(toScreen(geo, regionAnchor(pin.region)))),
+              outline: regionOutline(pin.region).map((point) => project(toScreen(geo, point))),
+              closed: pin.region.kind === 'box',
+            };
+          }
+          const point = pinPoint(pin);
+          if (point) return { badge, at: clampBadge(project([point.x, point.y])) };
+          const rects = pin.elementIds
+            .map(nodeFor)
+            .filter((node): node is HTMLElement => !!node)
+            .map((node) => node.getBoundingClientRect());
+          if (!rects.length) throw Error('A note target is no longer visible');
+          // The on-canvas marker sits at the targets' top-right corner; center the badge there.
+          return {
+            badge,
+            at: clampBadge(
+              project([
+                Math.max(...rects.map((rect) => rect.right)) + 6,
+                Math.min(...rects.map((rect) => rect.top)),
+              ])
+            ),
+          };
+        });
+        drawNoteAnnotations(context, annotations, canvas.width, canvas.height);
+        return encodeCopy(canvas, context);
+      } finally {
+        release();
       }
-      return { elementId, mimeType, data: url.slice(url.indexOf(',') + 1) };
     },
     snapshot,
     restore(notes: readonly DesignNote[]) {
@@ -710,8 +824,15 @@ body[data-commenting="true"] .ed-stage-scale [data-el-id],body[data-brushing="tr
       prune();
       changed();
     },
-    settle(expected: number, sent: boolean) {
+    settle(expected: number, sent: boolean, expectedInstance?: string) {
       busy = false;
+      // A recreated canvas shares nothing with the page that staged or sent the
+      // notes; never clear this page's pins for another lifetime's message.
+      if (expectedInstance && expectedInstance !== instance) {
+        render();
+        schedulePublish();
+        return false;
+      }
       if (!sent || expected !== epoch) {
         render();
         schedulePublish();

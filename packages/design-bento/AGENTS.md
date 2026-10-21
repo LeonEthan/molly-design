@@ -31,8 +31,10 @@ an empty one is dropped) and returns to select for either tool; Escape during IM
 does not exit, and `V` typed in the editor is text. Both keys are consumed in the
 capture phase so Bento's legacy `c` handler never sees them. Unsent pins are pushed to main
 (`notes-sync` on `/ws/<id>/toolbar`) after every change, debounced by `NOTE_PUBLISH_DEBOUNCE_MS`
-through an injectable clock. Every publish is an awaited POST; only the dispose flush (`pagehide`)
-uses `keepalive`, and only when the body is under `DESIGN_NOTES_KEEPALIVE_BODY_LIMIT` (64 KiB,
+through an injectable clock. Every publish carries the pins epoch and the page's instance id —
+epochs restart when the canvas is recreated — and is an awaited POST; only the
+dispose flush (`pagehide`) uses `keepalive`, and only when the body is under
+`DESIGN_NOTES_KEEPALIVE_BODY_LIMIT` (64 KiB,
 Chromium's keepalive cap). A failed publish keeps the pending flag, so the next change or flush
 retries. Points are rounded to `DESIGN_NOTE_COORDINATE_DECIMALS` (4) on the canvas; that is 0.4 px
 at a 4096 px edge. The largest body the schema admits (10 notes, 200-point strokes, 4000-character
@@ -47,15 +49,27 @@ rejected by the request schema and leaves that copy. A crashed frame cannot be a
 it loses only edits made since its last successful publish. Every attach restores the copy with `window.molly.restoreNotes`, which
 merges into the pins, prunes missing targets and never fails the attach. A failed restore keeps the
 copy for the next attach. A pending publish is never sent while a send is in flight, so a reload
-cannot put sent notes back. Sending flushes the latest state first; main then moves the copy into
-a flight, so an accepted send leaves no copy. A settle with `sent=false` merges the flight back into
+cannot put sent notes back. The tray's Send stages the notes in the chat composer — an "N comments"
+chip plus the annotated whole-artwork snapshot and the one marked copy as ordinary image
+attachments — while ⌘/Ctrl+Enter in the note editor or the tray sends a turn at once. Staging never
+consumes the retained copy; a direct send moves it into a flight, and an accepted send — staged or
+direct — retires the copy whose epoch and page instance the message carried, so pins edited since
+staging or restored into a recreated canvas stay.
+A settle with `sent=false` merges the flight back into
 the copy and into any live canvas. Clear, delete and an emptied editor publish the new state.
 A drag on an image in comment mode draws a box region, and a drag on an image in brush mode
 draws a stroke region (ordered points thinned and resampled to `DESIGN_STROKE_POINTS_MAX`). Both use
 image-normalized coordinates (`image-regions.ts`) and set the note's `region`; a click stores a `pin`
 at a point normalized to its element's box. Regions cover one image per read; `window.molly.marked(epoch)` returns the marked copy
-of that image with the note numbers drawn on it. Requests carry only their epoch, and main reads the
-marked copy. Test visual changes with real
+of that image with the note numbers drawn on it. For a staged draft, main renders the saved artwork
+offscreen and serves it once on `/ws/<id>/notes-snapshot`, and
+`window.molly.annotateNotesSnapshot(epoch)` draws every note's number where it sits — pins at their
+points, region outlines around their marks — before main validates the bytes like the marked copy.
+Requests carry only their epoch, and main reads the marked copy and the annotated snapshot.
+Hold-to-compare shows main's prepared pre-turn render: `window.molly.showCompare(src|null)` drives
+the overlay (`compare-overlay.ts`), which is display-only, blocks stage pointer input while shown
+and tracks the stage through zoom and pan; holding `\` in the canvas asks main for the frame with a
+`{type:'compare'}` request. Neither path writes the document, history or a sync loop. Test visual changes with real
 Electron composite screenshots for each supported element kind in both themes.
 Canvas copy is never hardcoded in one language: key it into the shell's `design.*`
 locale entries, list the key in `DESIGN_CANVAS_LABEL_KEYS`, and let Electron

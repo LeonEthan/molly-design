@@ -89,6 +89,10 @@ try {
   );
   cpSync(join(root, 'src/note-pins.ts'), join(destination, 'editor-bento/src/boot/note-pins.ts'));
   cpSync(
+    join(root, 'src/compare-overlay.ts'),
+    join(destination, 'editor-bento/src/boot/compare-overlay.ts')
+  );
+  cpSync(
     join(root, 'src/image-regions.ts'),
     join(destination, 'editor-bento/src/boot/image-regions.ts')
   );

@@ -15,6 +15,7 @@ export const DESIGN_CANVAS_LABEL_KEYS = [
   'notesCountOne',
   'notesClear',
   'notesSend',
+  'notesSendTitle',
   'notesFull',
   'notesRegionOneImage',
   'askPresets',

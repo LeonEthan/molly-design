@@ -11,6 +11,7 @@ import {
   DESIGN_NOTES_MAX,
   DESIGN_NOTES_SYNC_BODY_LIMIT,
   DESIGN_SELECTION_BODY_LIMIT,
+  decodeDesignAnnotatedSnapshot,
   decodeDesignMarkedImage,
   DesignCanvasCommandResultSchema,
   DesignCanvasCommandSchema,
@@ -48,6 +49,7 @@ import {
   selectCanvasInstance,
   selectChangeBaseline
 } from './design-canvas-sync-core'
+import { findDesignCompareSource } from './design-compare-core'
 import {
   DesignCanvasAccess,
   type CanvasInstance,
@@ -81,6 +83,7 @@ type RecordEntry = {
   owner: BrowserWindow
   dispose(): void
   revisionId: string
+  savedContent(): DesignPayload
 }
 export const designCanvasAccess = new DesignCanvasAccess()
 export function notifyDesignState(artworkId?: string) {
@@ -134,6 +137,99 @@ export async function captureDesignFrame(owner: BrowserWindow, artworkId: string
 const lastSelectionSummaries = new Map<string, DesignSelectionSummary>()
 const retainedUnsentNotes = createRetainedNotes<DesignNotes[number]>({ max: DESIGN_NOTES_MAX })
 const noteScope = (id: string, hostId: string) => JSON.stringify([id, hostId])
+/** Whole-artwork renders waiting for the canvas to annotate them, one per artwork. */
+const pendingNoteSnapshots = new Map<string, Buffer>()
+/**
+ * Hold-to-compare frames: the pre-turn render, prepared in memory after a
+ * committed turn reloads an open canvas. History bytes go through the ordinary
+ * offscreen render; nothing is persisted, no history commit is created, and a
+ * new turn or a torn-down canvas invalidates the frame. A bump on the
+ * generation supersedes an in-flight preparation.
+ */
+const compareFrames = new Map<string, { src: string; preTurnRevisionId: string }>()
+const compareGenerations = new Map<string, number>()
+function notifyDesignCompare(id: string) {
+  const available = compareFrames.has(id)
+  for (const window of BrowserWindow.getAllWindows())
+    if (!window.isDestroyed())
+      window.webContents.send('design.compare', { artworkId: id, available })
+}
+export function invalidateDesignCompare(id: string) {
+  compareGenerations.set(id, (compareGenerations.get(id) ?? 0) + 1)
+  if (compareFrames.delete(id)) notifyDesignCompare(id)
+}
+export function designCompareAvailable(id: string): boolean {
+  return compareFrames.has(id)
+}
+/** Show or hide the compare frame on the live canvas; resolves whether a frame showed. */
+export async function holdDesignCompare(
+  id: string,
+  hostId: string,
+  holding: boolean
+): Promise<boolean> {
+  const record = records.get(hostId)
+  if (!record || record.artworkId !== id || record.view.webContents.isDestroyed()) return false
+  if (!holding) {
+    await record.view.webContents
+      .executeJavaScript('window.molly?.showCompare && window.molly.showCompare(null)')
+      .catch(() => {})
+    return true
+  }
+  const frame = compareFrames.get(id)
+  if (!frame) return false
+  return (
+    (await record.view.webContents
+      .executeJavaScript(
+        `typeof window.molly?.showCompare === 'function' && (window.molly.showCompare(${JSON.stringify(frame.src)}), true)`
+      )
+      .catch(() => false)) === true
+  )
+}
+async function prepareDesignCompare(
+  id: string,
+  before: {
+    doc: { elements: { id: string }[] }
+    assets: Record<string, string>
+    revisionId: string
+  }
+) {
+  const generation = (compareGenerations.get(id) ?? 0) + 1
+  compareGenerations.set(id, generation)
+  compareFrames.delete(id)
+  const stale = () => compareGenerations.get(id) !== generation
+  try {
+    const versions = await designRequest<DesignVersion[]>({
+      operation: 'history-list',
+      sessionId: id
+    })
+    if (stale()) return
+    const source = findDesignCompareSource(versions, before)
+    if (!source) return
+    const payload = await designRequest<DesignPayload>({
+      operation: 'history-read',
+      sessionId: id,
+      commitId: source.commitId
+    })
+    if (stale()) return
+    let image = nativeImage.createFromBuffer(await renderSavedDesign(payload, 'png', 1))
+    if (stale()) return
+    const size = image.getSize()
+    const scale = Math.min(1, DESIGN_MARKED_IMAGE_MAX_EDGE / Math.max(size.width, size.height))
+    if (scale < 1)
+      image = image.resize({
+        width: Math.round(size.width * scale),
+        height: Math.round(size.height * scale)
+      })
+    if (stale()) return
+    compareFrames.set(id, {
+      src: 'data:image/png;base64,' + image.toPNG().toString('base64'),
+      preTurnRevisionId: before.revisionId
+    })
+    notifyDesignCompare(id)
+  } catch {
+    // Compare is best-effort: without a frame the hold control simply stays off.
+  }
+}
 const recordsFor = (id: string) => [...records.values()].filter((record) => record.artworkId === id)
 const loading = new Map<string, Promise<RecordEntry>>()
 const syncing = new Map<string, Promise<DesignElementChanges | null>>()
@@ -258,24 +354,49 @@ export async function surface(
           }
           if (input.type === 'notes-sync') {
             assertRetained()
-            retainedUnsentNotes.publish(noteScope(id, hostId), input.notes)
+            retainedUnsentNotes.publish(
+              noteScope(id, hostId),
+              input.notesEpoch,
+              input.notesInstance,
+              input.notes
+            )
             return Response.json({ ok: true }, { headers })
           }
           assertCurrent()
+          if (input.type === 'compare') {
+            const frame = compareFrames.get(id)
+            return Response.json(
+              { ok: true, frame: frame ? { src: frame.src } : null },
+              { headers }
+            )
+          }
           if (input.type === 'notes') {
-            const notes = await getDesignNotes(id, hostId, input.notesEpoch, assertCurrent)
+            const { list: notes, instance } = await getDesignNotes(
+              id,
+              hostId,
+              input.notesEpoch,
+              assertCurrent
+            )
             const region = notes.find((note) => note.region)
             const image = region
               ? await readDesignNoteImage(record!, input.notesEpoch, region.reference.elementIds[0])
               : undefined
+            const snapshot = input.stage
+              ? await readDesignNotesSnapshot(record!, id, input.notesEpoch, assertCurrent)
+              : undefined
             assertCurrent()
-            retainedUnsentNotes.accept(noteScope(id, hostId), input.notesEpoch)
+            // A staged draft sends nothing yet: the retained copy stays until the
+            // composer send settles with sent=true. Only a direct send consumes it.
+            if (!input.stage) retainedUnsentNotes.accept(noteScope(id, hostId), input.notesEpoch)
             record!.owner.webContents.send('design.selectionAction', {
               hostId,
               action: 'notes',
               notes,
               notesEpoch: input.notesEpoch,
-              ...(image ? { image } : {})
+              notesInstance: instance,
+              ...(input.stage ? { stage: true } : {}),
+              ...(image ? { image } : {}),
+              ...(snapshot ? { snapshot } : {})
             })
             return Response.json({ ok: true }, { headers })
           }
@@ -352,13 +473,33 @@ export async function surface(
           return Response.json({ ok: false }, { status: 400, headers })
         }
       }
+      if (
+        editable &&
+        hostId &&
+        request.method === 'GET' &&
+        url.pathname === '/ws/' + id + '/notes-snapshot'
+      ) {
+        const buffer = pendingNoteSnapshots.get(id)
+        const record = records.get(hostId)
+        if (
+          !buffer ||
+          !record ||
+          record.artworkId !== id ||
+          record.view.webContents.session !== isolated
+        )
+          return new Response(null, { status: 404, headers })
+        return new Response(new Uint8Array(buffer), {
+          headers: { ...headers, 'Content-Type': 'image/png' }
+        })
+      }
       return new Response(null, { status: 403 })
     })
     return {
       isolated,
       url: origin + '/editor.html?ws=' + id + (editable || preview ? '&autosave=1&molly=1' : ''),
       own: lease.own,
-      dispose: lease.dispose
+      dispose: lease.dispose,
+      savedContent: () => payload
     }
   } catch (error) {
     lease.dispose()
@@ -458,6 +599,7 @@ export async function attachDesign(
             view,
             owner,
             dispose: source.dispose,
+            savedContent: source.savedContent,
             revisionId: payload.revisionId
           }
           records.set(hostId, entry)
@@ -560,6 +702,7 @@ async function retireDesignInstance(key: string) {
   destroyDesignInstance(key)
 }
 export async function destroyDesign(id: string) {
+  invalidateDesignCompare(id)
   const keys = [...records].filter(([, record]) => record.artworkId === id).map(([key]) => key)
   await Promise.all(keys.map(retireDesignInstance))
 }
@@ -696,11 +839,20 @@ export async function getDesignNotes(
 ) {
   const read = `window.molly.notes(${JSON.stringify(notesEpoch)})`
   let notes: DesignNotes = []
+  let notesInstance = ''
   const references = await captureDesignReferences(
     id,
     hostId,
     async (record) => {
       const value: unknown = await record.view.webContents.executeJavaScript(read)
+      notesInstance =
+        typeof value === 'object' &&
+        value !== null &&
+        'instance' in value &&
+        typeof value.instance === 'string'
+          ? value.instance
+          : ''
+      if (!notesInstance) throw Error('Canvas notes are missing their instance')
       notes = DesignNotesSchema.parse(
         typeof value === 'object' && value !== null && 'notes' in value ? value.notes : undefined
       )
@@ -711,11 +863,14 @@ export async function getDesignNotes(
     },
     { assertCurrent }
   )
-  return references.map((reference, index) => ({
-    reference,
-    prompt: notes[index].prompt,
-    ...(notes[index].region ? { region: true as const } : {})
-  }))
+  return {
+    list: references.map((reference, index) => ({
+      reference,
+      prompt: notes[index].prompt,
+      ...(notes[index].region ? { region: true as const } : {})
+    })),
+    instance: notesInstance
+  }
 }
 
 /** The marked copy of the one image region notes mark; bytes are validated before they leave main. */
@@ -734,6 +889,50 @@ async function readDesignNoteImage(record: RecordEntry, notesEpoch: number, elem
   )
     throw Error('Marked image could not be read')
   return { mimeType: image.mimeType, bytes: image.bytes }
+}
+
+/**
+ * The annotated whole-artwork snapshot for a staged draft. Main renders the
+ * saved artwork offscreen at the canvas's own copy cap, serves it back to the
+ * canvas once (the page draws the numbered pins and region outlines onto it),
+ * and validates the composed bytes like any marked image.
+ */
+async function readDesignNotesSnapshot(
+  record: RecordEntry,
+  id: string,
+  notesEpoch: number,
+  assertCurrent: () => void
+) {
+  const saved = await designRequest({ operation: 'read', sessionId: id })
+  let rendered = nativeImage.createFromBuffer(await renderSavedDesign(saved, 'png', 1))
+  const full = rendered.getSize()
+  // The canvas re-caps at its own copy edge; serving the capped render keeps
+  // the loopback fetch small.
+  const scale = Math.min(1, 1600 / Math.max(full.width, full.height))
+  if (scale < 1)
+    rendered = rendered.resize({
+      width: Math.round(full.width * scale),
+      height: Math.round(full.height * scale)
+    })
+  assertCurrent()
+  pendingNoteSnapshots.set(id, rendered.toPNG())
+  try {
+    const snapshot = decodeDesignAnnotatedSnapshot(
+      await record.view.webContents.executeJavaScript(
+        `window.molly.annotateNotesSnapshot(${JSON.stringify(notesEpoch)})`
+      )
+    )
+    const size = nativeImage.createFromBuffer(Buffer.from(snapshot.bytes)).getSize()
+    if (
+      !size.width ||
+      !size.height ||
+      Math.max(size.width, size.height) > DESIGN_MARKED_IMAGE_MAX_EDGE
+    )
+      throw Error('Annotated snapshot could not be read')
+    return { mimeType: snapshot.mimeType, bytes: snapshot.bytes }
+  } finally {
+    pendingNoteSnapshots.delete(id)
+  }
 }
 
 async function captureDesignReferences(
@@ -816,14 +1015,20 @@ export async function settleDesignNotes(
   id: string,
   hostId: string,
   notesEpoch: number,
-  sent: boolean
+  sent: boolean,
+  notesInstance?: string
 ) {
-  const rejected = retainedUnsentNotes.settle(noteScope(id, hostId), notesEpoch, sent)
+  const rejected = retainedUnsentNotes.settle(
+    noteScope(id, hostId),
+    notesEpoch,
+    sent,
+    notesInstance
+  )
   const record = records.get(hostId)
   if (!record || record.artworkId !== id || hosts.get(hostId) !== id) return false
   const settled =
     (await record.view.webContents.executeJavaScript(
-      `window.molly.settleNotes ? window.molly.settleNotes(${JSON.stringify(notesEpoch)}, ${sent}) : false`
+      `window.molly.settleNotes ? window.molly.settleNotes(${JSON.stringify(notesEpoch)}, ${sent}, ${JSON.stringify(notesInstance ?? null)}) : false`
     )) === true
   if (rejected.length) void restoreCanvasNotes(record.view.webContents, rejected).catch(() => {})
   return settled
@@ -888,10 +1093,13 @@ export async function readDesignCandidateFile(
  */
 export async function syncDesignCanvasFromStore(
   id: string,
-  hostId?: string
+  hostId?: string,
+  options?: { compare?: boolean }
 ): Promise<DesignElementChanges | null> {
   const previous = syncing.get(id) ?? Promise.resolve(null)
-  const next = previous.catch(() => null).then(() => syncDesignCanvasFromStoreOnce(id, hostId))
+  const next = previous
+    .catch(() => null)
+    .then(() => syncDesignCanvasFromStoreOnce(id, hostId, options))
   syncing.set(id, next)
   try {
     return await next
@@ -903,7 +1111,8 @@ export async function syncDesignCanvasFromStore(
 /** Element changes compare the superseded canvas (see `selectChangeBaseline`) with the saved document. */
 async function syncDesignCanvasFromStoreOnce(
   id: string,
-  hostId?: string
+  hostId?: string,
+  options?: { compare?: boolean }
 ): Promise<DesignElementChanges | null> {
   const saved = await designRequest({ operation: 'read', sessionId: id })
   if (
@@ -914,12 +1123,21 @@ async function syncDesignCanvasFromStoreOnce(
     return null
   const before = await reloadDesignCanvas(id, hostId)
   const after = saved.doc as { elements?: unknown } | null
-  return before && Array.isArray(after?.elements)
-    ? diffDesignElements(before, after as { elements: { id: string }[] })
-    : null
+  if (!before || !Array.isArray(after?.elements)) return null
+  const changes = diffDesignElements(before.doc, after as { elements: { id: string }[] })
+  if (options?.compare) void prepareDesignCompare(id, before)
+  else invalidateDesignCompare(id)
+  return changes
 }
 
-async function reloadDesignCanvas(id: string, hostId?: string) {
+async function reloadDesignCanvas(
+  id: string,
+  hostId?: string
+): Promise<{
+  doc: { elements: { id: string }[] }
+  assets: Record<string, string>
+  revisionId: string
+} | null> {
   const entries = [...records].filter(([, record]) => record.artworkId === id)
   // Check every instance before destroying any: exceptional dirty content is never discarded.
   for (const [, record] of entries) {
@@ -928,18 +1146,21 @@ async function reloadDesignCanvas(id: string, hostId?: string) {
       throw Error('Canvas has unsaved edits; preserve or save them before reloading')
   }
   const baseline = selectChangeBaseline(entries, hosts, id, hostId)
-  const before = baseline
-    ? await baseline[1].view.webContents
-        .executeJavaScript('window.molly.snapshot().then((value) => value.doc)')
-        .catch(() => null)
-    : null
+  const baselineRevisionId = baseline?.[1].revisionId
+  const before = baseline?.[1].savedContent()
   for (const [key, record] of entries) {
     const visible = hosts.has(key)
     const bounds = record.view.getBounds()
     await retireDesignInstance(key)
     if (visible) await attachDesign(record.owner, id, bounds, key, false)
   }
-  return Array.isArray(before?.elements) ? (before as { elements: { id: string }[] }) : null
+  return Array.isArray(before?.doc?.elements) && before.assets && baselineRevisionId
+    ? {
+        doc: before.doc as { elements: { id: string }[] },
+        assets: before.assets,
+        revisionId: baselineRevisionId
+      }
+    : null
 }
 
 async function restoreRetainedNotes(webContents: Electron.WebContents, id: string, hostId: string) {

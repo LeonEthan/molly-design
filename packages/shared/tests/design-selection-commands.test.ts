@@ -15,6 +15,7 @@ import {
   DESIGN_NOTES_MAX,
   DESIGN_STROKE_POINTS_MAX,
   DESIGN_MARKED_IMAGE_MAX_BYTES,
+  decodeDesignAnnotatedSnapshot,
   decodeDesignMarkedImage,
   diffDesignElements,
 } from '../src/design-selection-commands';
@@ -466,30 +467,83 @@ describe('element change feedback', () => {
     ])
       expect(() => decodeDesignMarkedImage(input, 'photo')).toThrow();
   });
+  it('carries the stage flag on a notes request and the epoch on every notes sync', () => {
+    expect(
+      DesignToolbarRequestSchema.parse({ type: 'notes', notesEpoch: 3, stage: true })
+    ).toEqual({
+      type: 'notes',
+      notesEpoch: 3,
+      stage: true,
+    });
+    expect(
+      DesignToolbarRequestSchema.safeParse({ type: 'notes', notesEpoch: 3, stage: 'yes' }).success
+    ).toBe(false);
+    const note = { elementIds: ['a'], prompt: 'Warmer' };
+    const sync = { type: 'notes-sync', notesEpoch: 7, notesInstance: 'page-1', notes: [note] };
+    expect(DesignToolbarRequestSchema.parse(sync)).toEqual(sync);
+    for (const input of [
+      { type: 'notes-sync', notes: [note] },
+      { type: 'notes-sync', notesEpoch: -1, notesInstance: 'page-1', notes: [] },
+      { type: 'notes-sync', notesEpoch: 7, notes: [note] },
+      { type: 'notes-sync', notesEpoch: 7, notesInstance: '', notes: [note] },
+    ])
+      expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
+    expect(DesignToolbarRequestSchema.parse({ type: 'compare' })).toEqual({ type: 'compare' });
+    expect(
+      DesignToolbarRequestSchema.safeParse({ type: 'compare', holding: true }).success
+    ).toBe(false);
+  });
+  it('decodes an annotated snapshot without an element id and real image bytes', () => {
+    const png = btoa(String.fromCharCode(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0));
+    const decoded = decodeDesignAnnotatedSnapshot({ mimeType: 'image/png', data: png });
+    expect([...decoded.bytes.slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect(() => decodeDesignAnnotatedSnapshot({ mimeType: 'image/jpeg', data: png })).toThrow(
+      'valid PNG or JPEG'
+    );
+    for (const input of [
+      { mimeType: 'image/svg+xml', data: png },
+      { mimeType: 'image/png', data: 'not base64!' },
+      { mimeType: 'image/png', data: png, elementId: 'photo' },
+    ])
+      expect(() => decodeDesignAnnotatedSnapshot(input)).toThrow();
+  });
 });
 
 describe('canvas notes sync', () => {
   const note = { elementIds: ['title'], prompt: 'Warmer' };
 
   it('accepts a canvas state with no notes so a cleared canvas can publish it', () => {
-    expect(DesignToolbarRequestSchema.safeParse({ type: 'notes-sync', notes: [] }).success).toBe(
-      true
-    );
+    expect(
+      DesignToolbarRequestSchema.safeParse({
+        type: 'notes-sync',
+        notesEpoch: 0,
+        notesInstance: 'page-1',
+        notes: [],
+      }).success
+    ).toBe(true);
   });
 
   it('accepts a canvas state that holds notes', () => {
     expect(
-      DesignToolbarRequestSchema.safeParse({ type: 'notes-sync', notes: [note] }).success
+      DesignToolbarRequestSchema.safeParse({
+        type: 'notes-sync',
+        notesEpoch: 3,
+        notesInstance: 'page-1',
+        notes: [note],
+      }).success
     ).toBe(true);
   });
 
   it('rejects an invalid canvas state so the last good copy stays', () => {
     const invalid = [
-      { type: 'notes-sync', notes: [{ elementIds: [], prompt: 'Warmer' }] },
-      { type: 'notes-sync', notes: [{ ...note, prompt: '   ' }] },
-      { type: 'notes-sync', notes: 'Warmer' },
-      { type: 'notes-sync', notes: [note], notesEpoch: 1 },
-      { type: 'notes-sync', notes: Array.from({ length: DESIGN_NOTES_MAX + 1 }, () => note) },
+      { type: 'notes-sync', notesEpoch: 0, notesInstance: 'p', notes: [{ elementIds: [], prompt: 'Warmer' }] },
+      { type: 'notes-sync', notesEpoch: 0, notesInstance: 'p', notes: [{ ...note, prompt: '   ' }] },
+      { type: 'notes-sync', notesEpoch: 0, notesInstance: 'p', notes: 'Warmer' },
+      // The epoch and the page identity bind the copy to the canvas's pin
+      // generation; without them a staged send could retire the wrong notes.
+      { type: 'notes-sync', notes: [note] },
+      { type: 'notes-sync', notesEpoch: 0, notes: [note] },
+      { type: 'notes-sync', notesEpoch: 0, notesInstance: 'p', notes: Array.from({ length: DESIGN_NOTES_MAX + 1 }, () => note) },
     ];
     for (const input of invalid)
       expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
@@ -505,7 +559,7 @@ describe('notes-sync body size', () => {
       prompt: 'x'.repeat(DESIGN_ASK_PROMPT_MAX),
       region: { kind: 'stroke' as const, points: stroke },
     }));
-    const body = JSON.stringify({ type: 'notes-sync', notes });
+    const body = JSON.stringify({ type: 'notes-sync', notesEpoch: 3, notesInstance: 'page-1', notes });
     expect(new TextEncoder().encode(body).byteLength).toBeLessThan(DESIGN_NOTES_SYNC_BODY_LIMIT);
     expect(DesignNotesSchema.safeParse(notes).success).toBe(true);
   });

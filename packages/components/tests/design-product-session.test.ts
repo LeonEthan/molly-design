@@ -681,3 +681,54 @@ it('receives every canvas copy key from the shell in both languages', () => {
     expect(zhCN, key).toHaveProperty([`design.${key}`]);
   }
 });
+
+it('forwards the notes instance guard through window.molly.settleNotes', async () => {
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  const ready = new Promise<void>((resolve) =>
+    window.addEventListener('molly:ready', () => resolve(), { once: true })
+  );
+  document.body.innerHTML =
+    '<div class="ed-stage-scale"><div data-el-id="title"><span>Hi</span></div></div>';
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({}),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => ({ ok: true }),
+    pickImageFile: () => {},
+    elements: () => [{ id: 'title', kind: 'text' }],
+    select: () => {},
+  });
+  await ready;
+  const api = (
+    window as unknown as {
+      molly: {
+        setReadonly(value: boolean): void;
+        notes(expected?: number): { epoch: number; instance: string; notes: unknown[] };
+        settleNotes(expected: number, sent: boolean, instance?: string | null): boolean;
+      };
+    }
+  ).molly;
+  api.setReadonly(false);
+  const target = document.querySelector('[data-el-id="title"]')!;
+  target.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+  target.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, metaKey: true }));
+  const field = document.querySelector<HTMLTextAreaElement>('.molly-note-editor textarea')!;
+  field.value = 'Warmer';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  const read = api.notes();
+  expect(read.notes).toHaveLength(1);
+  // A settlement naming another canvas lifetime must not clear this page's pins.
+  expect(api.settleNotes(read.epoch, true, 'another-page')).toBe(false);
+  expect(api.notes().notes).toHaveLength(1);
+  expect(api.settleNotes(read.epoch, true, read.instance)).toBe(true);
+  expect(api.notes().notes).toHaveLength(0);
+  window.dispatchEvent(new Event('pagehide'));
+});

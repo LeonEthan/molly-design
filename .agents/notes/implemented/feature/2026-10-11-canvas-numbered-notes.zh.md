@@ -20,6 +20,12 @@ Translation: current
 - **契约。** 工具栏请求为 `{ type: 'notes', notesEpoch }`，不携带元素 ID。主进程执行 `window.molly.notes(epoch)`，解析 `DesignNotesSchema`，像其他显式引用操作一样先保存，再按已保存修订为每条批注生成引用、统一校验，并在转发 `{ action: 'notes', notes, notesEpoch }` 前再次核对 epoch。
 - **发送与清除。** `sendDesignNotes` 生成 `1. 说明 @批注 1` 形式的多行文字，每条批注一个提及，作为一个文本块发出，不改动草稿。从发出请求起图钉保持锁定，直到外壳通过新增的 `design.settleNotes(artwork, host, epoch, sent)` 回复；外壳在任何结果下（包括忽略该事件时）都会回复，从而避免再次点击把同一批注发送两次。只有回合被接受才会清除图钉，若图钉此后又被修改则保留。发送被拒时保留图钉并提示；与“问 Molly”不同，批注不会退回输入框草稿，因为草稿只容纳一个选区标签。
 
+## 2026-10-20 暂存打磨
+
+所有者批准了画布批注打磨第三阶段：托盘的“发送”改为把批注暂存进输入框——“N 条批注”纸片加上整稿标注快照与原有的一张区域标记图，均作为普通附件；在编辑器或托盘上按 ⌘/Ctrl+Enter 保留立即发送。见[画布批注第三阶段](2026-10-20-canvas-comment-stage-and-compare.zh.md)。批注仍是会话临时状态，只有在暂存或直接发送的回合真正发出后才清除；发布的副本现在携带图钉
+epoch 和画布页面实例 id（画布重建时 epoch 重置），因此被接受的暂存发送只退役它所发送的那份
+副本，暂存后又改动——或恢复进重建画布——的图钉保留。
+
 ## 验证
 
 - 单元测试：模式边界与只带 epoch 的请求（`packages/shared/tests/design-selection-commands.test.ts`）；图钉手势、合并、上限、清理、待回复锁定、epoch/清除与托盘失败（`packages/components/tests/design-note-pins.test.ts`）；“添加为批注”（`design-selection-toolbar.test.ts`）；画布事件路由与清除（`design-canvas-selection-ask.test.tsx`）；带编号的输入框发送（`session-chat-input-submission.test.tsx`）。

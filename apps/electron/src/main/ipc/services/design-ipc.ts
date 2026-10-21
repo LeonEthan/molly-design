@@ -36,6 +36,8 @@ import {
   createDesignVersion,
   readDesignCanvasState,
   designCanvasAccess,
+  designCompareAvailable,
+  holdDesignCompare,
   restoreDesignVersion,
   hideDesign,
   destroyDesign,
@@ -129,13 +131,16 @@ export class DesignIpc extends IpcService {
     sessionId: string,
     hostId: string,
     notesEpoch: unknown,
-    sent: unknown
+    sent: unknown,
+    notesInstance?: unknown
   ) {
     owner()
     if (typeof notesEpoch !== 'number' || !Number.isSafeInteger(notesEpoch) || notesEpoch < 0)
       throw Error('Invalid notes epoch')
     if (typeof sent !== 'boolean') throw Error('Invalid notes outcome')
-    return settleDesignNotes(id.parse(sessionId), id.parse(hostId), notesEpoch, sent)
+    if (notesInstance !== undefined && typeof notesInstance !== 'string')
+      throw Error('Invalid notes instance')
+    return settleDesignNotes(id.parse(sessionId), id.parse(hostId), notesEpoch, sent, notesInstance)
   }
   @IpcMethod() async presentToolbar(sessionId: string, hostId: string, presentation: unknown) {
     owner()
@@ -170,8 +175,25 @@ export class DesignIpc extends IpcService {
     owner()
     return syncDesignCanvasFromStore(
       id.parse(sessionId),
-      hostId === undefined ? undefined : id.parse(hostId)
+      hostId === undefined ? undefined : id.parse(hostId),
+      // The renderer calls this from the committed-turn receipt, so the sync is
+      // turn-driven and prepares the hold-to-compare frame.
+      { compare: true }
     )
+  }
+  /** Whether a pre-turn hold-to-compare frame is ready for this artwork. */
+  @IpcMethod() async compareAvailable(sessionId: string) {
+    owner()
+    return designCompareAvailable(id.parse(sessionId))
+  }
+  /**
+   * Hold-to-compare: show the prepared pre-turn frame on the live canvas while
+   * held, hide it on release. Read-only display; nothing is persisted.
+   */
+  @IpcMethod() async compareHold(sessionId: string, hostId: string, holding: unknown) {
+    owner()
+    if (typeof holding !== 'boolean') throw Error('Invalid compare hold')
+    return holdDesignCompare(id.parse(sessionId), id.parse(hostId), holding)
   }
   /** Existing historical content, addressed by artwork and its recorded digest. */
   @IpcMethod() async candidateFile(sessionId: string, rawCandidateId: string) {

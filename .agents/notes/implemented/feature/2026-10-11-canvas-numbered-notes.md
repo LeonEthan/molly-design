@@ -63,6 +63,19 @@ Lovart's up-to-10 marks per prompt were the reference patterns.
   unlike Ask, notes never fall back into the composer draft, because the
   draft holds one selection chip.
 
+## 2026-10-20 staging pass
+
+The owner approved phase 3 of the canvas comment polish: the tray's Send now
+stages the notes in the composer as an "N comments" chip with the annotated
+whole-artwork snapshot and the one marked copy as ordinary attachments, while
+⌘/Ctrl+Enter in the editor or the tray keeps the direct send. See
+[canvas comment phase 3](2026-10-20-canvas-comment-stage-and-compare.md).
+Notes remain session state cleared only after the staged or direct turn is
+actually sent; published copies now carry the pins epoch and the canvas page's
+instance id (epochs restart on recreation), so an accepted staged send retires
+exactly the copy it sent and pins edited since staging — or restored into a
+recreated canvas — stay.
+
 ## Validation
 
 - Unit: schema bounds and the epoch-only request

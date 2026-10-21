@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DESIGN_NOTES_MAX,
   DESIGN_STROKE_POINTS_MAX,
@@ -30,6 +30,9 @@ let requests: DesignToolbarRequest[];
 let published: { elementIds: string[]; prompt: string }[][];
 let keepalives: boolean[];
 let publishFailures: number;
+let snapshotStub:
+  | { image: { naturalWidth: number; naturalHeight: number }; release: () => void }
+  | undefined;
 let events: string[];
 let highlights: HighlightGroup[][];
 let selected: string[];
@@ -111,6 +114,7 @@ beforeEach(() => {
   published = [];
   keepalives = [];
   publishFailures = 0;
+  snapshotStub = undefined;
   events = [];
   highlights = [];
   selected = [];
@@ -121,7 +125,7 @@ beforeEach(() => {
       events.push(input.type);
       return { ok: true };
     },
-    publish: async (notes, keepalive) => {
+    publish: async (notes, _epoch, _instance, keepalive) => {
       published.push(notes);
       keepalives.push(keepalive);
       events.push('publish');
@@ -130,6 +134,10 @@ beforeEach(() => {
         throw Error('Canvas sync failed');
       }
       return { ok: true };
+    },
+    snapshotImage: async () => {
+      if (!snapshotStub) throw Error('No snapshot image');
+      return snapshotStub as never;
     },
     selectedIds: () => selected,
     elements: () => present.map((id) => ({ id, kind: id === 'title' ? 'text' : 'image' })),
@@ -422,6 +430,7 @@ it('sends every note on Cmd/Ctrl+Enter from the editor', async () => {
   enter(field, { metaKey: true });
   expect(document.querySelector('.molly-note-editor')).toBeNull();
   const { epoch } = pins.read();
+  // The editor chord is the direct send: it never stages in the composer.
   await vi.waitFor(() => expect(requests).toEqual([{ type: 'notes', notesEpoch: epoch }]));
 });
 
@@ -462,7 +471,9 @@ it('sends by epoch and rejects a read after the notes changed', async () => {
   pins.add(['title'], 'Warmer headline');
   const { epoch } = pins.read();
   button('Send').click();
-  await vi.waitFor(() => expect(requests).toEqual([{ type: 'notes', notesEpoch: epoch }]));
+  await vi.waitFor(() =>
+    expect(requests).toEqual([{ type: 'notes', notesEpoch: epoch, stage: true }])
+  );
   button('Send').click();
   pins.add(['photo'], 'Crop tighter');
   expect(requests).toHaveLength(1);
@@ -474,6 +485,35 @@ it('sends by epoch and rejects a read after the notes changed', async () => {
   expect(pins.settle(epoch, true)).toBe(false);
   expect(pins.read().notes).toHaveLength(2);
   expect(pins.settle(pins.read().epoch, true)).toBe(true);
+  expect(pins.read().notes).toEqual([]);
+});
+
+it('refuses to settle pins for another canvas lifetime', () => {
+  pins.add(['title'], 'Warmer');
+  const { epoch, instance } = pins.read();
+  // A staged draft from a closed-and-recreated canvas carries that page's
+  // identity; settling it must not clear this page's pins.
+  expect(pins.settle(epoch, true, 'another-instance')).toBe(false);
+  expect(pins.read().notes).toHaveLength(1);
+  expect(pins.settle(epoch, true, instance)).toBe(true);
+  expect(pins.read().notes).toEqual([]);
+});
+
+it('stages from the tray Send but sends at once on ⌘Enter, keeping the pins', async () => {
+  pins.add(['title'], 'Warmer headline');
+  const { epoch } = pins.read();
+  button('Send').click();
+  await vi.waitFor(() =>
+    expect(requests).toEqual([{ type: 'notes', notesEpoch: epoch, stage: true }])
+  );
+  // A staged draft settles unsent: the pins stay on the canvas.
+  expect(pins.settle(epoch, false)).toBe(false);
+  expect(pins.read().notes).toHaveLength(1);
+  button('Send').dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true })
+  );
+  await vi.waitFor(() => expect(requests.at(-1)).toEqual({ type: 'notes', notesEpoch: epoch }));
+  expect(pins.settle(epoch, true)).toBe(true);
   expect(pins.read().notes).toEqual([]);
 });
 
@@ -588,7 +628,7 @@ it('clears region shading once an accepted send settles', async () => {
   drawRegionNote();
   const { epoch } = pins.read();
   button('Send').click();
-  await vi.waitFor(() => expect(requests).toEqual([{ type: 'notes', notesEpoch: epoch }]));
+  await vi.waitFor(() => expect(requests).toEqual([{ type: 'notes', notesEpoch: epoch, stage: true }]));
   expect(pins.settle(epoch, true)).toBe(true);
   expect(pins.read().notes).toEqual([]);
   expect(regionShading()).toHaveLength(0);
@@ -605,7 +645,7 @@ it('clears stroke overlays once an accepted send settles', async () => {
   drawStrokeNote();
   const { epoch } = pins.read();
   button('Send').click();
-  await vi.waitFor(() => expect(requests).toEqual([{ type: 'notes', notesEpoch: epoch }]));
+  await vi.waitFor(() => expect(requests).toEqual([{ type: 'notes', notesEpoch: epoch, stage: true }]));
   expect(pins.settle(epoch, true)).toBe(true);
   expect(pins.read().notes).toEqual([]);
   expect(regionShading()).toHaveLength(0);
@@ -790,4 +830,97 @@ it('a restored canvas publishes what it restored', () => {
   pins.restore([{ elementIds: ['title'], prompt: 'Warmer' }]);
   vi.advanceTimersByTime(NOTE_PUBLISH_DEBOUNCE_MS);
   expect(published.at(-1)).toEqual([{ elementIds: ['title'], prompt: 'Warmer' }]);
+});
+
+describe('annotated artwork snapshot', () => {
+  function slide(left: number, top: number, width: number, height: number) {
+    const node = document.createElement('div');
+    node.className = 'bento-slide';
+    Object.defineProperty(node, 'getBoundingClientRect', {
+      value: () => ({ left, top, right: left + width, bottom: top + height, width, height }),
+    });
+    document.querySelector('.ed-stage-scale')!.append(node);
+  }
+  function fakeContext() {
+    const texts: [string, number, number][] = [];
+    const points: [number, number][] = [];
+    const context = {
+      drawImage: () => {},
+      beginPath: () => {},
+      moveTo: (x: number, y: number) => points.push([x, y]),
+      lineTo: (x: number, y: number) => points.push([x, y]),
+      closePath: () => {},
+      arc: () => {},
+      stroke: () => {},
+      fill: () => {},
+      fillRect: () => {},
+      fillText: (text: string, x: number, y: number) => texts.push([text, x, y]),
+    };
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as never);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
+      `data:image/png;base64,${btoa('png-bytes')}`
+    );
+    return { texts, points };
+  }
+  function stubSnapshot(naturalWidth: number, naturalHeight: number) {
+    snapshotStub = { image: { naturalWidth, naturalHeight }, release: vi.fn() };
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.querySelector('.bento-slide')?.remove();
+  });
+
+  it('draws every note where it sits on the artwork snapshot', async () => {
+    slide(0, 0, 800, 400);
+    stubSnapshot(1600, 800);
+    const { texts } = fakeContext();
+    pins.add(['title'], 'Warmer', { elementId: 'title', at: [0.5, 0.5] });
+    pins.add(['photo'], 'Darker');
+    const { epoch } = pins.read();
+    const snapshot = await pins.annotate(epoch);
+    expect(snapshot).toEqual({ mimeType: 'image/png', data: btoa('png-bytes') });
+    // The pin point maps through the stage rect; the plain note sits at its
+    // targets' top-right corner, like the on-canvas marker.
+    expect(texts.map(([text, x, y]) => [text, Math.round(x), Math.round(y)])).toEqual([
+      ['1', 600, 600],
+      ['2', 1012, 400],
+    ]);
+    expect(snapshotStub?.release).toHaveBeenCalled();
+  });
+
+  it('draws a region outline and its badge on the snapshot', async () => {
+    slide(0, 0, 800, 400);
+    stubSnapshot(1600, 800);
+    const { texts, points } = fakeContext();
+    drawRegionNote();
+    const { epoch } = pins.read();
+    await expect(pins.annotate(epoch)).resolves.not.toBeNull();
+    expect(texts).toEqual([['1', 400, 500]]);
+    expect(points).toEqual([
+      [400, 500],
+      [600, 500],
+      [600, 700],
+      [400, 700],
+    ]);
+  });
+
+  it('rejects a stale or empty snapshot read', async () => {
+    slide(0, 0, 800, 400);
+    stubSnapshot(1600, 800);
+    fakeContext();
+    pins.add(['title'], 'Warmer');
+    const { epoch } = pins.read();
+    await expect(pins.annotate(epoch + 1)).rejects.toThrow('Notes changed');
+    pins.settle(epoch, true);
+    await expect(pins.annotate(pins.read().epoch)).resolves.toBeNull();
+  });
+
+  it('rejects the snapshot when the artwork is gone', async () => {
+    stubSnapshot(1600, 800);
+    fakeContext();
+    pins.add(['title'], 'Warmer');
+    const { epoch } = pins.read();
+    await expect(pins.annotate(epoch)).rejects.toThrow('no longer visible');
+  });
 });

@@ -325,14 +325,24 @@ export const DesignToolbarRequestSchema = z.discriminatedUnion('type', [
     .object({
       type: z.literal('notes'),
       notesEpoch: z.number().int().nonnegative(),
+      // stage: the shell parks the notes, the annotated snapshot and the marked
+      // copy in the composer as a draft instead of sending a turn at once.
+      stage: z.boolean().optional(),
     })
     .strict(),
   z
     .object({
       type: z.literal('notes-sync'),
+      notesEpoch: z.number().int().nonnegative(),
+      // The publishing canvas page's identity: epochs restart when the canvas
+      // is recreated, so retention and settlement key on both.
+      notesInstance: z.string().min(1).max(100),
       notes: DesignNotesStateSchema,
     })
     .strict(),
+  // Hold-to-compare: the canvas asks main for the pre-turn frame it prepared
+  // after the last committed turn; the answer is read-only display data.
+  z.object({ type: z.literal('compare') }).strict(),
 ]).superRefine((request, ctx) => {
   if (request.type !== 'ask' || request.prompt) return;
   if (!request.preset || DESIGN_ASK_PRESETS[request.preset].detail)
@@ -370,22 +380,52 @@ export const DesignHighlightSchema = z
   .max(DESIGN_NOTES_MAX + DESIGN_HIGHLIGHT_TONES.length);
 export type DesignHighlight = z.infer<typeof DesignHighlightSchema>;
 
-/** Decodes a marked copy for the referenced image; rejects other targets and non-image bytes. */
-export function decodeDesignMarkedImage(value: unknown, elementId: string) {
-  const image = DesignMarkedImageSchema.parse(value);
-  if (image.elementId !== elementId)
-    throw Error('Regions belong to another image; draw them on the image again');
-  const bytes = Uint8Array.from(atob(image.data), (char) => char.charCodeAt(0));
+/**
+ * The canvas's annotated snapshot of the whole artwork: numbered pins and
+ * region outlines drawn where each note sits. Carries no element id; it is
+ * composed from the saved artwork, not one source image.
+ */
+export const DesignAnnotatedSnapshotSchema = z
+  .object({
+    mimeType: z.enum(['image/png', 'image/jpeg']),
+    data: z
+      .string()
+      .min(1)
+      .max(Math.ceil(DESIGN_MARKED_IMAGE_MAX_BYTES / 3) * 4)
+      .regex(/^[A-Za-z0-9+/]+={0,2}$/),
+  })
+  .strict();
+export type DesignAnnotatedSnapshot = z.infer<typeof DesignAnnotatedSnapshotSchema>;
+
+function decodeDesignImageBytes(mimeType: 'image/png' | 'image/jpeg', data: string) {
+  const bytes = Uint8Array.from(atob(data), (char) => char.charCodeAt(0));
   const signature =
-    image.mimeType === 'image/png'
+    mimeType === 'image/png'
       ? [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
       : [0xff, 0xd8, 0xff];
   if (
     bytes.length > DESIGN_MARKED_IMAGE_MAX_BYTES ||
     signature.some((byte, index) => bytes[index] !== byte)
   )
-    throw Error('Marked image is not a valid PNG or JPEG under 5 MB');
-  return { mimeType: image.mimeType, bytes };
+    throw Error('Image is not a valid PNG or JPEG under 5 MB');
+  return bytes;
+}
+
+/** Decodes an annotated artwork snapshot; rejects non-image bytes. */
+export function decodeDesignAnnotatedSnapshot(value: unknown) {
+  const snapshot = DesignAnnotatedSnapshotSchema.parse(value);
+  return {
+    mimeType: snapshot.mimeType,
+    bytes: decodeDesignImageBytes(snapshot.mimeType, snapshot.data),
+  };
+}
+
+/** Decodes a marked copy for the referenced image; rejects other targets and non-image bytes. */
+export function decodeDesignMarkedImage(value: unknown, elementId: string) {
+  const image = DesignMarkedImageSchema.parse(value);
+  if (image.elementId !== elementId)
+    throw Error('Regions belong to another image; draw them on the image again');
+  return { mimeType: image.mimeType, bytes: decodeDesignImageBytes(image.mimeType, image.data) };
 }
 
 export type DesignElementChanges = { changed: string[]; removed: string[] };

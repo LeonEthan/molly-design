@@ -93,6 +93,8 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
         }
       ),
       presentToolbar: async () => {},
+      compareAvailable: async () => false,
+      compareHold: async () => false,
       highlight: async (_artworkId: string, _hostId: string, groups: unknown) => {
         state.highlights.push(groups);
         return state.canvasVisible;
@@ -652,10 +654,11 @@ it('numbers the targets of a notes run while it runs and checks them on commit',
         { reference: reference(['leaf']), prompt: 'Crop tighter' },
       ],
       notesEpoch: 3,
+      notesInstance: 'page-1',
     } as never);
   });
   await act(async () => {});
-  expect(state.notesSettled.at(-1)).toEqual(['artwork', 'artwork', 3, true]);
+  expect(state.notesSettled.at(-1)).toEqual(['artwork', 'artwork', 3, true, 'page-1']);
   const turn = {
     items: [
       {
@@ -710,6 +713,7 @@ it('keeps a plain working outline when the running turn did not come from notes'
         },
       ],
       notesEpoch: 7,
+      notesInstance: 'page-1',
     } as never);
   });
   await act(async () => {});

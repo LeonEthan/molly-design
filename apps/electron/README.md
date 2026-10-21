@@ -50,6 +50,16 @@ for the regression and verification limits.
 an OSS build that has already been prepared. It deliberately skips rebuilding
 and should not be used as the normal development command.
 
+### Image export verification
+
+Run `node apps/electron/scripts/image-preview-export-probe.mjs` from the repository
+root for the focused native image-export regression. It uses the real renderer CSP,
+export helper and Electron clipboard service with synthetic PNG/JPEG assets over
+`data:`, `blob:` and `molly-resource:` URLs. It checks full-resolution clipboard PNGs
+and original save payloads, then restores the clipboard. The save dialog and
+cross-application paste still require a packaged-app check; this probe does not
+launch Molly's full desktop or call a model.
+
 ### Build
 
 Run these commands from `apps/electron`. They use the local renderer and embedded

@@ -228,10 +228,18 @@ export function DesignCanvas({
   useEffect(() => {
     if (active && claimNavigationFocus()) setFocused(true);
   }, [active, claimNavigationFocus, setFocused]);
+  const focusOwner = useRef<string | null>(null);
+  const focusOwnerKey = `${sessionId}:${artworkId}`;
   useEffect(() => {
-    if (!active) return undefined;
-    return () => setFocused(false);
-  }, [active, setFocused]);
+    if (!canvasFocus) {
+      focusOwner.current = null;
+      return undefined;
+    }
+    focusOwner.current ??= focusOwnerKey;
+    return () => {
+      if (focusOwner.current === focusOwnerKey) setFocused(false);
+    };
+  }, [focusOwnerKey, canvasFocus, setFocused]);
   const [selection, setSelection] = useState<DesignSelectionSummary | null>(null);
   const selectionCount = selection?.count ?? 0;
   const [canvasState, setCanvasState] =

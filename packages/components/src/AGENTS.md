@@ -30,7 +30,9 @@ Parent `AGENTS.md` files also apply.
   that opens a viewer, Files, Changes, PR, Browser, or Side Chat must clear Zen.
 - `designCanvasFocusAtom` follows the same rule: focusing the active design canvas
   hides only the navigation sidebar, keeping the conversation and canvas, without writing the saved preference.
-  Deactivating the canvas or an explicit navigation-sidebar request clears it.
+  Deactivating the canvas keeps it: the Agent revealing another right-panel tab
+  must not re-expand the navigation sidebar. Only leaving the canvas (session or
+  artwork switch, unmount) or an explicit navigation-sidebar request clears it.
   Accepted first-design landing navigation carries one history-state focus request;
   only its active target canvas consumes it. Later sends, ordinary history visits and
   failed submissions preserve layout; the request adds no persisted preference.

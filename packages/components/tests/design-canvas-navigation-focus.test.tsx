@@ -306,7 +306,7 @@ describe('design canvas creation navigation', () => {
   });
 
   it.each([false, true])(
-    'restores the saved collapsed=%s preference on leaving',
+    'keeps the saved collapsed=%s preference while the canvas is covered and restores it on leaving',
     async (collapsed) => {
       store.set(sidebarCollapsedAtom, collapsed);
       setNavigationState({ __TSR_key: 'entry-0', focusDesignCanvasSessionId: SESSION_ID });
@@ -316,10 +316,17 @@ describe('design canvas creation navigation', () => {
 
       await mount(false);
 
+      expect(store.get(designCanvasFocusAtom)).toBe(true);
+      expect(store.get(navigationSidebarHiddenAtom)).toBe(true);
+      expect(store.get(sidebarCollapsedAtom)).toBe(collapsed);
+      expect(navigationVisible()).toBe(false);
+
+      await mount(true);
+      await unmount();
+
       expect(store.get(designCanvasFocusAtom)).toBe(false);
       expect(store.get(navigationSidebarHiddenAtom)).toBe(collapsed);
       expect(store.get(sidebarCollapsedAtom)).toBe(collapsed);
-      expect(navigationVisible()).toBe(!collapsed);
     }
   );
 
@@ -345,5 +352,76 @@ describe('design canvas creation navigation', () => {
     await mount();
     expect(navigationVisible()).toBe(true);
     expect(store.get(designCanvasFocusAtom)).toBe(false);
+  });
+
+  it('keeps the navigation sidebar hidden when the Agent browser tab covers the focused canvas', async () => {
+    setNavigationState({ __TSR_key: 'entry-0', focusDesignCanvasSessionId: SESSION_ID });
+    await mount();
+    expect(store.get(designCanvasFocusAtom)).toBe(true);
+    expect(navigationVisible()).toBe(false);
+
+    await mount(false);
+
+    expect(store.get(designCanvasFocusAtom)).toBe(true);
+    expect(store.get(navigationSidebarHiddenAtom)).toBe(true);
+    expect(navigationVisible()).toBe(false);
+    expect(store.get(sidebarCollapsedAtom)).toBe(false);
+
+    await mount(true);
+
+    expect(store.get(designCanvasFocusAtom)).toBe(true);
+    expect(navigationVisible()).toBe(false);
+  });
+
+  it('clears canvas focus only when the canvas leaves (unmount or artwork change)', async () => {
+    setNavigationState({ __TSR_key: 'entry-0', focusDesignCanvasSessionId: SESSION_ID });
+    await mount();
+    expect(store.get(designCanvasFocusAtom)).toBe(true);
+
+    await act(async () => {
+      root?.render(
+        <Provider store={store}>
+          <WebWorkspaceLayout>
+            <DesignCanvas
+              sessionId={SESSION_ID}
+              artworkId="another-artwork"
+              active
+              workspaceSlug="local"
+              name="Synthetic"
+            />
+          </WebWorkspaceLayout>
+        </Provider>
+      );
+    });
+    expect(store.get(designCanvasFocusAtom)).toBe(false);
+
+    store.set(designCanvasFocusAtom, true);
+    await act(async () => {});
+    expect(store.get(designCanvasFocusAtom)).toBe(true);
+
+    await unmount();
+    expect(store.get(designCanvasFocusAtom)).toBe(false);
+  });
+
+  it('keeps the navigation sidebar open across a covered canvas when focus was never requested', async () => {
+    await mount();
+    expect(navigationVisible()).toBe(true);
+
+    await mount(false);
+
+    expect(store.get(designCanvasFocusAtom)).toBe(false);
+    expect(store.get(navigationSidebarHiddenAtom)).toBe(false);
+    expect(navigationVisible()).toBe(true);
+  });
+
+  it('leaves the saved collapsed preference alone while the Agent browser covers the canvas', async () => {
+    store.set(sidebarCollapsedAtom, true);
+    setNavigationState({ __TSR_key: 'entry-0', focusDesignCanvasSessionId: SESSION_ID });
+    await mount();
+
+    await mount(false);
+
+    expect(store.get(sidebarCollapsedAtom)).toBe(true);
+    expect(store.get(navigationSidebarHiddenAtom)).toBe(true);
   });
 });

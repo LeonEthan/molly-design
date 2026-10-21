@@ -132,9 +132,10 @@ files retain the last valid frame. There is no source switch, manual refresh or 
 Focus canvas is the transient `designCanvasFocusAtom`. It hides only the navigation
 sidebar, so the conversation and canvas remain, and the conversation header then
 reserves the macOS traffic-light inset and leads with the show-sidebar button. The
-canvas toolbar's button toggles it and reads "Hide navigation sidebar" / "Show navigation sidebar"; ending
-focus, deactivating the canvas or an explicit show-sidebar request restores the saved
-sidebar state. A new design's accepted first message from the landing page also
+canvas toolbar's button toggles it and reads "Hide navigation sidebar" / "Show navigation sidebar"; an explicit show-sidebar request restores the saved
+sidebar state. Focus survives the canvas being covered by another right-panel
+tab (for example the Agent revealing the in-app browser) and ends only when the
+canvas itself leaves (session or artwork switch, unmount). A new design's accepted first message from the landing page also
 requests focus once through navigation history state. Its active target canvas
 consumes the request after navigation, preserving the conversation; failed submissions,
 later messages and ordinary history visits leave the layout alone. No focus preference

@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import sharp from 'sharp';
 import type { z } from 'zod';
 import {
   AgentBrowserActionInputSchemas,
@@ -207,7 +208,24 @@ const failure = (text: string, webmcp?: BrowserWebMcpSummary) => ({
   isError: true,
 });
 
-function toToolResult(reply: AgentBrowserReply) {
+// #199: Pi re-encodes any inline image above 2000 px to PNG, so model screenshots are bounded here.
+const SCREENSHOT_MAX_EDGE = 1280;
+const SCREENSHOT_JPEG_QUALITY = 70;
+
+async function screenshotForModel(base64: string): Promise<string> {
+  const bytes = await sharp(Buffer.from(base64, 'base64'))
+    .resize({
+      width: SCREENSHOT_MAX_EDGE,
+      height: SCREENSHOT_MAX_EDGE,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: SCREENSHOT_JPEG_QUALITY })
+    .toBuffer();
+  return bytes.toString('base64');
+}
+
+async function toToolResult(reply: AgentBrowserReply) {
   if (reply.kind === 'image')
     return {
       content: [
@@ -218,7 +236,11 @@ function toToolResult(reply: AgentBrowserReply) {
             ...(reply.webmcp ? { webmcp: reply.webmcp } : {}),
           }),
         },
-        { type: 'image' as const, mimeType: reply.mimeType, data: reply.base64 },
+        {
+          type: 'image' as const,
+          mimeType: 'image/jpeg' as const,
+          data: await screenshotForModel(reply.base64),
+        },
       ],
     };
   const { kind: _kind, ...structuredContent } = reply;
@@ -253,7 +275,7 @@ export function buildMollyBrowserMcpServer(config: MollyBrowserMcpServerConfig =
           if (!command.success) return failure('Browser operation parameters are invalid.');
           const result = await request(command.data, signal);
           if (!result.ok) return failure(result.error, result.webmcp);
-          return toToolResult(result.reply);
+          return await toToolResult(result.reply);
         } catch (error) {
           return failure(error instanceof Error ? error.message : String(error));
         }

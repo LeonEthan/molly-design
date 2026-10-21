@@ -1,6 +1,6 @@
 import { constants } from 'node:fs'
 import { mkdir, open, rename, unlink } from 'node:fs/promises'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { z } from 'zod'
 import {
@@ -212,7 +212,7 @@ export class ModelConnectionStore {
     })
   }
 
-  private async read(): Promise<Store> {
+  private async readEncrypted(): Promise<Buffer | undefined> {
     this.assertProtectedStorage()
     let handle
     try {
@@ -221,15 +221,24 @@ export class ModelConnectionStore {
         constants.O_RDONLY | constants.O_NOFOLLOW
       )
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-        return { schemaVersion: 1, entries: [] }
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
       // eslint-disable-next-line preserve-caught-error -- Storage causes may contain sensitive paths or input.
       throw new Error('credential_storage_read_failed')
     }
     try {
       const stat = await handle.stat()
       if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new Error('invalid_vault')
-      const raw: unknown = JSON.parse(this.cipher.decryptString(await handle.readFile()))
+      return await handle.readFile()
+    } catch {
+      throw new Error('credential_storage_unreadable')
+    } finally {
+      await handle.close()
+    }
+  }
+
+  private parse(bytes: Buffer): Store {
+    try {
+      const raw: unknown = JSON.parse(this.cipher.decryptString(bytes))
       // Pre-migration vaults stored a grantSeq counter on OAuth rows; strip it so the
       // strict schema does not reject the whole vault.
       if (raw && typeof raw === 'object' && Array.isArray((raw as { entries?: unknown[] }).entries))
@@ -270,9 +279,62 @@ export class ModelConnectionStore {
     } catch {
       // Decryption/schema errors may include input. Never cross IPC with their details.
       throw new Error('credential_storage_unreadable')
-    } finally {
-      await handle.close()
     }
+  }
+
+  private async read(): Promise<Store> {
+    const bytes = await this.readEncrypted()
+    return bytes ? this.parse(bytes) : { schemaVersion: 1, entries: [] }
+  }
+
+  private async recoveryCandidate(): Promise<{ bytes: Buffer; digest: string }> {
+    const bytes = await this.readEncrypted()
+    if (!bytes) throw new Error('credential_storage_recovery_not_needed')
+    return { bytes, digest: createHash('sha256').update(bytes).digest('hex') }
+  }
+
+  private assertUnreadable(bytes: Buffer): void {
+    try {
+      this.parse(bytes)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'credential_storage_unreadable') return
+      throw error
+    }
+    throw new Error('credential_storage_recovery_not_needed')
+  }
+
+  prepareRecovery(): Promise<{ digest: string }> {
+    return this.serial(async () => {
+      const { bytes, digest } = await this.recoveryCandidate()
+      this.assertUnreadable(bytes)
+      return { digest }
+    })
+  }
+
+  recoverUnreadableStorage(input: { digest: string }): Promise<{ backupFileName: string }> {
+    return this.serial(async () => {
+      const { bytes, digest } = await this.recoveryCandidate()
+      if (digest !== input.digest) throw new Error('credential_storage_recovery_conflict')
+      this.assertUnreadable(bytes)
+      const backupFileName = `model-connections.unreadable-${randomUUID()}.enc`
+      try {
+        await rename(
+          join(this.directory, 'model-connections.enc'),
+          join(this.directory, backupFileName)
+        )
+        if (this.platform !== 'win32') {
+          const directory = await open(this.directory, constants.O_RDONLY | constants.O_NOFOLLOW)
+          try {
+            await directory.sync()
+          } finally {
+            await directory.close()
+          }
+        }
+      } catch {
+        throw new Error('credential_storage_recovery_failed')
+      }
+      return { backupFileName }
+    })
   }
 
   private async write(store: Store): Promise<void> {

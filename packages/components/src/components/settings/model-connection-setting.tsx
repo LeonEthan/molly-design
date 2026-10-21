@@ -49,6 +49,11 @@ import { Label } from '@/ui/label';
 import { Switch } from '@/ui/switch';
 import { CompactSection } from './compact-layout';
 import {
+  CredentialStorageRecovery,
+  isUnreadableCredentialStorage,
+  useCredentialStorageRecoveryRevision,
+} from './credential-storage-recovery';
+import {
   CompatibleModelFields,
   compatibleModelDraft,
   type DiscoveryState,
@@ -1117,6 +1122,8 @@ export function ModelConnectionSetting({
   const [ready, setReady] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [storageUnreadable, setStorageUnreadable] = useState(false);
+  const recoveryRevision = useCredentialStorageRecoveryRevision();
   const [catalog, setCatalog] = useState<HarnessModelCatalog['models']>();
   const [metadataSnapshot, setMetadataSnapshot] = useState<ModelMetadataSnapshot | null>(null);
   const [checks, setChecks] = useState<
@@ -1129,6 +1136,13 @@ export function ModelConnectionSetting({
   useEffect(() => {
     if (ready) onConnectionsChange?.(connections);
   }, [connections, onConnectionsChange, ready]);
+  useEffect(() => {
+    setReady(false);
+    setLoadFailed(false);
+    setStorageUnreadable(false);
+    setEditing(null);
+    setChecks({});
+  }, [recoveryRevision]);
   useEffect(() => {
     if (!ipc) return undefined;
     let live = true;
@@ -1144,12 +1158,15 @@ export function ModelConnectionSetting({
       })
       .catch((readError: unknown) => {
         console.error('Failed to read model connections', readError);
-        if (live) setLoadFailed(true);
+        if (live) {
+          setLoadFailed(true);
+          setStorageUnreadable(isUnreadableCredentialStorage(readError));
+        }
       });
     return () => {
       live = false;
     };
-  }, [ipc, loadAttempt]);
+  }, [ipc, loadAttempt, recoveryRevision]);
   useEffect(() => {
     if (!ipc) return undefined;
     let live = true;
@@ -1327,8 +1344,15 @@ export function ModelConnectionSetting({
                 role={loadFailed ? 'alert' : 'status'}
                 className="min-w-0 flex-1 text-xs text-muted-foreground"
               >
-                {t(loadFailed ? 'settings.models.loadFailed' : 'settings.models.loading')}
+                {t(
+                  storageUnreadable
+                    ? 'settings.credentials.unreadable'
+                    : loadFailed
+                      ? 'settings.models.loadFailed'
+                      : 'settings.models.loading'
+                )}
               </p>
+              {storageUnreadable ? <CredentialStorageRecovery /> : null}
               {loadFailed ? (
                 <Button
                   size="sm"

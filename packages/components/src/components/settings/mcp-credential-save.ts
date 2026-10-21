@@ -8,7 +8,10 @@ import {
 } from '@molly/shared/embedded-harness';
 import type { IpcServices } from '@/lib/electron-ipc-client';
 
-type CredentialWriter = Pick<IpcServices['modelConnections'], 'saveMcp' | 'deleteMcp'>;
+type CredentialWriter = Pick<
+  IpcServices['modelConnections'],
+  'saveMcp' | 'deleteMcp' | 'getMcpSnapshot'
+>;
 type ToolLister = Pick<IpcServices['modelConnections'], 'listMcpTools'>;
 
 function destination(connection: McpConnectionSpec): McpCredentialDestination {
@@ -62,11 +65,19 @@ export async function protectMcpEntry(
       return { ...entry, connection: { ...publicConnection, protectedCredentials: reference } };
     }
     if (!writer) throw new Error('mcp_credential_storage_unavailable');
+    let expectedRevision = prior?.revision;
+    if (prior && Object.keys(values).length) {
+      const snapshot = await writer.getMcpSnapshot();
+      const current = snapshot.connections.find((binding) => binding.serverId === entry.id);
+      if (!current) expectedRevision = undefined;
+      else if (current.credentialRef !== prior.credentialRef)
+        throw new Error('mcp_credential_revision_conflict');
+    }
     const saved = McpCredentialBindingSchema.parse(
       await writer.saveMcp({
         serverId: entry.id,
         destination: target,
-        expectedRevision: prior?.revision,
+        expectedRevision,
         ...(Object.keys(values).length ? { values } : {}),
       })
     );

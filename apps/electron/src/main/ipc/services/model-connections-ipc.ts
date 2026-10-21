@@ -21,6 +21,7 @@ import {
   type DeleteImageConnection
 } from '@molly/shared/embedded-harness'
 import { shell } from 'electron'
+import { z } from 'zod'
 import { getModelConnectionStore } from '../../services/model-connections'
 import { checkImageConnection, checkModelConnection } from '../../services/connection-check'
 import { discoverModelConnection } from '../../services/model-discovery'
@@ -70,6 +71,21 @@ export class ModelConnectionsIpc extends IpcService {
   @IpcMethod()
   async getImageSnapshot() {
     return getModelConnectionStore().imageSnapshot()
+  }
+
+  @IpcMethod()
+  async prepareStorageRecovery() {
+    return getModelConnectionStore().prepareRecovery()
+  }
+
+  @IpcMethod()
+  async recoverUnreadableStorage(input: unknown) {
+    const parsed = z
+      .object({ digest: z.string().regex(/^[a-f0-9]{64}$/) })
+      .strict()
+      .safeParse(input)
+    if (!parsed.success) throw new Error('invalid_credential_storage_recovery')
+    return getModelConnectionStore().recoverUnreadableStorage(parsed.data)
   }
 
   @IpcMethod()

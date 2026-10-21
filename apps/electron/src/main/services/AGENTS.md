@@ -4,28 +4,30 @@
 
 ## Model credentials
 
-Capability IPC verifies adjacent CLI package/catalog digests and public fields without
-SDK/vault access; absent/incompatible resources are unavailable.
+Capability IPC verifies adjacent CLI package/catalog digests/public fields without
+SDK/vault access; missing/incompatible resources are unavailable.
 
-`model-connection-store`: main-only metadata IPC, never grants.
+`model-connection-store`: main-only metadata IPC; never grants.
 Encrypt; unavailable OS storage/Linux plaintext fail closed. Endpoint/provider edits
 require explicit credentials; empty keys are compatible-only, omission preserves.
 Grants bind run/epoch/revision; vault grants no authority. Declarations share row/revision;
 no keys, headers, scripts or model destinations.
-OAuth refresh/mutations queue per row; I/O outside vault lock, CAS the grant.
+OAuth refresh/mutations queue per row; unlocked I/O, grant CAS.
 Sign-in binds ID/revision, preserves IDs; provider collisions fail.
 OpenAI: reuse client/host/subject; validate JWT signature/issuer/audience/expiry/nonce.
-Auth URLs stay in main; encrypted hints survive refresh, not sign-out.
-Sign-out keeps disabled, token-free registration; Delete forgets it. Add cannot overwrite it.
+Auth URLs stay in main; encrypted hints survive refresh only.
+Sign-out keeps disabled token-free registration; Delete forgets; Add cannot overwrite.
 Cancel before revocation/commit; never restore revoked grants. Revoke unretained
 provider/client/refresh-token grants; report unconfirmed sign-out revocation.
-Image grants share the vault. Legacy removal needs durable encrypted backup/exact row;
-disclose history/backup residue. Grants need active runs except main-only saved checks.
-MCP binds workspace/server/destination/revision. URL/stdio command/args edits need new inputs.
-Settings derives local workspace; returns no values.
-Grants require selected Session/epoch, except explicit Settings tool listing of the
-exact catalog binding; values travel only to CLI helper stdin. Saving enables nothing.
+Image grants share vault; legacy removal needs durable encrypted backup/exact row.
+Disclose history/backup residue. Grants need active runs except main-only saved checks.
+MCP binds workspace/server/destination/revision; URL/command/args edits need new inputs.
+Settings: local workspace, no values.
+Grants require selected Session/epoch, except explicit Settings tool listing for the
+exact binding. Values travel only to CLI helper stdin; saving enables nothing.
 Header framing/isolated env fields cannot be credentials; enforce vault size limits.
+
+Unreadable recovery: confirmed, digest CAS, encrypted backup.
 
 ## Design canvas contracts
 

@@ -61,3 +61,5 @@ Supported non-interlaced 8-bit gray/RGB/RGBA/palette PNG is decoded via
 PNG. These are optional inspection aids, never gates.
 
 Batch independent measurements: compute several crops, bounds or color samples in one script and print a compact summary, instead of one command per measurement. Look at a detail with `molly_view_image` `region` rather than writing and reading a crop file.
+
+Do not brute-force a fit: never sweep fonts, sizes, tracking or positions in a search loop to match pixels. Measure once, place, render and compare; when the face is not available, use the closest available one and report it.

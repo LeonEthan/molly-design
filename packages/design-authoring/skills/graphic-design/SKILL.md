@@ -70,7 +70,7 @@ directory: in the session workspace or the shell's `$TMPDIR`. `$TMPDIR`
 `codemode`) is removed when the worker exits, so copy anything a later turn
 needs into the workspace. Prefer the shipped helpers and read a helper's
 `--help` before building its command. Fix argument errors before blaming the
-sandbox. Never install globally or with `pip install --user`.
+sandbox. Never install globally or with `pip install --user`. Never search the whole filesystem or home directory (`find /`, `find ~`, unscoped `mdfind`); look in the known directories instead (fonts: the `design-text` skill lists them).
 
 ## Recommended flow
 

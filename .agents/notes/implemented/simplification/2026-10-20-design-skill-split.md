@@ -106,3 +106,27 @@ enforces nothing.
   including repointed skill-script tests and live-fingerprint guards.
 - Link/anchor sweep across all skill markdown resolves; single-owner check for
   research rule/gate, asking, reporting, design defaults and rejection holds.
+
+## CLI follow-up (PR #219)
+
+The follow-up now materializes all four skills for every design session, with
+`imagegen` still capability-scoped. The prompt keeps the core as its entry and
+says to load siblings only when the task needs them; no creative enforcement is
+added. This completes the materialization follow-up described above.
+
+Reuse: the existing list-driven materializer and ownership manifests need only
+an expanded default list. The CLI already stages the whole tree and Electron's
+`resources/cli/design-skills/**` includes it, so no packaging mechanism or new
+storage is needed. Previously delivered files absent from the new bundle remain
+untouched; human-modified files retain the existing drift behavior. Tests cover
+that upgrade, the actual staged family and its links/helpers, and prompt delivery.
+Skill content is unchanged by this follow-up.
+
+Follow-up verification: all 28 focused staging/prompt/turn-input tests pass.
+`pnpm check` passes with local socket permissions, including 255 CLI test files
+(2,985 passed, three skipped), Electron tests and boundary checks. The initial
+sandboxed check hit existing IPC `listen EPERM` errors; the known unrelated DSH
+failure did not reproduce (11 tests passed). `pnpm format` passed; unrelated
+Electron formatting drift was reverted. `pnpm run docs check` reports no errors
+or protected topics, only existing size warnings on untouched instruction files.
+These checks do not establish agent skill-selection behavior or visual quality.

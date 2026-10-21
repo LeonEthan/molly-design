@@ -64,7 +64,7 @@ describe('materializeDesignSkills', () => {
   it('syncs every bundled file into both project-level skill dirs with a sha256 manifest', () => {
     const sourceDir = makeSource(SOURCE_FILES);
     const workdir = makeWorkdir();
-    const result = materializeDesignSkills({ workdir, sourceDir });
+    const result = materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
 
     expect(result.skills).toEqual(['graphic-design']);
     expect(result.targets).toHaveLength(2);
@@ -88,25 +88,25 @@ describe('materializeDesignSkills', () => {
   it('is idempotent: a second run writes nothing and reports all files unchanged', () => {
     const sourceDir = makeSource(SOURCE_FILES);
     const workdir = makeWorkdir();
-    materializeDesignSkills({ workdir, sourceDir });
-    const second = materializeDesignSkills({ workdir, sourceDir });
+    materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
+    const second = materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
     for (const target of second.targets) {
       expect(target.written).toEqual([]);
       expect(target.drifted).toEqual([]);
       expect(target.unchanged.sort()).toEqual(Object.keys(SOURCE_FILES).sort());
     }
     expect(second.sourceIdentity).toBe(
-      materializeDesignSkills({ workdir, sourceDir }).sourceIdentity
+      materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] }).sourceIdentity
     );
   });
 
   it('updates a managed-clean file when the bundle changes, and rewrites the manifest', () => {
     const sourceDir = makeSource(SOURCE_FILES);
     const workdir = makeWorkdir();
-    materializeDesignSkills({ workdir, sourceDir });
+    materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
 
     writeFileSync(path.join(sourceDir, 'graphic-design', 'references', 'guide.md'), 'guide v2\n');
-    const result = materializeDesignSkills({ workdir, sourceDir });
+    const result = materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
     for (const target of result.targets) {
       expect(target.written).toEqual(['references/guide.md']);
       expect(target.drifted).toEqual([]);
@@ -119,14 +119,14 @@ describe('materializeDesignSkills', () => {
   it('never overwrites a user-modified file and reports the drift', () => {
     const sourceDir = makeSource(SOURCE_FILES);
     const workdir = makeWorkdir();
-    materializeDesignSkills({ workdir, sourceDir });
+    materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
 
     const edited = path.join(workdir, '.claude', 'skills', 'graphic-design', 'SKILL.md');
     writeFileSync(edited, '# user edits\n');
     // The bundle moved on too, so the file differs from both old and new.
     writeFileSync(path.join(sourceDir, 'graphic-design', 'SKILL.md'), '# test skill v2\n');
 
-    const result = materializeDesignSkills({ workdir, sourceDir });
+    const result = materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
     const claude = result.targets.find((t) => t.dir.includes('.claude'))!;
     const agents = result.targets.find((t) => t.dir.includes('.agents'))!;
     expect(claude.drifted).toEqual(['SKILL.md']);
@@ -135,7 +135,7 @@ describe('materializeDesignSkills', () => {
     expect(agents.drifted).toEqual([]);
     expect(readFileSync(path.join(agents.dir, 'SKILL.md'), 'utf8')).toBe('# test skill v2\n');
     // Drift is sticky: still reported, still not clobbered on the next run.
-    const third = materializeDesignSkills({ workdir, sourceDir });
+    const third = materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
     expect(third.targets.find((t) => t.dir.includes('.claude'))!.drifted).toEqual(['SKILL.md']);
     expect(readFileSync(edited, 'utf8')).toBe('# user edits\n');
   });
@@ -147,10 +147,63 @@ describe('materializeDesignSkills', () => {
     mkdirSync(path.dirname(preExisting), { recursive: true });
     writeFileSync(preExisting, '# my own skill\n');
 
-    const result = materializeDesignSkills({ workdir, sourceDir });
+    const result = materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
     const claude = result.targets.find((t) => t.dir.includes('.claude'))!;
     expect(claude.drifted).toEqual(['SKILL.md']);
     expect(readFileSync(preExisting, 'utf8')).toBe('# my own skill\n');
+  });
+
+  it('expands an existing session to the family without deleting old files or overwriting human edits', () => {
+    const sourceDir = makeSource(SOURCE_FILES);
+    const workdir = makeWorkdir();
+    const before = materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
+    for (const base of DESIGN_SKILL_TARGET_BASES) {
+      writeFileSync(
+        path.join(workdir, base, 'graphic-design/references/guide.md'),
+        'human guide\n'
+      );
+    }
+    rmSync(path.join(sourceDir, 'graphic-design/scripts/finalize.mjs'));
+    writeFileSync(path.join(sourceDir, 'graphic-design/SKILL.md'), '# core v2\n');
+    for (const skill of ['design-research', 'design-replication', 'design-text']) {
+      mkdirSync(path.join(sourceDir, skill));
+      writeFileSync(path.join(sourceDir, skill, 'SKILL.md'), `# ${skill}\n`);
+    }
+
+    const after = materializeDesignSkills({ workdir, sourceDir });
+    expect(after.skills).toEqual([
+      'graphic-design',
+      'design-research',
+      'design-replication',
+      'design-text',
+    ]);
+    expect(after.sourceIdentity).not.toBe(before.sourceIdentity);
+    for (const base of DESIGN_SKILL_TARGET_BASES) {
+      const core = path.join(workdir, base, 'graphic-design');
+      expect(readFileSync(path.join(core, 'SKILL.md'), 'utf8')).toBe('# core v2\n');
+      expect(readFileSync(path.join(core, 'references/guide.md'), 'utf8')).toBe('human guide\n');
+      expect(readFileSync(path.join(core, 'scripts/finalize.mjs'), 'utf8')).toBe(
+        SOURCE_FILES['scripts/finalize.mjs']
+      );
+      const manifest = JSON.parse(readFileSync(path.join(core, SKILL_MANIFEST_FILENAME), 'utf8'));
+      expect(Object.keys(manifest)).toEqual(['SKILL.md']);
+      for (const skill of ['design-research', 'design-replication', 'design-text']) {
+        const dir = path.join(workdir, base, skill);
+        expect(readFileSync(path.join(dir, 'SKILL.md'), 'utf8')).toBe(`# ${skill}\n`);
+        expect(JSON.parse(readFileSync(path.join(dir, SKILL_MANIFEST_FILENAME), 'utf8'))).toEqual({
+          'SKILL.md': sha256Hex(Buffer.from(`# ${skill}\n`)),
+        });
+      }
+      expect(existsSync(path.join(workdir, base, 'imagegen'))).toBe(false);
+    }
+    const again = materializeDesignSkills({ workdir, sourceDir });
+    expect(again.sourceIdentity).toBe(after.sourceIdentity);
+    expect(again.targets.every((target) => target.written.length === 0)).toBe(true);
+    for (const target of again.targets.filter(
+      (candidate) => path.basename(candidate.dir) === 'graphic-design'
+    )) {
+      expect(target.drifted).toEqual(['references/guide.md']);
+    }
   });
 
   it('refuses skill names that escape the target layout', () => {
@@ -169,18 +222,18 @@ describe('materializeDesignSkills', () => {
     const link = path.join(workdir, '.claude', 'skills', 'graphic-design');
     mkdirSync(path.dirname(link), { recursive: true });
     symlinkSync(elsewhere, link);
-    expect(() => materializeDesignSkills({ workdir, sourceDir })).toThrow(
-      SkillMaterializationError
-    );
+    expect(() =>
+      materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] })
+    ).toThrow(SkillMaterializationError);
     expect(existsSync(path.join(elsewhere, 'SKILL.md'))).toBe(false);
   });
 
   it('fails honestly when the bundled source is missing', () => {
     const workdir = makeWorkdir();
     const missing = path.join(makeWorkdir(), 'no-such-dir');
-    expect(() => materializeDesignSkills({ workdir, sourceDir: missing })).toThrow(
-      SkillMaterializationError
-    );
+    expect(() =>
+      materializeDesignSkills({ workdir, sourceDir: missing, skills: ['graphic-design'] })
+    ).toThrow(SkillMaterializationError);
   });
 });
 
@@ -189,6 +242,9 @@ describe('designSkillPointerLine', () => {
     expect(designSkillPointerLine('/tmp/wd')).toContain(
       '/tmp/wd/.claude/skills/graphic-design/SKILL.md'
     );
+    expect(designSkillPointerLine('/tmp/wd')).toContain(
+      'load sibling skills only when the task needs them'
+    );
   });
 });
 
@@ -196,15 +252,28 @@ describe('designSkillsForImageCapability', () => {
   /* The imagegen skill instructs the agent to call the `molly_image` tools, so it
      is delivered exactly when that tool will be registered — never on its own. */
   it('adds the imagegen skill only when the machine has image capability', () => {
-    expect(designSkillsForImageCapability(false)).toEqual(['graphic-design']);
-    expect(designSkillsForImageCapability(true)).toEqual(['graphic-design', 'imagegen']);
+    expect(designSkillsForImageCapability(false)).toEqual([
+      'graphic-design',
+      'design-research',
+      'design-replication',
+      'design-text',
+    ]);
+    expect(designSkillsForImageCapability(true)).toEqual([
+      'graphic-design',
+      'design-research',
+      'design-replication',
+      'design-text',
+      'imagegen',
+    ]);
   });
 
-  it('materializes both skills from the bundle when capability is present', () => {
+  it('materializes the skill family and imagegen from the bundle when capability is present', () => {
     const root = makeSource(SOURCE_FILES);
-    const imagegenDir = path.join(root, 'imagegen');
-    mkdirSync(imagegenDir, { recursive: true });
-    writeFileSync(path.join(imagegenDir, 'SKILL.md'), '# imagegen\n');
+    for (const skill of ['design-research', 'design-replication', 'design-text', 'imagegen']) {
+      const dir = path.join(root, skill);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, 'SKILL.md'), `# ${skill}\n`);
+    }
     const workdir = makeWorkdir();
     const result = materializeDesignSkills({
       workdir,
@@ -212,7 +281,13 @@ describe('designSkillsForImageCapability', () => {
       skills: designSkillsForImageCapability(true),
     });
 
-    expect(result.skills).toEqual(['graphic-design', 'imagegen']);
+    expect(result.skills).toEqual([
+      'graphic-design',
+      'design-research',
+      'design-replication',
+      'design-text',
+      'imagegen',
+    ]);
     for (const base of DESIGN_SKILL_TARGET_BASES) {
       expect(existsSync(path.join(workdir, base, 'imagegen', 'SKILL.md'))).toBe(true);
     }
@@ -243,7 +318,7 @@ function headingSlugs(markdown: string): string[] {
 }
 
 describe('packaged design materials', () => {
-  it('stages the real bundle, materializes both skills, and keeps human edits', () => {
+  it('stages the real skill family, resolves its links and helpers, and keeps human edits', () => {
     const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
     const staged = makeWorkdir();
     for (const [script, args] of [
@@ -260,8 +335,16 @@ describe('packaged design materials', () => {
     const workdir = makeWorkdir();
     const skills = designSkillsForImageCapability(true);
     const first = materializeDesignSkills({ workdir, sourceDir, skills });
-    const materials: string[] = [];
-    const graphicMaterials: string[] = [];
+    expect(first.skills).toEqual([
+      'graphic-design',
+      'design-research',
+      'design-replication',
+      'design-text',
+      'imagegen',
+    ]);
+    expect(first.targets.map((target) => path.relative(workdir, target.dir))).toEqual(
+      skills.flatMap((skill) => DESIGN_SKILL_TARGET_BASES.map((base) => path.join(base, skill)))
+    );
     for (const target of first.targets) {
       const manifest = JSON.parse(
         readFileSync(path.join(target.dir, SKILL_MANIFEST_FILENAME), 'utf8')
@@ -272,33 +355,21 @@ describe('packaged design materials', () => {
         expect(
           bytes.equals(readFileSync(path.join(sourceDir, path.basename(target.dir), rel)))
         ).toBe(true);
-        if (rel.endsWith('.md')) {
-          const text = bytes.toString('utf8');
-          materials.push(text);
-          if (path.basename(target.dir) === 'graphic-design') graphicMaterials.push(text);
-        }
       }
     }
-    const text = materials.join('\n');
-    const graphicText = graphicMaterials.join('\n');
     const graphic = path.join(workdir, '.agents/skills/graphic-design');
     const entry = readFileSync(path.join(graphic, 'SKILL.md'), 'utf8');
-    expect(text).not.toMatch(
-      /inspect → draft|inspect once|inspect in one pass|verify in two loops|never script pixel|do not write pixel-probing|rerun until|done check is executable|review is incomplete|never substitute another renderer/i
+    expect(entry).toMatch(/^## Recommended flow$/m);
+    expect(entry).not.toMatch(/^## Required workflow$/m);
+    const skillRoot = path.dirname(graphic);
+    const replication = path.join(skillRoot, 'design-replication');
+    const familyFiles = new Map(
+      designSkillsForImageCapability(false).flatMap((skill) => [
+        ...materializedMarkdown(path.join(skillRoot, skill)),
+      ])
     );
-    expect(graphicText).not.toMatch(
-      /choose your own analysis|methods, order|order and iteration count|no fixed limit|sufficient supplied material supports proceeding directly/i
-    );
-    expect(Array.from(entry.matchAll(/^### (\d+)\./gm), (match) => Number(match[1]))).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9,
-    ]);
-    for (const heading of ['Required workflow', 'Design defaults', 'Reporting']) {
-      expect(entry).toMatch(new RegExp(`^## ${heading}$`, 'm'));
-    }
-
-    const graphicFiles = materializedMarkdown(graphic);
     const linked = new Set<string>();
-    for (const [file, body] of graphicFiles) {
+    for (const [file, body] of familyFiles) {
       for (const [, target] of body.matchAll(/\]\(([^)\s]+)\)/g)) {
         if (/^([a-z]+:|\/)/.test(target)) continue;
         const [relative, anchor] = target.split('#');
@@ -312,102 +383,16 @@ describe('packaged design materials', () => {
         }
       }
     }
-    for (const file of graphicFiles.keys()) {
-      if (file !== path.join(graphic, 'SKILL.md')) expect(linked, file).toContain(file);
+    for (const file of familyFiles.keys()) {
+      if (path.basename(file) !== 'SKILL.md') expect(linked, file).toContain(file);
     }
     for (const example of ['minimal', 'layered']) {
-      expect(linked).toContain(path.join(graphic, 'examples', example, 'design.yaml'));
+      expect(linked).toContain(path.join(replication, 'examples', example, 'design.yaml'));
     }
 
-    const singleOwner = [
-      /\*\*Research rule\.\*\*/g,
-      /\*\*Research gate\.\*\*/g,
-      /\*\*Asking\.\*\*/g,
-      /^## When the user rejects a direction$/gm,
-      /^## Reporting$/gm,
-      /^## Design defaults$/gm,
-      /If `molly_render_preview` is absent/g,
-      /Markdown image syntax/g,
-      /^## What is editable today$/gm,
-    ];
-    const oneCopy = [...graphicFiles.values()].join('\n');
-    for (const pattern of singleOwner) {
-      expect(oneCopy.match(pattern)?.length ?? 0, String(pattern)).toBe(1);
-    }
-
-    const researchGate = entry.match(/\*\*Research gate\.\*\*[\s\S]*?(?=\n### )/)?.[0] ?? '';
-    for (const rule of [
-      /read \[references\/browser-research\.md\]\([^)]*\) in\s+full/,
-      /one focused browser pass on a design site that meets the user's\s+source constraints\. Use their requested site; otherwise prefer Pinterest\s+when it is allowed and you observe it signed in[\s\S]*Imported\s+cookies alone are not access/,
-      /fewer than three relevant ones, keep\s+the ones you inspected \(at least one\) and name the shortfall in the options\s+report; never pad with uninspected results/,
-      /individual images; result grids, search snippets and\s+page titles do not count/,
-      /persisted one to three inspected inspiration images for stage 3/,
-      /Prefer\s+`save_image` when it can save the inspected asset\. If it is absent or cannot\s+save that asset \(including a rejected format\), use an equivalent available\s+visual tool to inspect and persist the same image to a local path stage 3\s+can use/,
-      /kept three to six references, each with one named quality/,
-      /user forbids networking, keep prompts and assets local: report the gap\s+and stop before any network call, including `molly_image` generation or editing/,
-      /When research applies and either the user forbids web research or the browser\s+or network is unavailable, report the gap and stop/,
-      /report the gap and stop:\s+offer no design options and invent no research/,
-    ]) {
-      expect(researchGate, String(rule)).toMatch(rule);
-    }
-    expect(entry).toMatch(
-      /Create the options from images and text, not text alone, with `molly_image`\s+`edit`/
-    );
-    expect(entry).toMatch(
-      /For a template, reconstruction or bounded edit, the prescribed artwork is the\s+chosen design; do not offer options/
-    );
-    expect(entry).toMatch(
-      /inspected source-page URLs[\s\S]*a search-results URL alone does not\s+count/
-    );
-    expect(entry).toMatch(
-      /those saved in stage 2 and style references the user supplied and you\s+inspected/
-    );
-    expect(entry).not.toMatch(/there are no\s+inspiration images/);
-    expect(graphicText).not.toMatch(
-      /continue only\s+if the user then tells you to proceed without research/
-    );
-    expect(graphicText).not.toMatch(/waived\s+research/);
-    expect(graphicText).not.toMatch(/user forbade networking/);
-    expect(graphicText).not.toMatch(
-      /proceed without\s+research|no-research stage 2|stage 2 ran without\s+research/
-    );
-    const browserResearch = readFileSync(
-      path.join(graphic, 'references/browser-research.md'),
-      'utf8'
-    );
-    expect(browserResearch).not.toMatch(/signed in or imported/i);
-    expect(browserResearch).not.toMatch(/three to six|one to three|usually one/i);
-    expect(browserResearch).toMatch(/using the gate's persistence rule/);
-    expect(browserResearch).toMatch(
-      /A directly opened\s+and inspected image can provide evidence even when its source page is\s+unavailable\. Report that provenance gap/
-    );
-    expect(browserResearch).toContain('[Reporting](../SKILL.md#reporting)');
-    expect(browserResearch).not.toMatch(
-      /individual pages could not be opened, the gate is not met/
-    );
-    expect(browserResearch).not.toMatch(/report exactly which visible results/i);
-
-    expect(text).toContain('mcp__molly_image__generate');
-    expect(text).toContain('Molly has no default model');
-    expect(text).toContain('sent as data URLs in a JSON request');
-    expect(text).toContain('`background: "transparent"`');
-    expect(graphicText).not.toMatch(/You may write `design\.pptd` directly/);
-    expect(graphicText).not.toMatch(/version:\s*v[23]/);
-    expect(graphicText).not.toMatch(/\belementId\b|\belementType\b/);
-    expect(graphicText).not.toMatch(/few-shot/i);
-    expect(graphicText).not.toMatch(/step0|Step 0|five-step/i);
-    expect(graphicText).not.toMatch(/do not claim native icons, tables, charts/i);
-    expect(text).not.toMatch(/design\.pptd/);
-    expect(text).not.toMatch(/use the result in PPTD/);
-
-    // Directly authored final files are valid without running finalize, and the
-    // shipped helper executes from the materialized tree with its bundled library.
-    expect(existsSync(path.join(graphic, 'examples/minimal/pages/canvas.yaml'))).toBe(false);
-    expect(existsSync(path.join(graphic, 'examples/minimal/poster.pptd'))).toBe(false);
-    expect(existsSync(path.join(graphic, 'examples/minimal/pages/poster.page'))).toBe(false);
     for (const example of ['minimal', 'layered']) {
       const project = makeWorkdir();
-      cpSync(path.join(graphic, 'examples', example), project, { recursive: true });
+      cpSync(path.join(replication, 'examples', example), project, { recursive: true });
       const intake = spawnSync(
         process.execPath,
         [path.join(graphic, 'scripts/render-preview.mjs'), path.join(project, 'design.yaml')],
@@ -427,14 +412,14 @@ describe('packaged design materials', () => {
       'SKILL.md',
     ]);
     expect(readFileSync(edited, 'utf8')).toBe('# Human-owned design instructions\n');
-    expect(readFileSync(path.join(graphic, 'SKILL.md'), 'utf8')).toMatch(/^## Required workflow$/m);
+    expect(readFileSync(path.join(graphic, 'SKILL.md'), 'utf8')).toMatch(/^## Recommended flow$/m);
   });
 });
 
 it('upgrades Folio-managed skills while retaining user edits and old ownership evidence', () => {
   const sourceDir = makeSource(SOURCE_FILES);
   const workdir = makeWorkdir();
-  materializeDesignSkills({ workdir, sourceDir });
+  materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
   for (const base of DESIGN_SKILL_TARGET_BASES) {
     const dir = path.join(workdir, base, 'graphic-design');
     writeFileSync(
@@ -445,7 +430,7 @@ it('upgrades Folio-managed skills while retaining user edits and old ownership e
     writeFileSync(path.join(dir, 'references/guide.md'), 'user revision');
   }
   writeFileSync(path.join(sourceDir, 'graphic-design/SKILL.md'), '# upgraded skill');
-  const result = materializeDesignSkills({ workdir, sourceDir });
+  const result = materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
   for (const target of result.targets) {
     expect(readFileSync(path.join(target.dir, 'SKILL.md'), 'utf8')).toBe('# upgraded skill');
     expect(readFileSync(path.join(target.dir, 'references/guide.md'), 'utf8')).toBe(
@@ -461,6 +446,6 @@ it('upgrades Folio-managed skills while retaining user edits and old ownership e
       SOURCE_FILES['references/guide.md']
     );
   writeFileSync(path.join(sourceDir, 'graphic-design/references/guide.md'), 'new bundled guide');
-  const again = materializeDesignSkills({ workdir, sourceDir });
+  const again = materializeDesignSkills({ workdir, sourceDir, skills: ['graphic-design'] });
   for (const target of again.targets) expect(target.drifted).toContain('references/guide.md');
 });

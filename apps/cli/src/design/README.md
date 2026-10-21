@@ -232,3 +232,18 @@ cannot replace the current artwork; a canonical save followed by projection or
 canvas-reload failure remains a saved state with a recovery error. User repositories,
 branches, index, global configuration and remote operations are not involved.
 See the decision and acceptance limits.
+
+## Design skills
+
+`skills.ts` materializes `graphic-design`, `design-research`, `design-replication`
+and `design-text` into both `.claude/skills/` and `.agents/skills/` in every design
+session workdir. `imagegen` is added only when image capability is available.
+The prompt still points to the core `graphic-design/SKILL.md`; sibling skills
+are loaded only when the task needs them. This is guidance, without new runtime
+enforcement.
+
+The existing per-directory ownership manifests preserve human edits and report
+drift. Files removed from a later bundle remain in the workdir; the new manifest
+only tracks the delivered files that remain managed. Adding siblings does not
+move or delete the old core's references or examples. The CLI staging script
+copies the whole skill tree, and Electron packages `resources/cli/design-skills/**`.

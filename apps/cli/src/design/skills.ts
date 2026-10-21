@@ -30,7 +30,12 @@ export const DESIGN_SKILL_TARGET_BASES = ['.claude/skills', '.agents/skills'] as
 export const SKILL_MANIFEST_FILENAME = '.molly-managed-files.json';
 
 /** Skills every design session gets, capability or not. */
-export const DEFAULT_DESIGN_SKILLS = ['graphic-design'] as const;
+export const DEFAULT_DESIGN_SKILLS = [
+  'graphic-design',
+  'design-research',
+  'design-replication',
+  'design-text',
+] as const;
 
 /**
  * The skill that only makes sense next to the `molly_image` `generate` and `edit` tools.
@@ -219,7 +224,7 @@ function existsSyncSymlink(p: string): boolean {
 export interface MaterializeDesignSkillsOptions {
   /** Absolute session workdir (e.g. getDefaultSessionWorkdir(sessionId)). */
   workdir: string;
-  /** Skills to materialize; defaults to graphic-design only. */
+  /** Skills to materialize; defaults to the core and its three sibling skills. */
   skills?: readonly string[];
   /** Test seam: explicit bundled skill source dir. */
   sourceDir?: string;
@@ -274,5 +279,5 @@ function isWithin(root: string, candidate: string): boolean {
 /** Prompt pointer line for design turns (see message-handler wiring). */
 export function designSkillPointerLine(workdir: string, skill = 'graphic-design'): string {
   const skillDir = path.join(path.resolve(workdir), '.claude', 'skills', skill);
-  return `Before design work, read the design skill: ${skillDir}/SKILL.md. It covers the artwork format and design workflow; choose methods suited to the task.`;
+  return `Before design work, read the design skill: ${skillDir}/SKILL.md. It covers the artwork format and design workflow; load sibling skills only when the task needs them.`;
 }

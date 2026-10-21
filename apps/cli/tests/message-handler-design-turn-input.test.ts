@@ -131,10 +131,17 @@ describe('MessageHandler design turn-input wiring', () => {
     mocks.imageMimeType = 'image/png';
 
     mocks.sourceDir = path.join(tmpDir, 'bundle');
-    const skillSrc = path.join(mocks.sourceDir, 'graphic-design');
-    fs.mkdirSync(path.join(skillSrc, 'references'), { recursive: true });
-    fs.writeFileSync(path.join(skillSrc, 'SKILL.md'), '# synthetic skill\n');
-    fs.writeFileSync(path.join(skillSrc, 'references', 'guide.md'), 'guide\n');
+    for (const skill of [
+      'graphic-design',
+      'design-research',
+      'design-replication',
+      'design-text',
+    ]) {
+      const skillSrc = path.join(mocks.sourceDir, skill);
+      fs.mkdirSync(path.join(skillSrc, 'references'), { recursive: true });
+      fs.writeFileSync(path.join(skillSrc, 'SKILL.md'), `# synthetic ${skill} skill\n`);
+      fs.writeFileSync(path.join(skillSrc, 'references', 'guide.md'), 'guide\n');
+    }
 
     // The design store owns chats/<id>/design.json; create the baseline through
     // it so the manifest pins a real revisionId.

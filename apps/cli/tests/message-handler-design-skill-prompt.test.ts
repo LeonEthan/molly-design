@@ -158,10 +158,17 @@ describe('MessageHandler design skill prompt wiring', () => {
     process.env.MOLLY_DATA_DIR = dataDir;
 
     mocks.sourceDir = path.join(tmpDir, 'bundle');
-    const skillSrc = path.join(mocks.sourceDir, 'graphic-design');
-    fs.mkdirSync(path.join(skillSrc, 'references'), { recursive: true });
-    fs.writeFileSync(path.join(skillSrc, 'SKILL.md'), '# synthetic skill\n');
-    fs.writeFileSync(path.join(skillSrc, 'references', 'guide.md'), 'guide\n');
+    for (const skill of [
+      'graphic-design',
+      'design-research',
+      'design-replication',
+      'design-text',
+    ]) {
+      const skillSrc = path.join(mocks.sourceDir, skill);
+      fs.mkdirSync(path.join(skillSrc, 'references'), { recursive: true });
+      fs.writeFileSync(path.join(skillSrc, 'SKILL.md'), `# synthetic ${skill} skill\n`);
+      fs.writeFileSync(path.join(skillSrc, 'references', 'guide.md'), 'guide\n');
+    }
     const imageSrc = path.join(mocks.sourceDir, 'imagegen');
     fs.mkdirSync(imageSrc, { recursive: true });
     fs.writeFileSync(path.join(imageSrc, 'SKILL.md'), '# synthetic imagegen skill\n');
@@ -197,10 +204,20 @@ describe('MessageHandler design skill prompt wiring', () => {
       expect(text).toContain(
         `make a poster\n\nBefore design work, read the design skill: ${workdir}/.claude/skills/graphic-design/SKILL.md`
       );
+      expect(text).toContain('load sibling skills only when the task needs them');
       for (const base of ['.claude/skills', '.agents/skills']) {
-        const dir = path.join(workdir, base, 'graphic-design');
-        expect(fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8')).toBe('# synthetic skill\n');
-        expect(fs.existsSync(path.join(dir, '.molly-managed-files.json'))).toBe(true);
+        for (const skill of [
+          'graphic-design',
+          'design-research',
+          'design-replication',
+          'design-text',
+        ]) {
+          const dir = path.join(workdir, base, skill);
+          expect(fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8')).toBe(
+            `# synthetic ${skill} skill\n`
+          );
+          expect(fs.existsSync(path.join(dir, '.molly-managed-files.json'))).toBe(true);
+        }
       }
     } finally {
       await handler.cleanup();

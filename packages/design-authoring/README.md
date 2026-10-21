@@ -61,7 +61,7 @@ Python CLI and its deployment-specific references, and `skills/amazon-aplus`.
 
 The skill set is decentralized: a slim core skill plus small siblings an agent
 reads only when the task reaches their ground. `skills/graphic-design/` is the
-core entry — definition, task branches, recommended flow, reporting and
+core entry — definition, task branches, required workflow, reporting and
 boundaries — with the format reference (`references/artwork-format.md`) and the
 artwork-level helpers. `skills/design-research/` owns new-direction work
 (intent, bounded website research, image-model design options with the recipe

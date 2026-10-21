@@ -72,12 +72,14 @@ needs into the workspace. Prefer the shipped helpers and read a helper's
 `--help` before building its command. Fix argument errors before blaming the
 sandbox. Never install globally or with `pip install --user`. Never search the whole filesystem or home directory (`find /`, `find ~`, unscoped `mdfind`); look in the known directories instead (fonts: the `design-text` skill lists them).
 
-## Recommended flow
+## Required workflow
 
-Recommended, not enforced: the application checks structure, assets and
-versions at intake, never creative stages. Choose techniques and iteration
-counts within the user's constraints. A repair returns to the step it affects;
-helper scripts are optional methods, never gates.
+Follow these steps and their dependencies on every branch; the branch decides
+how deep each step goes, and the `design-research` stages apply only when it
+sets a new direction. The application checks structure, assets and versions at
+intake, never creative stages. Choose techniques and iteration counts within
+the user's constraints. A repair returns to the step it affects; helper scripts
+are optional methods, never gates.
 
 1. **Baseline.** Read the brief and the branch's baseline artwork: the current
    `design.yaml` for an edit, the prescribed reference for a reconstruction.

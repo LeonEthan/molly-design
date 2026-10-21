@@ -359,8 +359,8 @@ describe('packaged design materials', () => {
     }
     const graphic = path.join(workdir, '.agents/skills/graphic-design');
     const entry = readFileSync(path.join(graphic, 'SKILL.md'), 'utf8');
-    expect(entry).toMatch(/^## Recommended flow$/m);
-    expect(entry).not.toMatch(/^## Required workflow$/m);
+    expect(entry).toMatch(/^## Required workflow$/m);
+    expect(entry).not.toMatch(/^## Recommended flow$/m);
     const skillRoot = path.dirname(graphic);
     const replication = path.join(skillRoot, 'design-replication');
     const familyFiles = new Map(
@@ -412,7 +412,7 @@ describe('packaged design materials', () => {
       'SKILL.md',
     ]);
     expect(readFileSync(edited, 'utf8')).toBe('# Human-owned design instructions\n');
-    expect(readFileSync(path.join(graphic, 'SKILL.md'), 'utf8')).toMatch(/^## Recommended flow$/m);
+    expect(readFileSync(path.join(graphic, 'SKILL.md'), 'utf8')).toMatch(/^## Required workflow$/m);
   });
 });
 

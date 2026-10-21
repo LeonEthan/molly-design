@@ -14,7 +14,7 @@
   upstream for reviewable diffs; `source-manifest.json` records every migration
   and is enforced by the build.
 - The graphic-design Skill family is decentralized: the core `graphic-design`
-  Skill owns the definition, task branches, recommended flow, format pointer
+  Skill owns the definition, task branches, required workflow, format pointer
   and reporting; sibling skills (`design-research`, `design-replication`,
   `design-text`) own situational guidance and are read only when the task
   reaches their ground. References supply techniques, not competing workflows.

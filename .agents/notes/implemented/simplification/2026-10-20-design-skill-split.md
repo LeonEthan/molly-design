@@ -6,7 +6,7 @@ Translation: pending
 ## Abstract
 
 The single ~24 KB `graphic-design` skill became a family of four: a slim core
-(branches, recommended flow, reporting, boundaries) plus `design-research`,
+(branches, required workflow, reporting, boundaries) plus `design-research`,
 `design-replication` and `design-text` siblings that an agent loads only when
 the task reaches their ground, so a bounded edit reads ~10 KB instead of ~63 KB
 of prose. The nine-stage "Required workflow" became a four-step recommended
@@ -24,7 +24,7 @@ The single ~24 KB `graphic-design` skill becomes a family of four skills under
 `packages/design-authoring/skills/`:
 
 - `graphic-design` (core, ~9.7 KB) — definition, task branches with per-branch
-  depth, a four-step recommended flow, the artwork-format pointer, reporting
+  depth, a four-step required workflow, the artwork-format pointer, reporting
   and boundaries. Keeps the format reference, examples pointer, and the
   artwork-level scripts (`finalize`, `render-preview`, `format`,
   `migrate-two-file` + `scripts/lib/molly-authoring.mjs`).
@@ -63,9 +63,12 @@ would force agents to load two skills for one step.
 
 ## Speed-up measures (issue goal 2)
 
-- "Required workflow" → "Recommended flow" of four steps (baseline, layers,
-  compose, render-and-read). Per the Spec, skills recommend and the app
-  enforces structure/assets/versions only, so no app change is needed.
+- "Required workflow" keeps its name and Agent obligation but shrinks to four
+  steps (baseline, layers, compose, render-and-read). The Spec makes the Skill
+  workflow binding on the Agent while the application enforces only
+  structure/assets/versions, so no app change is needed. (Corrected after
+  review: an earlier draft renamed it "Recommended flow", which contradicted
+  the Spec.)
 - Research and offered options are explicitly conditional on the branch;
   bounded edits and clear briefs skip direction words, `ask_user_question`,
   research and options. The #139 research gate's intent is preserved verbatim

@@ -33,7 +33,7 @@ Never ask the user to paste an API key in chat; keys live in the app's settings 
 ## Using generated assets
 
 For editable artwork, follow the `graphic-design` Skill's task branches and
-recommended flow. Choose image prompting and inspection techniques within that
+required workflow. Choose image prompting and inspection techniques within that
 flow. Each call may be billed; an unknown result may
 already have consumed budget. Useful inputs include exact text, subject,
 composition, intended use, and constraints.

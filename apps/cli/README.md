@@ -68,3 +68,12 @@ alongside `molly_render_preview` through the existing per-tool MCP exposure rule
 it does not require discovering the general Molly codemode namespace first.
 See the [discovery regression record](../../.agents/notes/implemented/bug-fix/2026-10-21-design-viewer-exposure.md)
 for evidence and verification limits.
+
+## Browser reference images
+
+`molly_browser` `save_image` converts downloads identified by WebP/AVIF magic bytes
+to PNG before the existing design media publication. PNG/JPEG/GIF bytes remain
+unchanged. Conversion retains the image byte, edge, total-frame pixel and decode
+time limits; invalid images fail explicitly without fallback or retry. The active
+browser run is checked again after conversion, before publication. Generated-image
+intake elsewhere still accepts only PNG/JPEG/GIF.

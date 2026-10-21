@@ -46,7 +46,7 @@ needs no adaptation. Native `read` remains useful but does not bound these PNGs;
 the existing viewer already provides that behavior. No new protocol, cache,
 retry, storage or runtime patch is needed. The design Spec's intent is unchanged.
 
-## Browser save investigation (read-only)
+## Browser save investigation (initially read-only)
 
 JSONL entries 57 and 59 select the archive image “Bewegte Schrift” by Philippe
 Apeloig; entry 60 records the PNG/JPEG/GIF byte-admission refusal. The failed
@@ -66,7 +66,8 @@ changing Accept cannot override an already selected AVIF URL. That would change
 the current explicit-refusal behavior and needs separate implementation scope.
 The owning publication seam is `message-handler.ts:5957`, before calling
 `writeGeneratedImageAsset`; keep generated-image intake strict. No browser code
-is changed here.
+was changed in the initial exposure commit `956f72bd`; the owner-approved
+follow-up below implements this separate scope.
 
 ## Validation
 
@@ -84,3 +85,36 @@ network provider or Electron launch. They do not establish live model tool
 choice or visual acceptance. The concurrent desktop test build is deliberately
 left untouched; a later rebuild/new run is needed to verify the changed exposure
 in the real desktop. No captured transcripts are added to Git.
+
+## Owner-approved browser save follow-up (#199)
+
+The browser-only save path now recognizes WebP RIFF/WEBP signatures and AVIF
+`ftyp` brands (including compatible brands), then converts those downloads to PNG
+before `writeGeneratedImageAsset`. It ignores declared Content-Type for conversion.
+PNG/JPEG/GIF stay byte-identical, and all other formats retain the intake refusal.
+Reuse the existing sharp dependency and publication function; the screenshot
+encoder resizes to JPEG for model inspection and is unsuitable for lossless PNG
+publication. Generic generated-image intake remains strict, so no new admission
+protocol or storage is needed.
+
+Conversion uses the existing 16 MiB input/output admission cap, 16,384-pixel edge
+cap, 64 million pixels across frames, four-channel bound, strict decoding and
+15-second decoder timeout. Publication rechecks the active browser run after
+conversion. Corruption uses the existing fixed decode error, without fallback,
+repair, resize or retry. Human visual acceptance remains separate.
+
+Synthetic sharp-generated WebP and AVIF fixtures exercise the real browser RPC
+save handler and disk publication with the wrong declared MIME type. Tests check
+PNG encoding and dimensions, unchanged PNG/JPEG/GIF bytes, corrupt AVIF refusal,
+byte-limit refusal, cancellation before and after conversion, and continued
+rejection by generic intake. This sharp build supports AVIF encoding; no network
+or captured site bytes are used. Desktop output/resources and the concurrent
+Electron test run are left untouched.
+
+Follow-up validation: the regression first failed on valid WebP/AVIF browser saves;
+the focused suite now passes all 86 tests. Full `pnpm check` passes (CLI: 3,007
+passed, three existing skips). Its first sandboxed run failed on denied local
+socket listeners and related timeouts; rerunning outside the sandbox passed.
+`pnpm format` passes, with unrelated Electron source formatting reverted and the
+new test formatted explicitly. `pnpm run docs check` passes with existing warnings.
+No Electron build, launch, process termination, branch switch, push or PR is used.

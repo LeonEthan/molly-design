@@ -909,6 +909,99 @@ describe('free key check and model choice', () => {
 });
 
 describe('connection management', () => {
+  it.each([
+    ['en', 'panel', 'Could not read saved language model connections. Please retry.'],
+    ['zh_CN', 'panel', '无法读取已保存的语言模型连接，请重试。'],
+    ['en', 'section', 'Could not read saved language model connections. Please retry.'],
+  ] as const)(
+    'recovers a failed snapshot in %s %s without remount',
+    async (locale, variant, copy) => {
+      await initI18n(locale);
+      const translations = locale === 'en' ? en : zh;
+      const firstError = new Error('Synthetic credential storage failure');
+      const retryError = new Error('Synthetic IPC read failure');
+      const logged: unknown[] = [];
+      const logger = vi.spyOn(console, 'error').mockImplementation((...args) => logged.push(args));
+      const reports: (readonly ModelConnection[])[] = [];
+      const retry = Promise.withResolvers<{ connections: ModelConnection[] }>();
+      connectionIpc.getSnapshot.mockRejectedValueOnce(firstError).mockReturnValue(retry.promise);
+      try {
+        await act(async () =>
+          root.render(
+            createElement(ModelConnectionSetting, {
+              variant,
+              onConnectionsChange: (connections) => reports.push(connections),
+            })
+          )
+        );
+        const retryButton = () =>
+          [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+            (button) => button.textContent === translations['common.retry']
+          );
+        expect(host.querySelector('[role=alert]')?.textContent).toContain(copy);
+        expect(logged).toContainEqual(['Failed to read model connections', firstError]);
+        expect(reports).toEqual([]);
+        expect(host.querySelector('form')).toBeNull();
+        expect(retryButton()).toBeDefined();
+        await act(async () => retryButton()!.click());
+        expect(host.textContent).toContain(translations['settings.models.loading']);
+        expect(host.querySelector('[role=alert]')).toBeNull();
+        expect(retryButton()).toBeUndefined();
+        expect(reports).toEqual([]);
+        await act(async () => retry.reject(retryError));
+        expect(host.querySelector('[role=alert]')?.textContent).toContain(copy);
+        expect(logged).toContainEqual(['Failed to read model connections', retryError]);
+        expect(retryButton()).toBeDefined();
+        connectionIpc.getSnapshot.mockResolvedValue({ connections: [stored] });
+        await act(async () => retryButton()!.click());
+        expect(host.textContent).toContain(stored.displayName);
+        expect(host.querySelector('[role=alert]')).toBeNull();
+        expect(retryButton()).toBeUndefined();
+        expect(reports).toEqual([[stored]]);
+      } finally {
+        logger.mockRestore();
+      }
+    }
+  );
+
+  it('recovers an empty snapshot into the normal first-connection form', async () => {
+    connectionIpc.getSnapshot
+      .mockRejectedValueOnce(new Error('Synthetic read failure'))
+      .mockResolvedValue({ connections: [] });
+    const reports: (readonly ModelConnection[])[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionSetting, {
+          variant: 'panel',
+          onConnectionsChange: (connections) => reports.push(connections),
+        })
+      )
+    );
+    expect(reports).toEqual([]);
+    await pickDiscovered(en['common.retry']);
+    expect(reports).toEqual([[]]);
+    expect(host.querySelector('form')).not.toBeNull();
+    expect(host.textContent).toContain(en['settings.models.chooseProvider']);
+    expect(host.querySelector('[role=alert]')).toBeNull();
+  });
+
+  it('keeps mutation failures separate from snapshot retry', async () => {
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [stored] });
+    connectionIpc.save.mockRejectedValue(new Error('Synthetic save failure'));
+    connectionIpc.delete.mockRejectedValue(new Error('Synthetic delete failure'));
+    vi.stubGlobal('confirm', () => true);
+    await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
+    await act(async () => host.querySelector<HTMLButtonElement>('[role=switch]')!.click());
+    expect(host.querySelector('[role=alert]')?.textContent).toBe(en['settings.models.error']);
+    expect(host.textContent).not.toContain(en['common.retry']);
+    await pickDiscovered(en['common.edit']);
+    await pickDiscovered(en['settings.models.delete']);
+    expect(host.querySelector('[role=alert]')?.textContent).toBe(en['settings.models.error']);
+    expect(host.textContent).not.toContain(en['common.retry']);
+    await pickDiscovered(en['common.cancel']);
+    expect(host.textContent).toContain(stored.displayName);
+  });
+
   it('scrolls only the body of a tall compatible form in edit and add', async () => {
     const customModels: NonNullable<ModelConnection['customModels']> = Array.from(
       { length: 4 },

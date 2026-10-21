@@ -140,8 +140,7 @@ const isDefaultEndpoint = (endpoint: string, preset: ProviderPresetId | ''): boo
 
 const firstCheckableModelId = (
   models: readonly { modelId: string }[] | undefined
-): string | undefined =>
-  models?.find((model) => model.modelId.trim().length > 0)?.modelId.trim();
+): string | undefined => models?.find((model) => model.modelId.trim().length > 0)?.modelId.trim();
 
 export type ConnectionIdentityDraft = {
   provider: ProviderPresetId | '';
@@ -1116,6 +1115,8 @@ export function ModelConnectionSetting({
   const [error, setError] = useState(false);
   const [signOutUnconfirmed, setSignOutUnconfirmed] = useState(false);
   const [ready, setReady] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [catalog, setCatalog] = useState<HarnessModelCatalog['models']>();
   const [metadataSnapshot, setMetadataSnapshot] = useState<ModelMetadataSnapshot | null>(null);
   const [checks, setChecks] = useState<
@@ -1137,12 +1138,21 @@ export function ModelConnectionSetting({
         const parsed = ModelConnectionSchema.array().parse(snapshot.connections);
         if (live) {
           setConnections(parsed);
+          setLoadFailed(false);
           setReady(true);
         }
       })
-      .catch(() => {
-        if (live) setError(true);
+      .catch((readError: unknown) => {
+        console.error('Failed to read model connections', readError);
+        if (live) setLoadFailed(true);
       });
+    return () => {
+      live = false;
+    };
+  }, [ipc, loadAttempt]);
+  useEffect(() => {
+    if (!ipc) return undefined;
+    let live = true;
     void Promise.resolve()
       .then(() => ipc.modelConnections.getModelCatalog())
       .then((value) => {
@@ -1311,10 +1321,27 @@ export function ModelConnectionSetting({
               {t('settings.models.oauth.signOutUnconfirmed')}
             </p>
           )}
-          {!ready && !error && (
-            <p role="status" className="p-5 text-xs text-muted-foreground">
-              {t('settings.models.loading')}
-            </p>
+          {!ready && (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+              <p
+                role={loadFailed ? 'alert' : 'status'}
+                className="min-w-0 flex-1 text-xs text-muted-foreground"
+              >
+                {t(loadFailed ? 'settings.models.loadFailed' : 'settings.models.loading')}
+              </p>
+              {loadFailed ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setLoadFailed(false);
+                    setLoadAttempt((attempt) => attempt + 1);
+                  }}
+                >
+                  {t('common.retry')}
+                </Button>
+              ) : null}
+            </div>
           )}
           <div data-connection-list="" className={panelListClass(variant, editing)}>
             {editingPanelConnection && editingPanelIndex >= 0 ? (

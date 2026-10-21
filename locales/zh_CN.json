@@ -177,6 +177,7 @@
   "settings.models.unavailable": "当前界面无法访问本地加密凭据服务。",
   "settings.models.error": "无法读取或保存连接。请检查系统凭据存储；若有并发修改，请重新打开设置。不会回退为明文存储。",
   "settings.models.loading": "正在读取本地连接…",
+  "settings.models.loadFailed": "无法读取已保存的语言模型连接，请重试。",
   "settings.models.add": "添加模型连接",
   "settings.models.useConnection": "使用 {{name}}",
   "settings.models.keyStoredPlaceholder": "已保存，留空即保留",

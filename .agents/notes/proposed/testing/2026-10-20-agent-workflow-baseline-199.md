@@ -311,3 +311,35 @@ by the owner and never reached a design artifact. C run 2's 272.8 s `find /`
 call is a single-command outlier. These numbers show direction and failure
 modes, not a stable distribution, and no human review of the resulting artwork
 was performed.
+
+## Round 4 (perf/browser-screenshot-199, 813a75c1)
+
+After the after-run above, the cause of the slow A runs was isolated: model
+latency grew with image bytes in each request (browser screenshots returned as
+2000 px PNGs, render previews read as full PNGs), amplified by a slow network
+path (about 30 s per MB of request body before a network change, about 1.1 s
+per MB after). The follow-up stack bounds browser screenshots to JPEG ≤1280 px,
+keeps only the newest four to seven tool images per model request through Pi's
+public `context` hook, adds `molly_view_image` (single image, region, or contact
+sheet; JPEG ≤1280 px, declared directly to the Agent), converts WebP/AVIF browser
+saves to PNG, and tunes the skills (two-step survey→pick research, one option on
+the you-choose path, scoped font and filesystem search, no brute-force fitting).
+
+Same prompts and fixture, DeepSeek Flash with reasoning high, 20-minute cap,
+network probes HTTP 200 before and after (four-JPEG request 2.4–3.3 s):
+
+| Build | A pass | A total (min) | A first preview | C pass | C total (min) | C first preview |
+|---|---|---|---|---|---|---|
+| BEFORE 52a21ffd | 0/2 | 20.0, 20.0 | 11.6, 12.0 | 2/2 | 14.3, 4.7 | 7.2, 2.2 |
+| AFTER 0acf4ee7 | 2/2 | 8.7, 15.4 | 5.6, 9.6 | 1/2 | 20.0, 9.6 | —, 7.6 |
+| Round 4 813a75c1 | 2/2 | 13.6, 11.2 | 10.0, 7.9 | 2/2 | 10.5, 5.2 | 2.7, 3.9 |
+
+Peak decoded image bytes per A request fell from 24.5 MB (BEFORE median) to
+7.7–10.0 MB. In round 4 the viewer was declared in all runs and used; all five
+`save_image` calls succeeded (AVIF sources saved as PNG); both A runs made one
+complete poster option and no extra options. Remaining departures: both C runs
+still swept fonts and sizes to fit pixels despite the no-brute-force guidance
+(C1 90 bash calls); A1 repeated one query without scrolling its results and A2
+browsed an archive instead of searching, with no search extension. Two runs per
+case on one machine; the bundle changes several things together, so effects are
+not isolated, and no human visual review was performed.

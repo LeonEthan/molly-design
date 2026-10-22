@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { BrowserAccountImportPanel } from '../src/components/settings/browser-account-import-dialog';
 import { BrowserAccountsSetting } from '../src/components/settings/browser-accounts-setting';
 import { initI18n } from '../src/i18n';
 import zh from '../../../locales/zh_CN.json';
@@ -16,13 +17,22 @@ const bridge = vi.hoisted(() => ({
   getAccountSummary: vi.fn(),
   getImportSources: vi.fn(),
   getImportProfiles: vi.fn(),
+  openImportSettings: vi.fn(),
   importBrowserAccount: vi.fn(),
   cancelAccountImport: vi.fn(),
   clearAccountData: vi.fn(),
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({
   getPublicBrowserBridge: () => bridge,
+  onIpcEvent: (_channel: string, listener: (value: boolean) => void) => {
+    nativeForeground = listener;
+    listener(true);
+    return () => {
+      nativeForeground = null;
+    };
+  },
 }));
+let nativeForeground: ((value: boolean) => void) | null = null;
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 const result: ElectronBrowserImportResult = {
@@ -57,8 +67,12 @@ const button = (label: string) => {
 const dialog = () => document.querySelector('[role="dialog"]')!;
 const picker = (labelId: 'browser-import-source-label' | 'browser-import-profile-label') =>
   document.querySelector<HTMLButtonElement>(`[role="combobox"][aria-labelledby="${labelId}"]`)!;
-async function openImport() {
+async function openImport(requestAccess = true) {
   await act(async () => button(zh['settings.browserAccounts.importFromBrowser']).click());
+  const accessButton = [...document.querySelectorAll('button')].find(
+    (entry) => entry.textContent === zh['settings.browserImport.permission.openSettings']
+  );
+  if (requestAccess && accessButton) await act(async () => accessButton.click());
 }
 async function expandSites() {
   const trigger = [...document.querySelectorAll('button')].find((entry) =>
@@ -104,6 +118,7 @@ beforeEach(async () => {
   bridge.importBrowserAccount.mockResolvedValue(result);
   bridge.cancelAccountImport.mockResolvedValue('cancelled');
   bridge.clearAccountData.mockResolvedValue({ removed: 7 });
+  bridge.openImportSettings.mockResolvedValue({ opened: true });
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -114,7 +129,7 @@ afterEach(async () => {
   localStorage.clear();
 });
 
-it('lists the real profiles when the dialog opens and reads no cookies until one is picked', async () => {
+it('lists profiles after the access action and reads no cookies until one is picked', async () => {
   const order: string[] = [];
   const received: ElectronBrowserAccountImportInput[] = [];
   bridge.getImportProfiles.mockImplementation(async (browserId: string, operationId: string) => {
@@ -177,6 +192,8 @@ it('lists the profiles of another browser only after it is chosen', async () => 
   await openImport();
   expect(listings).toEqual(['chrome']);
   await choose('browser-import-source-label', 'Microsoft Edge');
+  expect(listings).toEqual(['chrome']);
+  await act(async () => button(zh['settings.browserImport.permission.openSettings']).click());
   expect(listings).toEqual(['chrome', 'edge']);
   expect(picker('browser-import-profile-label').textContent).toBe('Edge person');
 });
@@ -262,9 +279,7 @@ it('revokes a reading operation on close and ignores its late result', async () 
   await act(async () => root.render(<BrowserAccountsSetting />));
   await openImport();
   await act(async () => button(zh['settings.browserImport.import']).click());
-  expect(document.querySelector('[role="status"]')?.textContent).toContain(
-    zh['settings.browserImport.importing']
-  );
+  expect(dialog().textContent).toContain(zh['settings.browserImport.importing']);
   await act(async () => button(zh['common.cancel']).click());
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(cancelled[0]).toMatch(/^[a-f0-9-]{36}$/);
@@ -283,10 +298,7 @@ it('revokes a pending profile listing when the dialog closes', async () => {
   });
   await act(async () => root.render(<BrowserAccountsSetting />));
   await openImport();
-  expect(picker('browser-import-profile-label').textContent).toBe(
-    zh['settings.browserImport.loading']
-  );
-  expect(button(zh['settings.browserImport.import']).disabled).toBe(true);
+  expect(button(zh['settings.browserImport.permission.openSettings']).disabled).toBe(true);
   await act(async () => button(zh['common.cancel']).click());
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(bridge.cancelAccountImport).toHaveBeenCalledWith(listing[0]);
@@ -302,9 +314,7 @@ it('keeps the dialog open while an accepted write is finishing', async () => {
   await act(async () => button(zh['settings.browserImport.import']).click());
   await act(async () => button(zh['common.cancel']).click());
   expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-  expect(document.querySelector('[role="status"]')?.textContent).toBe(
-    zh['settings.browserImport.finishing']
-  );
+  expect(dialog().textContent).toContain(zh['settings.browserImport.finishing']);
   await act(async () => pending.resolve(result));
   expect(button(zh['settings.browserImport.done']).disabled).toBe(false);
 });
@@ -355,29 +365,27 @@ it('keeps unsupported builds honest', async () => {
   expect(bridge.getImportProfiles).not.toHaveBeenCalled();
 });
 
-it('stays silent after an OS denial of the listing and offers no recovery guidance', async () => {
+it('shows actionable guidance after a file denial instead of an empty profile catalog', async () => {
   bridge.getImportProfiles.mockResolvedValue({ ok: false, error: 'source-access-denied' });
   await act(async () => root.render(<BrowserAccountsSetting />));
   await openImport();
   expect(dialog().querySelector('[role="alert"]')).toBeNull();
-  expect(dialog().querySelector('a, img, video')).toBeNull();
-  expect(picker('browser-import-profile-label').textContent).toBe(
-    zh['settings.browserImport.noProfiles']
+  expect(dialog().textContent).toContain(
+    zh['settings.browserImport.permission.deniedTitle'].replace('{{browser}}', 'Chrome')
   );
+  expect(picker('browser-import-profile-label')).toBeNull();
   expect(bridge.importBrowserAccount).not.toHaveBeenCalled();
   expect(document.body.textContent).not.toContain('private');
 });
 
-it('re-enumerates after the user allows access, on focus or an explicit Import click', async () => {
+it('re-enumerates after access is allowed on focus or explicit re-check', async () => {
   bridge.getImportProfiles.mockResolvedValue({ ok: false, error: 'source-access-denied' });
   await act(async () => root.render(<BrowserAccountsSetting />));
   await openImport();
-  expect(bridge.getImportProfiles).toHaveBeenCalledTimes(1);
   bridge.getImportProfiles.mockResolvedValue(listed(several));
   await act(async () => {
     window.dispatchEvent(new Event('focus'));
   });
-  expect(bridge.getImportProfiles).toHaveBeenCalledTimes(2);
   expect(picker('browser-import-profile-label').textContent).toBe(
     zh['settings.browserImport.chooseProfile']
   );
@@ -387,48 +395,80 @@ it('re-enumerates after the user allows access, on focus or an explicit Import c
   bridge.getImportProfiles.mockResolvedValue({ ok: false, error: 'source-access-denied' });
   await openImport();
   bridge.getImportProfiles.mockResolvedValue(listed(one));
-  await act(async () => button(zh['settings.browserImport.import']).click());
+  await act(async () => button(zh['settings.browserImport.permission.recheck']).click());
   expect(bridge.importBrowserAccount).not.toHaveBeenCalled();
   expect(picker('browser-import-profile-label').textContent).toBe('Designer');
 });
 
-it('treats a denied copy at Import like a denied listing: silent, picker cleared, re-listed on focus', async () => {
-  bridge.getImportProfiles.mockResolvedValue(listed(several));
-  bridge.importBrowserAccount.mockResolvedValueOnce({ ok: false, error: 'source-access-denied' });
-  await act(async () => root.render(<BrowserAccountsSetting />));
-  await openImport();
-  await choose('browser-import-profile-label', 'Studio');
-  await act(async () => button(zh['settings.browserImport.import']).click());
-  expect(dialog().querySelector('[role="alert"]')).toBeNull();
-  expect(dialog().querySelector('a, img, video')).toBeNull();
-  expect(picker('browser-import-profile-label').textContent).toBe(
-    zh['settings.browserImport.noProfiles']
-  );
-  expect(picker('browser-import-profile-label').disabled).toBe(true);
-  expect(bridge.getImportProfiles).toHaveBeenCalledTimes(1);
-  await act(async () => {
-    window.dispatchEvent(new Event('focus'));
-  });
-  expect(bridge.getImportProfiles).toHaveBeenCalledTimes(2);
-  expect(picker('browser-import-profile-label').textContent).toBe(
-    zh['settings.browserImport.chooseProfile']
-  );
-  expect(bridge.importBrowserAccount).toHaveBeenCalledTimes(1);
-  expect(dialog().querySelector('[role="alert"]')).toBeNull();
-});
+it.each(['panel', 'dialog'])(
+  'keeps the %s copy denial actionable until Settings opens, then recovers without importing',
+  async (surface) => {
+    const imports: ElectronBrowserAccountImportInput[] = [];
+    const opened: string[] = [];
+    bridge.getImportProfiles.mockResolvedValue(listed(several));
+    bridge.importBrowserAccount.mockImplementation(
+      async (input: ElectronBrowserAccountImportInput) => {
+        imports.push(input);
+        return imports.length === 1 ? { ok: false, error: 'source-access-denied' } : result;
+      }
+    );
+    bridge.openImportSettings.mockImplementation(async () => {
+      opened.push('settings');
+      return { opened: true };
+    });
+    await act(async () =>
+      root.render(
+        surface === 'panel' ? (
+          <BrowserAccountImportPanel onClose={() => undefined} />
+        ) : (
+          <BrowserAccountsSetting />
+        )
+      )
+    );
+    if (surface === 'dialog') await openImport(false);
+    await act(async () => button(zh['settings.browserImport.permission.openSettings']).click());
+    await choose('browser-import-profile-label', 'Studio');
+    await act(async () => button(zh['settings.browserImport.import']).click());
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    await act(async () => button(zh['settings.browserImport.permission.recheck']).click());
+    expect(picker('browser-import-profile-label')).toBeNull();
+    expect(document.body.textContent).toContain(
+      zh['settings.browserImport.permission.deniedTitle'].replace('{{browser}}', 'Chrome')
+    );
+    expect(opened).toEqual([]);
+    await act(async () => button(zh['settings.browserImport.permission.openSettings']).click());
+    expect(opened).toEqual(['settings']);
+    expect(picker('browser-import-profile-label')).toBeNull();
+    await act(async () => nativeForeground?.(true));
+    expect(picker('browser-import-profile-label').textContent).toBe(
+      zh['settings.browserImport.chooseProfile']
+    );
+    expect(button(zh['settings.browserImport.import']).disabled).toBe(true);
+    expect(imports.map((input) => input.profileId)).toEqual(['opaque-studio']);
+    await choose('browser-import-profile-label', 'Studio');
+    await act(async () => button(zh['settings.browserImport.import']).click());
+    expect(imports.map((input) => input.profileId)).toEqual(['opaque-studio', 'opaque-studio']);
+    expect(button(zh['settings.browserImport.done'])).toBeTruthy();
+  }
+);
 
-it('re-lists on an explicit Import click after a denied copy and never re-reads on its own', async () => {
+it('retains the copy denial when Settings fails to open and lets the user retry', async () => {
   bridge.getImportProfiles.mockResolvedValue(listed(one));
   bridge.importBrowserAccount.mockResolvedValueOnce({ ok: false, error: 'source-access-denied' });
   await act(async () => root.render(<BrowserAccountsSetting />));
   await openImport();
   await act(async () => button(zh['settings.browserImport.import']).click());
-  expect(picker('browser-import-profile-label').textContent).toBe(
-    zh['settings.browserImport.noProfiles']
+  bridge.openImportSettings.mockResolvedValue({ opened: false });
+  await act(async () => button(zh['settings.browserImport.permission.openSettings']).click());
+  expect(dialog().querySelector('[role="alert"]')?.textContent).toContain(
+    zh['settings.browserImport.permission.settingsFailed']
   );
-  await act(async () => button(zh['settings.browserImport.import']).click());
-  expect(bridge.getImportProfiles).toHaveBeenCalledTimes(2);
-  expect(bridge.importBrowserAccount).toHaveBeenCalledTimes(1);
+  await act(async () => nativeForeground?.(true));
+  expect(picker('browser-import-profile-label')).toBeNull();
+  bridge.openImportSettings.mockResolvedValue({ opened: true });
+  await act(async () => button(zh['settings.browserImport.permission.openSettings']).click());
+  expect(dialog().querySelector('[role="alert"]')).toBeNull();
+  await act(async () => button(zh['settings.browserImport.permission.recheck']).click());
   expect(picker('browser-import-profile-label').textContent).toBe('Designer');
 });
 
@@ -442,7 +482,6 @@ it('requires a new explicit choice when the selected profile changed before read
   expect(document.querySelector('[role="alert"]')?.textContent).toContain(
     zh['settings.browserImport.errors.profile-changed']
   );
-  expect(bridge.getImportProfiles).toHaveBeenCalledTimes(2);
   expect(picker('browser-import-profile-label').textContent).toBe(
     zh['settings.browserImport.chooseProfile']
   );
@@ -477,7 +516,6 @@ it('shows an unreadable listing reason and retries it only on click', async () =
   expect(document.querySelector('[role="alert"]')?.textContent).toContain(
     zh['settings.browserImport.errors.source-unavailable']
   );
-  expect(bridge.getImportProfiles).toHaveBeenCalledTimes(1);
   bridge.getImportProfiles.mockResolvedValue(listed(one));
   await act(async () => button(zh['settings.browserImport.retry']).click());
   expect(document.querySelector('[role="alert"]')).toBeNull();
@@ -502,6 +540,25 @@ it('distinguishes no installed browsers from a failed catalog read and retries o
   expect(button(zh['settings.browserImport.import']).disabled).toBe(true);
 });
 
+it('explains access after recovering the initial source catalog before reading profiles', async () => {
+  const reads: string[] = [];
+  bridge.getImportSources.mockRejectedValue(new Error('Synthetic catalog failure'));
+  bridge.getImportProfiles.mockImplementation(async () => {
+    reads.push('profile-metadata');
+    return listed(one);
+  });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport(false);
+  bridge.getImportSources.mockResolvedValue({
+    sources: [{ browserId: 'chrome', browserName: 'Google Chrome' }],
+  });
+  await act(async () => button(zh['settings.browserImport.retry']).click());
+  expect(reads).toEqual([]);
+  expect(dialog().textContent).toContain(zh['settings.browserImport.permission.beforeTitle']);
+  await act(async () => button(zh['settings.browserImport.permission.openSettings']).click());
+  expect(reads).toEqual(['profile-metadata']);
+});
+
 it('clears all Molly website data only after the explicit clear confirmation', async () => {
   const events: string[] = [];
   vi.spyOn(window, 'confirm').mockImplementation(() => {
@@ -518,4 +575,115 @@ it('clears all Molly website data only after the explicit clear confirmation', a
   expect(host.querySelector('[role="status"]')?.textContent).toBe(
     zh['settings.browserImport.cleared']
   );
+});
+
+it('explains access before any profile read and cancellation leaves browser data untouched', async () => {
+  const events: string[] = [];
+  bridge.getImportProfiles.mockImplementation(async () => {
+    events.push('profile-read');
+    return listed(one);
+  });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport(false);
+  expect(dialog().textContent).toContain(zh['settings.browserImport.permission.beforeTitle']);
+  expect(
+    dialog().querySelector('[role="combobox"][aria-labelledby="browser-import-profile-label"]')
+  ).toBeNull();
+  await act(async () => window.dispatchEvent(new Event('focus')));
+  await act(async () => button(zh['common.cancel']).click());
+  expect(events).toEqual([]);
+});
+
+it.each(['panel', 'dialog'])(
+  'recovers the %s from a silent denial using native foreground without importing cookies',
+  async (surface) => {
+    const reads: string[] = [];
+    const writes: ElectronBrowserAccountImportInput[] = [];
+    const opened: string[] = [];
+    let allowed = false;
+    bridge.getImportSources.mockResolvedValue({
+      applicationName: 'Molly Preview',
+      sources: [{ browserId: 'chrome', browserName: 'Google Chrome' }],
+    });
+    bridge.getImportProfiles.mockImplementation(async (browserId: string) => {
+      reads.push(browserId);
+      return allowed ? listed(several) : { ok: false, error: 'source-access-denied' };
+    });
+    bridge.openImportSettings.mockImplementation(async () => {
+      opened.push('settings');
+      return { opened: true };
+    });
+    bridge.importBrowserAccount.mockImplementation(
+      async (input: ElectronBrowserAccountImportInput) => {
+        writes.push(input);
+        return result;
+      }
+    );
+    await act(async () =>
+      root.render(
+        surface === 'panel' ? (
+          <BrowserAccountImportPanel onClose={() => undefined} />
+        ) : (
+          <BrowserAccountsSetting />
+        )
+      )
+    );
+    if (surface === 'dialog') await openImport(false);
+    expect(document.body.textContent).toContain(
+      zh['settings.browserImport.permission.beforeTitle']
+    );
+    expect(document.body.textContent).toContain('Molly Preview');
+    expect(reads).toEqual([]);
+    await act(async () => button(zh['settings.browserImport.permission.openSettings']).click());
+    expect(reads).toEqual(['chrome']);
+    expect(opened).toEqual(['settings']);
+    expect(picker('browser-import-profile-label')).toBeNull();
+    expect(document.body.textContent).not.toContain(zh['settings.browserImport.noProfiles']);
+    allowed = true;
+    await act(async () => nativeForeground?.(true));
+    expect(document.body.textContent).toContain(zh['settings.browserImport.permission.granted']);
+    expect(button(zh['settings.browserImport.import']).disabled).toBe(true);
+    await choose('browser-import-profile-label', 'Studio');
+    expect(button(zh['settings.browserImport.import']).disabled).toBe(false);
+    expect(reads).toEqual(['chrome', 'chrome']);
+    expect(writes).toEqual([]);
+  }
+);
+
+it('keeps an actually empty readable catalog separate from a denied source', async () => {
+  bridge.getImportProfiles.mockResolvedValue(listed([]));
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
+  expect(picker('browser-import-profile-label').textContent).toBe(
+    zh['settings.browserImport.noProfiles']
+  );
+  expect(dialog().textContent).toContain(zh['settings.browserImport.permission.granted']);
+  expect(dialog().textContent).not.toContain(zh['settings.browserImport.permission.settingsGuide']);
+  expect(button(zh['settings.browserImport.import']).disabled).toBe(true);
+});
+
+it('does not strand the pre-permission panel during StrictMode effect replay', async () => {
+  await act(async () =>
+    root.render(
+      <StrictMode>
+        <BrowserAccountImportPanel onClose={() => undefined} />
+      </StrictMode>
+    )
+  );
+  expect(document.body.textContent).toContain(zh['settings.browserImport.permission.beforeTitle']);
+  expect(button(zh['settings.browserImport.permission.openSettings']).disabled).toBe(false);
+});
+
+it('keeps a manual settings path available when the system pane cannot open', async () => {
+  bridge.getImportProfiles.mockResolvedValue({ ok: false, error: 'source-access-denied' });
+  bridge.openImportSettings.mockResolvedValue({ opened: false });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
+  expect(dialog().querySelector('[role="alert"]')?.textContent).toBe(
+    zh['settings.browserImport.permission.settingsFailed']
+  );
+  bridge.getImportProfiles.mockResolvedValue(listed(one));
+  await act(async () => button(zh['settings.browserImport.permission.recheck']).click());
+  expect(picker('browser-import-profile-label').textContent).toBe('Designer');
+  expect(dialog().querySelector('[role="alert"]')).toBeNull();
 });

@@ -136,9 +136,10 @@ In a design session, the `molly_browser` tools control only the page in Molly's 
 
 Open **Settings → Website accounts → Import from browser…**, the Browser sidebar's
 **⋯ → Import from browser…**, or the Pinterest item in Settings → AI models. Choose
-a browser; Molly lists its profiles as soon as the dialog opens and macOS may ask
-for browser-data access then. Pick the profile you are signed in with (a single
-profile is shown by name), then **Import**; nothing is read before you click it. The
+a browser, then click **Open Settings** after reading the access guide. Molly tries
+to list profiles and opens System Settings if browser-data access is blocked. Pick
+the profile you are signed in with (a single profile is shown by name), then
+**Import**; cookies are read only after this click. The
 result lists, per website, how many cookies were discovered, imported, skipped and
 failed. The website list starts
 collapsed with all 27 design and commerce platforms selected; expand it to deselect
@@ -157,13 +158,14 @@ dismiss that prompt before retrying. Do not grant a generic `security` helper
 permanent access for this flow.
 
 When you approve a system prompt while import is pending, it continues automatically.
-An OS denial or cancellation retains your selections for retry. Closing the dialog
-resets its website choices the next time you open it. If macOS has blocked
-browser-data access, the dialog shows no profiles and no message; allow access
-yourself, then return to the window or click **Import** to list profiles again.
-Molly does not automatically retry a denied request, and macOS may not prompt again
-after a denial — allow Molly under **System Settings → Privacy & Security → App Data**
-yourself first. Keychain denial and other read failures show their own reason.
+A browser-file denial shows a short access guide, including when macOS denies
+without a prompt. Under **System Settings → Privacy & Security → Files & Folders**,
+expand **Molly** (or **Molly Preview**) and enable the source browser, for example
+**Google Chrome**. Return to the still-open import surface or choose **Check access
+again**. The profile list recovers without reopening or restarting; no cookies are
+imported automatically. A readable but empty list says no profiles were found.
+Website choices remain until the dialog is closed. Keychain denial and other read
+failures show their own reason.
 In development macOS can attribute browser-data access to the terminal or coding
 agent that launched Molly, and the system may decline to show an approval prompt
 for that launcher.
@@ -185,7 +187,9 @@ TikTok Shop, Shopee and Lazada; it does not certify live login compatibility. Th
 synthetic tests cover import isolation, merge, rollback and cancellation.
 The [permission-intent revision](.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md)
 records successful real Chrome/Pinterest import, website sign-in and denied-file
-settings recovery without a profile refresh. First-prompt grant continuation and
+settings recovery without a profile refresh. The
+[permission guide revision](.agents/notes/implemented/bug-fix/2026-10-22-browser-import-permission-guide.md)
+records the current explanation and recovery flow. First-prompt grant continuation and
 Developer ID distribution/upgrades remain unverified. Safari, Firefox and import
 on other operating systems are unsupported.
 

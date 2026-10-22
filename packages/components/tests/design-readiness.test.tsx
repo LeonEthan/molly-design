@@ -24,6 +24,7 @@ const fakes = vi.hoisted(() => ({
   openedTab: undefined as string | undefined,
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({
+  onIpcEvent: () => () => undefined,
   getIpcServices: () =>
     fakes.ipcAvailable
       ? {
@@ -132,7 +133,7 @@ describe('design setup strip', () => {
     expect(chips()).toEqual([
       'set: Models· Configured: DeepSeek +1',
       'set: Image generation· Configured: synthetic-image-model',
-      'unverified: Pinterest (optional)· Imported · check in Molly\'s browser',
+      "unverified: Pinterest (optional)· Imported · check in Molly's browser",
     ]);
   });
 

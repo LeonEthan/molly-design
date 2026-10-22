@@ -3189,5 +3189,19 @@
   "settings.browserImport.errors.restore-incomplete": "导入失败，无法确认网站数据已完整恢复。浏览已暂停，请到网站账号设置中清除网站数据后再试。",
   "settings.browserImport.errors.unavailable": "当前无法导入，请检查 Molly 安装后重试。",
   "settings.check.modelFailures.key_rejected": "密钥被拒绝。请检查密钥后重试。",
-  "settings.check.modelFailures.unreachable": "无法从你的电脑连接到服务器。请检查网址和网络。"
+  "settings.check.modelFailures.unreachable": "无法从你的电脑连接到服务器。请检查网址和网络。",
+  "settings.browserImport.permission.beforeTitle": "导入已有登录状态",
+  "settings.browserImport.permission.beforeDescription": "允许 {{app}} 访问 {{browser}}，即可继续。",
+  "settings.browserImport.permission.deniedTitle": "开启 {{browser}} 访问",
+  "settings.browserImport.permission.deniedDescription": "在系统设置中打开下方开关，返回后继续。",
+  "settings.browserImport.permission.settingsGuide": "系统设置示意",
+  "settings.browserImport.permission.privacy": "隐私与安全性",
+  "settings.browserImport.permission.files": "文件与文件夹",
+  "settings.browserImport.permission.returnHint": "开启 {{browser}} 后，返回此处。",
+  "settings.browserImport.permission.recheck": "已开启，重新检查",
+  "settings.browserImport.permission.stillDenied": "访问仍未开启，请检查开关。",
+  "settings.browserImport.permission.granted": "已允许访问",
+  "settings.browserImport.permission.openSettings": "打开设置",
+  "settings.browserImport.permission.settingsFailed": "无法打开系统设置。请手动前往「隐私与安全性 → 文件与文件夹」。",
+  "settings.browserImport.permission.privacyNote": "仅导入所选网站的登录状态，不含浏览记录和密码。"
 }

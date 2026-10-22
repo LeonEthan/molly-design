@@ -13,10 +13,12 @@ import type {
   ElectronBrowserProfileChoice,
   ElectronBrowserImportReport,
 } from '@molly/shared/electron-ipc';
-import { getPublicBrowserBridge } from '@/lib/electron-ipc-client';
+import { getPublicBrowserBridge, onIpcEvent } from '@/lib/electron-ipc-client';
 import { Button } from '@/ui/button';
 import { Checkbox } from '@/ui/checkbox';
-import { ChevronDown, Loader2, X } from '@/ui/icons';
+import { ArrowUpRight, ChevronDown, Loader2, X } from '@/ui/icons';
+import { BrowserImportAccess, type BrowserImportAccessState } from './browser-import-access';
+import { InfoTip } from './info-tip';
 import {
   Dialog,
   DialogContentWithoutClose,
@@ -60,7 +62,10 @@ function ImportSession({
   const [profileId, setProfileId] = useState('');
   const [loading, setLoading] = useState(true);
   const [catalogFailed, setCatalogFailed] = useState(false);
-  const [accessDenied, setAccessDenied] = useState(false);
+  const [access, setAccess] = useState<BrowserImportAccessState>('unrequested');
+  const [applicationName, setApplicationName] = useState('Molly');
+  const [settingsFailed, setSettingsFailed] = useState(false);
+  const [rechecked, setRechecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -73,13 +78,17 @@ function ImportSession({
   const listing = useRef<string | null>(null);
   const live = useRef(true);
   const catalogRequest = useRef(0);
+  const refreshing = useRef<number | null>(null);
+  const copyAccessDenied = useRef(false);
+  const accessRef = useRef(access);
+  accessRef.current = access;
   const browserRef = useRef<AccountImportBrowserId | null>(null);
   browserRef.current = browserId;
 
   const denyAccess = useCallback(() => {
     setProfiles([]);
     setProfileId('');
-    setAccessDenied(true);
+    setAccess('denied');
   }, []);
 
   const listProfiles = useCallback(
@@ -89,19 +98,23 @@ function ImportSession({
       listing.current = operationId;
       setProfiles([]);
       setProfileId('');
-      setAccessDenied(false);
       try {
         const result = await bridge.getImportProfiles(target, operationId);
-        if (!live.current || catalogRequest.current !== request) return;
+        if (!live.current || catalogRequest.current !== request) return undefined;
         if (result.ok) {
-          setProfiles(result.profiles);
-          if (result.profiles.length === 1) setProfileId(result.profiles[0]!.id);
+          if (copyAccessDenied.current) denyAccess();
+          else {
+            setAccess('readable');
+            setProfiles(result.profiles);
+            if (result.profiles.length === 1) setProfileId(result.profiles[0]!.id);
+          }
         } else if (result.error === 'source-access-denied') {
           denyAccess();
         } else if (result.error !== 'cancelled') {
           setCatalogFailed(true);
           setError(result.error);
         }
+        return result;
       } finally {
         if (listing.current === operationId) listing.current = null;
       }
@@ -109,56 +122,81 @@ function ImportSession({
     [bridge, denyAccess]
   );
 
-  const loadSources = useCallback(async () => {
-    const request = ++catalogRequest.current;
-    setLoading(true);
-    setError(null);
-    setCatalogFailed(false);
-    try {
-      if (!bridge) throw new Error('unavailable');
-      const nextSummary = await bridge.getAccountSummary();
-      if (!live.current || catalogRequest.current !== request) return;
-      setSummary(nextSummary);
-      if (!nextSummary.importAvailable || nextSummary.recoveryRequired) return;
-      const next = await bridge.getImportSources();
-      if (!live.current || catalogRequest.current !== request) return;
-      setSources(next.sources);
-      const browser =
-        next.sources.find((source) => source.browserId === browserRef.current) ??
-        next.sources.find((source) => source.browserId === 'chrome') ??
-        next.sources[0];
-      if (browser) {
-        setBrowserId(browser.browserId);
-        await listProfiles(browser.browserId, request);
+  const loadSources = useCallback(
+    async (readProfiles = false) => {
+      if (refreshing.current !== null) return undefined;
+      const request = ++catalogRequest.current;
+      refreshing.current = request;
+      setLoading(true);
+      setError(null);
+      setCatalogFailed(false);
+      try {
+        if (!bridge) throw new Error('unavailable');
+        const nextSummary = await bridge.getAccountSummary();
+        if (!live.current || catalogRequest.current !== request) return undefined;
+        setSummary(nextSummary);
+        if (!nextSummary.importAvailable || nextSummary.recoveryRequired) return undefined;
+        const next = await bridge.getImportSources();
+        if (!live.current || catalogRequest.current !== request) return undefined;
+        setSources(next.sources);
+        setApplicationName(next.applicationName ?? 'Molly');
+        const browser =
+          next.sources.find((source) => source.browserId === browserRef.current) ??
+          next.sources.find((source) => source.browserId === 'chrome') ??
+          next.sources[0];
+        if (browser) {
+          setBrowserId(browser.browserId);
+          if (readProfiles) return await listProfiles(browser.browserId, request);
+        }
+      } catch (cause) {
+        console.error('Failed to read browser import sources', cause);
+        if (live.current && catalogRequest.current === request) {
+          setCatalogFailed(true);
+          setError('unavailable');
+        }
+      } finally {
+        if (refreshing.current === request) refreshing.current = null;
+        if (live.current && catalogRequest.current === request) setLoading(false);
       }
-    } catch (cause) {
-      console.error('Failed to read browser import sources', cause);
-      if (live.current && catalogRequest.current === request) {
-        setCatalogFailed(true);
-        setError('unavailable');
-      }
-    } finally {
-      if (live.current && catalogRequest.current === request) setLoading(false);
-    }
-  }, [bridge, listProfiles]);
+      return undefined;
+    },
+    [bridge, listProfiles]
+  );
 
-  const switchBrowser = async (target: AccountImportBrowserId) => {
-    const request = ++catalogRequest.current;
+  const switchBrowser = (target: AccountImportBrowserId) => {
+    ++catalogRequest.current;
+    copyAccessDenied.current = false;
     setBrowserId(target);
+    setProfiles([]);
+    setProfileId('');
+    setAccess('unrequested');
     setError(null);
     setCatalogFailed(false);
-    setLoading(true);
-    try {
-      await listProfiles(target, request);
-    } catch (cause) {
-      console.error('Failed to list browser profiles', cause);
-      if (live.current && catalogRequest.current === request) {
-        setCatalogFailed(true);
-        setError('unavailable');
-      }
-    } finally {
-      if (live.current && catalogRequest.current === request) setLoading(false);
+    setRechecked(false);
+    setSettingsFailed(false);
+  };
+
+  const requestAccess = async () => {
+    setSettingsFailed(false);
+    if (!copyAccessDenied.current) {
+      const result = await loadSources(true);
+      if (!live.current || !result || result.ok || result.error !== 'source-access-denied') return;
     }
+    try {
+      const opened = await bridge?.openImportSettings();
+      if (live.current) {
+        if (opened?.opened) copyAccessDenied.current = false;
+        setSettingsFailed(!opened?.opened);
+      }
+    } catch (cause) {
+      console.error('Failed to open browser access settings', cause);
+      if (live.current) setSettingsFailed(true);
+    }
+  };
+
+  const recheckAccess = () => {
+    setRechecked(true);
+    void loadSources(true);
   };
 
   const cancelListing = useCallback(() => {
@@ -169,6 +207,7 @@ function ImportSession({
   const endSession = useCallback(() => {
     live.current = false;
     catalogRequest.current++;
+    refreshing.current = null;
     cancelListing();
     if (operation.current)
       void bridge?.cancelAccountImport(operation.current).catch(() => undefined);
@@ -181,18 +220,30 @@ function ImportSession({
   }, [endSession, loadSources]);
 
   useEffect(() => {
-    if (!accessDenied || loading || busy) return undefined;
-    const retry = () => void loadSources();
+    const retry = () => {
+      if (accessRef.current === 'denied' && !operation.current) void loadSources(true);
+    };
+    const stopNativeForeground = onIpcEvent('app.windowForeground', (foreground) => {
+      if (foreground) retry();
+    });
     window.addEventListener('focus', retry);
-    return () => window.removeEventListener('focus', retry);
-  }, [accessDenied, loading, busy, loadSources]);
+    return () => {
+      stopNativeForeground();
+      window.removeEventListener('focus', retry);
+    };
+  }, [loadSources]);
 
   const profile = profiles.find((entry) => entry.id === profileId);
+  const accessGuide =
+    Boolean(browserId) &&
+    access !== 'readable' &&
+    !catalogFailed &&
+    Boolean(summary?.importAvailable && !summary.recoveryRequired);
   const importBlocked =
     loading ||
     busy ||
     (!browserId && !catalogFailed) ||
-    (Boolean(browserId) && !accessDenied && !catalogFailed && !profile) ||
+    (Boolean(browserId) && !accessGuide && !catalogFailed && !profile) ||
     selected.size === 0 ||
     Boolean(summary && (!summary.importAvailable || summary.recoveryRequired));
 
@@ -211,8 +262,8 @@ function ImportSession({
   };
 
   const runImport = async () => {
-    if (catalogFailed || accessDenied) {
-      await loadSources();
+    if (catalogFailed) {
+      await loadSources(Boolean(browserId));
       return;
     }
     if (!bridge || !browserId || !profile || selected.size === 0 || operation.current) return;
@@ -233,8 +284,10 @@ function ImportSession({
       else if (result.error === 'profile-changed') {
         setError(result.error);
         await listProfiles(browserId, catalogRequest.current);
-      } else if (result.error === 'source-access-denied') denyAccess();
-      else setError(result.error);
+      } else if (result.error === 'source-access-denied') {
+        copyAccessDenied.current = true;
+        denyAccess();
+      } else setError(result.error);
     } catch (cause) {
       console.error('Browser account import failed', cause);
       if (live.current && operation.current === operationId) setError('unavailable');
@@ -273,7 +326,7 @@ function ImportSession({
           >
             <SelectTrigger
               aria-labelledby="browser-import-source-label"
-              className="min-w-0 flex-1 bg-input-field"
+              className="w-full min-w-0 bg-input-field pr-4"
             >
               <SelectValue />
             </SelectTrigger>
@@ -287,44 +340,68 @@ function ImportSession({
           </Select>
         </div>
       ) : null}
-      <div className="flex items-center gap-3">
-        <label
-          id="browser-import-profile-label"
-          className="w-16 shrink-0 text-sm text-muted-foreground"
-        >
-          {t('settings.browserImport.profile')}
-        </label>
-        <Select
-          value={profileId}
-          disabled={busy || loading || Boolean(report) || profiles.length === 0}
-          onValueChange={(value) => {
-            setProfileId(value);
-            setError(null);
-          }}
-        >
-          <SelectTrigger
-            aria-labelledby="browser-import-profile-label"
-            className="min-w-0 flex-1 bg-input-field"
+      {browserId &&
+      !report &&
+      !catalogFailed &&
+      summary?.importAvailable &&
+      !summary.recoveryRequired ? (
+        <BrowserImportAccess
+          state={access}
+          applicationName={applicationName}
+          browserName={
+            sources.find((source) => source.browserId === browserId)?.browserName ?? browserId
+          }
+          pending={loading || busy}
+          onRecheck={recheckAccess}
+        />
+      ) : null}
+      {accessGuide && settingsFailed ? (
+        <p role="alert" className="text-xs text-destructive">
+          {t('settings.browserImport.permission.settingsFailed')}
+        </p>
+      ) : null}
+      {access === 'denied' && rechecked && !loading ? (
+        <p role="status" className="text-xs text-muted-foreground">
+          {t('settings.browserImport.permission.stillDenied')}
+        </p>
+      ) : null}
+      {!accessGuide ? (
+        <div className="flex flex-col gap-2">
+          <label id="browser-import-profile-label" className="text-sm text-muted-foreground">
+            {t('settings.browserImport.profile')}
+          </label>
+          <Select
+            value={profileId}
+            disabled={busy || loading || Boolean(report) || profiles.length === 0}
+            onValueChange={(value) => {
+              setProfileId(value);
+              setError(null);
+            }}
           >
-            <SelectValue
-              placeholder={t(
-                loading
-                  ? 'settings.browserImport.loading'
-                  : profiles.length > 0
-                    ? 'settings.browserImport.chooseProfile'
-                    : 'settings.browserImport.noProfiles'
-              )}
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {profiles.map((candidate) => (
-              <SelectItem key={candidate.id} value={candidate.id}>
-                {candidate.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+            <SelectTrigger
+              aria-labelledby="browser-import-profile-label"
+              className="w-full min-w-0 bg-input-field pr-4"
+            >
+              <SelectValue
+                placeholder={t(
+                  loading
+                    ? 'settings.browserImport.loading'
+                    : profiles.length > 0
+                      ? 'settings.browserImport.chooseProfile'
+                      : 'settings.browserImport.noProfiles'
+                )}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {profiles.map((candidate) => (
+                <SelectItem key={candidate.id} value={candidate.id}>
+                  {candidate.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
       {report ? (
         <div
           role="status"
@@ -433,6 +510,11 @@ function ImportSession({
           </CollapsibleContent>
         </Collapsible>
       )}
+      {access === 'readable' && !report ? (
+        <div className="flex justify-end">
+          <InfoTip>{t('settings.browserImport.permission.privacyNote')}</InfoTip>
+        </div>
+      ) : null}
       {summary && !summary.importAvailable ? (
         <p role="alert" className="text-sm text-muted-foreground">
           {t(
@@ -465,20 +547,27 @@ function ImportSession({
           {t(variant === 'panel' ? 'settings.browserImport.notNow' : 'common.cancel')}
         </Button>
       ) : null}
-      <Button
-        onClick={() => (report ? onOpenChange(false) : void runImport())}
-        disabled={!report && importBlocked}
-      >
-        {t(
-          report
-            ? 'settings.browserImport.done'
-            : busy
-              ? 'settings.browserAccounts.importing'
-              : error
-                ? 'settings.browserImport.retry'
-                : 'settings.browserImport.import'
-        )}
-      </Button>
+      {accessGuide && !report ? (
+        <Button disabled={importBlocked} onClick={() => void requestAccess()}>
+          {t('settings.browserImport.permission.openSettings')}
+          <ArrowUpRight className="h-4 w-4" aria-hidden />
+        </Button>
+      ) : (
+        <Button
+          onClick={() => (report ? onOpenChange(false) : void runImport())}
+          disabled={!report && importBlocked}
+        >
+          {t(
+            report
+              ? 'settings.browserImport.done'
+              : busy
+                ? 'settings.browserAccounts.importing'
+                : error
+                  ? 'settings.browserImport.retry'
+                  : 'settings.browserImport.import'
+          )}
+        </Button>
+      )}
     </>
   );
 

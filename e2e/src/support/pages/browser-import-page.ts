@@ -29,17 +29,21 @@ export class BrowserImportPage {
     ).toBeVisible();
   }
 
-  async expectProfilePickerWithoutExplanatoryCopy(): Promise<void> {
+  async expectPermissionGuideBeforeRead(): Promise<void> {
     const dialog = this.page.getByRole('dialog').filter({ hasText: 'Import from your browser' });
-    await expect(dialog.getByRole('heading', { name: 'Import from your browser' })).toBeVisible();
-    await expect(dialog.getByRole('combobox', { name: 'Profile' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Websites' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Import', exact: true })).toBeVisible();
-    const explanatoryCopy = dialog
-      .getByRole('paragraph')
-      .filter({ hasNotText: /^$/u })
-      .and(dialog.locator('xpath=.//p[not(ancestor-or-self::*[@role="alert"])]'));
-    await expect(explanatoryCopy).toHaveCount(0);
+    const openSettings = dialog.getByRole('button', { name: 'Open Settings', exact: true });
+    const unavailable = dialog.getByRole('button', { name: 'Import', exact: true });
+    await expect(openSettings.or(unavailable)).toBeVisible();
+    if (await openSettings.isVisible()) {
+      await expect(
+        dialog.getByRole('heading', { name: 'Bring your sign-ins with you' })
+      ).toBeVisible();
+      await expect(dialog.getByRole('combobox', { name: 'Profile' })).toHaveCount(0);
+    } else {
+      await expect(unavailable).toBeDisabled();
+      await expect(dialog.getByRole('combobox', { name: 'Profile' })).toBeDisabled();
+    }
   }
 
   async closeWithoutImporting(): Promise<void> {

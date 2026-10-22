@@ -1,6 +1,7 @@
 # Molly Graphic Design Workbench
 
 Status: draft
+Previous approval: [2026-10-22 font sample rows](../.github/spec-approvals.md#2026-10-22-font-sample-rows-in-molly_view_image)
 Previous approval: [2026-10-11 whole-profile browser import](../.github/spec-approvals.md#2026-10-11-whole-profile-browser-import)
 Previous approval: [2026-10-08 sign-in-first website accounts](../.github/spec-approvals.md#2026-10-08-sign-in-first-website-accounts)
 Previous approval: [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
@@ -137,8 +138,8 @@ and delivered dimensions/bytes; overwide rows are uniformly reduced and reported
 A font render failure fails the whole call. Missing-face detection combines fallback
 bitmap comparison with font-name-table verification: Pango can fall back to the
 supplied file itself, so equal bitmaps alone cannot prove a missing face, and
-individual glyph fallback is not ruled out. This capability revision remains draft
-pending human approval of the revision.
+individual glyph fallback is not ruled out. The owner approved this capability revision on 2026-10-22
+([record](../.github/spec-approvals.md#2026-10-22-font-sample-rows-in-molly_view_image)).
 
 ## Built-in image tools
 

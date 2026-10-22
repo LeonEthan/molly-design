@@ -133,3 +133,15 @@ detail pages for rejected candidates. Options are exactly three; when the user
 asks the Agent to decide, it creates one recommended option and continues
 reproducing it in the same turn. `graphic-design-platform` stays draft because
 its current draft also carries unrelated revisions awaiting separate approval.
+
+## 2026-10-22 font sample rows in molly_view_image
+
+The owner approved the English and Chinese `graphic-design-platform` revision
+that lets `molly_view_image` render `fonts` with `text` under an optional
+reference region, introduced on
+[PR #231](https://github.com/LeonEthan/molly-design/pull/231) at commit
+`2ad2fc61` for [#223](https://github.com/LeonEthan/molly-design/issues/223).
+Font files are limited to the session workdir and platform system font
+directories, rows share one ink height, and missing-face detection is
+best-effort. This approves that revision only; the Spec's other draft
+revisions remain unapproved, so its status stays draft.

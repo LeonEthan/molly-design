@@ -121,6 +121,25 @@ The [generative layered design task](generative-layered-design-workflow.md) defi
 
 An Agent may render the YAML artwork projection through the existing `molly_render_preview`, then view it with an actually available image-reading tool and keep editing. The app does not require fetching images through result cards, nor equate render success with the model having read the image; when the preview tool is absent, the app only states the capability is unavailable and does not declare all visual review failed on the Agent's behalf. An optional finalize script is not a mandatory write order or a file-publish transaction.
 
+Design sessions also expose read-only `molly_view_image`, independently of a connected
+desktop, for an image, an original-pixel region or up to nine numbered images in the
+Session workdir or render-preview directory. It returns a JPEG with a long edge at
+most 1280 px plus original dimensions, bytes and coordinate conversion metadata.
+Paths are checked after realpath, symlink escapes and decode failures are refused,
+and source files remain unchanged. The same tool accepts `fonts` with `text` to
+compare up to eight font files rendering identical literal copy, optionally under a
+`path`/`region` reference. Fonts must be regular `.ttf`/`.otf`/`.ttc` files resolving
+inside the Session workdir or platform system font directories; preview directories
+do not grant font access. Rows are trimmed to ink, flattened on white and normalized
+to the reference ink height clamped to 48–120 px (96 px without a reference), labeled
+`R` and numbers. Metadata includes ink dimensions, reference-relative width ratios
+and delivered dimensions/bytes; overwide rows are uniformly reduced and reported.
+A font render failure fails the whole call. Missing-face detection combines fallback
+bitmap comparison with font-name-table verification: Pango can fall back to the
+supplied file itself, so equal bitmaps alone cannot prove a missing face, and
+individual glyph fallback is not ruled out. This capability revision remains draft
+pending human approval of the revision.
+
 ## Built-in image tools
 
 Molly's built-in MCP offers generate and edit, reusing the existing image connection, session permissions, transport and workspace asset saving. The user configures the URL, Key and required model; the product sets no default model, guesses no aliases and switches nothing silently. Existing user configurations keep their explicitly saved values, and an empty model is no longer auto-filled.

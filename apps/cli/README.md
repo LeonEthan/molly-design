@@ -66,6 +66,32 @@ is null and both image readiness flags are false. Coding or unknown sessions
 receive no scope and no viewer. The embedded Agent declares the viewer directly
 alongside `molly_render_preview` through the existing per-tool MCP exposure rules;
 it does not require discovering the general Molly codemode namespace first.
+The viewer also accepts `fonts: [{ file, face }]` (one to eight absolute
+`.ttf`/`.otf`/`.ttc` files) with `text` (1–60 characters). Supply `path` and
+optionally `region` to put a reference crop above the font rows. Image grid
+`paths` is exclusive with font mode; `text` is valid only with `fonts`.
+Font files must resolve to regular files in the Session workdir or the platform
+font directories: macOS `/System/Library/Fonts`, `/Library/Fonts`, `~/Library/Fonts`;
+Windows `%WINDIR%\Fonts`, `%LOCALAPPDATA%\Microsoft\Windows\Fonts`;
+Linux `/usr/share/fonts`, `/usr/local/share/fonts`, `~/.local/share/fonts`, `~/.fonts`.
+Preview directories do not grant font access; symlink escapes are refused.
+
+Pango renders escaped literal text through sharp's `text` and `fontfile` input.
+Rows are trimmed to ink, flattened on white and normalized to the reference ink
+height clamped to 48–120 px (96 px without a reference). The sheet labels the
+reference `R` and fonts `1..n`, with 8 px gaps and a 32 px label strip. Metadata
+reports normalized `inkWidth`/`inkHeight`, the reference-relative `widthRatio`,
+text and delivered JPEG dimensions/bytes. Rows exceeding the 1280 px sheet width
+are uniformly reduced and report `downscaled` and delivered ink dimensions;
+ratios retain the normalized widths. No reference means no `widthRatio`.
+A render failure fails the whole call. The missing-face bitmap probe is
+supplemented with SFNT/TTC name verification because Pango can use the supplied
+file itself as its fallback; matching bitmaps alone cannot prove a missing face.
+This does not verify individual glyph fallback or prove Pango's chosen face.
+
+See the [font-row implementation record](../../.agents/notes/implemented/feature/2026-10-22-view-image-font-rows.md)
+for the fallback limitation and fixture provenance.
+
 See the [discovery regression record](../../.agents/notes/implemented/bug-fix/2026-10-21-design-viewer-exposure.md)
 for evidence and verification limits.
 

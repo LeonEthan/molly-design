@@ -367,3 +367,24 @@ Both picked a visually close Avenir Next Condensed face and produced close side-
 Compared with Round 4 C, Round 5 run 1 was faster overall than C1 (7.7 vs 10.5 min) but had a later first preview (5.9 vs 2.7 min); run 2 was slower than C2 (14.4 vs 5.2 min) and had a later first preview (6.6 vs 3.9 min). Tool/bash and helper-use counts were not retained per Round 4 run, so no count comparison is available. Round 4 and Round 5 both completed both runs within 20 minutes, but all four C runs still swept type choices. Two samples per round, one machine, and a regenerated synthetic fixture limit the comparison; the side-by-side images allow the owner to judge visual quality.
 
 Artifacts: `e2e/artifacts/ab-223-r5/run-1/` and `e2e/artifacts/ab-223-r5/run-2/` (reference, final render, side-by-side, `design.yaml`, runtime/session metadata, screen capture, local trace, and captured transcript; run 2 also retains `receipt.json`). Run 1's committed receipt was confirmed before harness cleanup, but its temporary receipt file was not retained. The transcripts and traces are ignored local evidence and must not be committed.
+
+## Round 6 (#223 C, PR #231, f03dd539)
+
+Status: blocked before run 1; neither case C run started. The requested fixture was copied byte-for-byte from Round 5 run 1 into both Round 6 run directories. The local Electron app rebuilt from `f03dd539`. `start:local` reached “starting electron app…” but did not leave an observable Molly window or process. Direct Electron launch aborted with `SIGABRT`; macOS `open` returned `kLSNoLaunchPermissionErr` (“managed networks”). No prompt was sent and no paid model call was made. The 20-minute run clocks therefore never began.
+
+| Metric | Round 5 run 1 | Round 5 run 2 | Round 6 run 1 | Round 6 run 2 |
+| --- | --- | --- | --- | --- |
+| 20-minute rule | Pass | Pass | Not run | Not run |
+| Completed / total | 7m 40.6s | 14m 26.6s | — | — |
+| First preview | 5m 56.6s | 6m 38.6s | — | — |
+| Tool calls / bash calls (structured Pi JSONL) | 75 / 53 | 112 / 77 | — | — |
+| Preview renders | 3 | 6 | — | — |
+| `reference-pack.mjs measure` | 0 | 3 | — | — |
+| `font-catalog.mjs match` (calls; `--family` use) | 3; no | 1; no | — | — |
+| `molly_view_image` with `fonts` | 1 | 5 | — | — |
+| Avenir Next Condensed in first match output | Yes — ranks 2–3 for `BLUE` | No — first output ranks Futura Condensed ExtraBold and lists Avenir Black, not Avenir Next Condensed | — | — |
+| Custom measuring/font-comparison scripts | Yes — Python/Pillow candidate-font and size probes | Yes — continued font comparisons | Not assessed | Not assessed |
+| Picked faces and `fontSize` / `letterSpacing` by text line | `BLUE` 243 / −5; `HOUR` 243 / −6; `SESSIONS` 87.6 / 13; `LIVE JAZZ` 62.1 / 8.25; `EVERY THURSDAY 9PM` 38.1 / 5.41; `THE LANTERN ROOM` 35.3 / 4.75. Faces: Poster Sans (700) and Poster Sans Demi (600). | `BLUE` 244.35 / −5.6; `HOUR` 244.35 / −6.6; `SESSIONS` 88.98 / 12.4; `LIVE JAZZ` 62.85 / 7.97; `EVERY THURSDAY 9PM` 40.96 / 4; `THE LANTERN ROOM` 38.14 / 3.35. Faces: Avenir Next Condensed Bold and Demi Bold. | — | — |
+| Pass: completes under 20 minutes, ≤3 previews, no custom scripts | Fail (script sweep) | Fail (script sweep and 6 previews) | Not run | Not run |
+
+Round 6 provides no evidence about whether the measurement and catalog changes reduce the prior sweep: both requested runs were blocked at app launch, before the agent received the prompt. The two copied references remain in `e2e/artifacts/ab-223-r6/run-{1,2}/`; no final renders, side-by-side images, receipts, design YAML, or Pi transcripts were produced. The new `measure`/`match` behavior and the four-step recipe therefore remain unevaluated in this round. Visual match is unjudged.

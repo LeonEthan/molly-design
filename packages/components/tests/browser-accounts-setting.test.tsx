@@ -400,35 +400,74 @@ it('re-enumerates after access is allowed on focus or explicit re-check', async 
   expect(picker('browser-import-profile-label').textContent).toBe('Designer');
 });
 
-it('guides a denied copy like a denied listing and re-lists on focus', async () => {
-  bridge.getImportProfiles.mockResolvedValue(listed(several));
-  bridge.importBrowserAccount.mockResolvedValueOnce({ ok: false, error: 'source-access-denied' });
-  await act(async () => root.render(<BrowserAccountsSetting />));
-  await openImport();
-  await choose('browser-import-profile-label', 'Studio');
-  await act(async () => button(zh['settings.browserImport.import']).click());
-  expect(dialog().querySelector('[role="alert"]')).toBeNull();
-  expect(dialog().textContent).toContain(
-    zh['settings.browserImport.permission.deniedTitle'].replace('{{browser}}', 'Chrome')
-  );
-  expect(picker('browser-import-profile-label')).toBeNull();
-  expect(button(zh['settings.browserImport.permission.openSettings']).disabled).toBe(false);
-  await act(async () => {
-    window.dispatchEvent(new Event('focus'));
-  });
-  expect(picker('browser-import-profile-label').textContent).toBe(
-    zh['settings.browserImport.chooseProfile']
-  );
-  expect(dialog().querySelector('[role="alert"]')).toBeNull();
-});
+it.each(['panel', 'dialog'])(
+  'keeps the %s copy denial actionable until Settings opens, then recovers without importing',
+  async (surface) => {
+    const imports: ElectronBrowserAccountImportInput[] = [];
+    const opened: string[] = [];
+    bridge.getImportProfiles.mockResolvedValue(listed(several));
+    bridge.importBrowserAccount.mockImplementation(
+      async (input: ElectronBrowserAccountImportInput) => {
+        imports.push(input);
+        return imports.length === 1 ? { ok: false, error: 'source-access-denied' } : result;
+      }
+    );
+    bridge.openImportSettings.mockImplementation(async () => {
+      opened.push('settings');
+      return { opened: true };
+    });
+    await act(async () =>
+      root.render(
+        surface === 'panel' ? (
+          <BrowserAccountImportPanel onClose={() => undefined} />
+        ) : (
+          <BrowserAccountsSetting />
+        )
+      )
+    );
+    if (surface === 'dialog') await openImport(false);
+    await act(async () => button(zh['settings.browserImport.permission.openSettings']).click());
+    await choose('browser-import-profile-label', 'Studio');
+    await act(async () => button(zh['settings.browserImport.import']).click());
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    await act(async () => button(zh['settings.browserImport.permission.recheck']).click());
+    expect(picker('browser-import-profile-label')).toBeNull();
+    expect(document.body.textContent).toContain(
+      zh['settings.browserImport.permission.deniedTitle'].replace('{{browser}}', 'Chrome')
+    );
+    expect(opened).toEqual([]);
+    await act(async () => button(zh['settings.browserImport.permission.openSettings']).click());
+    expect(opened).toEqual(['settings']);
+    expect(picker('browser-import-profile-label')).toBeNull();
+    await act(async () => nativeForeground?.(true));
+    expect(picker('browser-import-profile-label').textContent).toBe(
+      zh['settings.browserImport.chooseProfile']
+    );
+    expect(button(zh['settings.browserImport.import']).disabled).toBe(true);
+    expect(imports.map((input) => input.profileId)).toEqual(['opaque-studio']);
+    await choose('browser-import-profile-label', 'Studio');
+    await act(async () => button(zh['settings.browserImport.import']).click());
+    expect(imports.map((input) => input.profileId)).toEqual(['opaque-studio', 'opaque-studio']);
+    expect(button(zh['settings.browserImport.done'])).toBeTruthy();
+  }
+);
 
-it('re-lists after a denied copy without automatically retrying cookie import', async () => {
+it('retains the copy denial when Settings fails to open and lets the user retry', async () => {
   bridge.getImportProfiles.mockResolvedValue(listed(one));
   bridge.importBrowserAccount.mockResolvedValueOnce({ ok: false, error: 'source-access-denied' });
   await act(async () => root.render(<BrowserAccountsSetting />));
   await openImport();
   await act(async () => button(zh['settings.browserImport.import']).click());
+  bridge.openImportSettings.mockResolvedValue({ opened: false });
+  await act(async () => button(zh['settings.browserImport.permission.openSettings']).click());
+  expect(dialog().querySelector('[role="alert"]')?.textContent).toContain(
+    zh['settings.browserImport.permission.settingsFailed']
+  );
+  await act(async () => nativeForeground?.(true));
   expect(picker('browser-import-profile-label')).toBeNull();
+  bridge.openImportSettings.mockResolvedValue({ opened: true });
+  await act(async () => button(zh['settings.browserImport.permission.openSettings']).click());
+  expect(dialog().querySelector('[role="alert"]')).toBeNull();
   await act(async () => button(zh['settings.browserImport.permission.recheck']).click());
   expect(picker('browser-import-profile-label').textContent).toBe('Designer');
 });

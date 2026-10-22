@@ -79,6 +79,7 @@ function ImportSession({
   const live = useRef(true);
   const catalogRequest = useRef(0);
   const refreshing = useRef<number | null>(null);
+  const copyAccessDenied = useRef(false);
   const accessRef = useRef(access);
   accessRef.current = access;
   const browserRef = useRef<AccountImportBrowserId | null>(null);
@@ -101,9 +102,12 @@ function ImportSession({
         const result = await bridge.getImportProfiles(target, operationId);
         if (!live.current || catalogRequest.current !== request) return undefined;
         if (result.ok) {
-          setAccess('readable');
-          setProfiles(result.profiles);
-          if (result.profiles.length === 1) setProfileId(result.profiles[0]!.id);
+          if (copyAccessDenied.current) denyAccess();
+          else {
+            setAccess('readable');
+            setProfiles(result.profiles);
+            if (result.profiles.length === 1) setProfileId(result.profiles[0]!.id);
+          }
         } else if (result.error === 'source-access-denied') {
           denyAccess();
         } else if (result.error !== 'cancelled') {
@@ -161,6 +165,7 @@ function ImportSession({
 
   const switchBrowser = (target: AccountImportBrowserId) => {
     ++catalogRequest.current;
+    copyAccessDenied.current = false;
     setBrowserId(target);
     setProfiles([]);
     setProfileId('');
@@ -173,11 +178,16 @@ function ImportSession({
 
   const requestAccess = async () => {
     setSettingsFailed(false);
-    const result = await loadSources(true);
-    if (!live.current || !result || result.ok || result.error !== 'source-access-denied') return;
+    if (!copyAccessDenied.current) {
+      const result = await loadSources(true);
+      if (!live.current || !result || result.ok || result.error !== 'source-access-denied') return;
+    }
     try {
       const opened = await bridge?.openImportSettings();
-      if (live.current) setSettingsFailed(!opened?.opened);
+      if (live.current) {
+        if (opened?.opened) copyAccessDenied.current = false;
+        setSettingsFailed(!opened?.opened);
+      }
     } catch (cause) {
       console.error('Failed to open browser access settings', cause);
       if (live.current) setSettingsFailed(true);
@@ -274,8 +284,10 @@ function ImportSession({
       else if (result.error === 'profile-changed') {
         setError(result.error);
         await listProfiles(browserId, catalogRequest.current);
-      } else if (result.error === 'source-access-denied') denyAccess();
-      else setError(result.error);
+      } else if (result.error === 'source-access-denied') {
+        copyAccessDenied.current = true;
+        denyAccess();
+      } else setError(result.error);
     } catch (cause) {
       console.error('Browser account import failed', cause);
       if (live.current && operation.current === operationId) setError('unavailable');

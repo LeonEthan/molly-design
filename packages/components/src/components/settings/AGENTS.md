@@ -21,10 +21,10 @@ Preserve historical catalog fields when editing unrelated values.
 
 ## Layout and components
 
-- Website accounts and onboarding share `BrowserAccountImportDialog`: explain access
-  before listing; Open Settings attempts metadata access, then opens the fixed main-owned
-  pane only on denial. Use the app name. Denial guides; focus/foreground
-  and explicit recheck only list profiles, never import cookies. Distinguish empty catalogs.
+- Website accounts/onboarding share `BrowserAccountImportDialog`: explain before listing.
+  Open Settings attempts metadata, then opens the fixed main-owned pane on denial.
+  Keep copy denial until the pane opens; metadata success alone cannot clear it.
+  Use the app name. Return/recheck lists only; never import cookies. Distinguish empty.
   One profile shows its name; several require a pick. Keep cancellation/results.
 - The shared website catalog starts collapsed and fully selected. Settings keep one line,
   Import, Clear and per-site counts. Clear covers all Molly website data; preserve

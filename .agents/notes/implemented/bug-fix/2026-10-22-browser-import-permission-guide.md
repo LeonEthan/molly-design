@@ -119,3 +119,32 @@ the explanation and requires the explicit access action. Retries after an explai
 profile read retain their existing listing behavior. This final one-line control-flow
 correction is covered by the red/green regression and full checks; the signed Preview
 screenshots predate it and cover the unchanged normal access and recovery paths.
+
+## PR review follow-up
+
+PR #229 identified two gaps in the first revision. Both Spec translations still
+contained the superseded silent-denial paragraph beside the new guide. They now
+state one permission flow and distinguish continuing an already pending native
+read from starting a new import after a settings visit. The historical October 14
+note remains historical; the current contract links to this revision.
+
+Profile metadata can be readable even when opening the Cookies database returns
+`source-access-denied`. The shared import session now retains that copy-stage
+denial while focus/foreground and explicit metadata rechecks run. Open Settings
+uses the observed denial directly, without letting another successful listing
+bypass Files & Folders. Only a successful settings launch releases that retained
+reason; launch failure keeps the guide and retry available. Returning or rechecking
+then restores profile choices, and cookie reading still needs a new explicit Import.
+Switching source browsers clears the source-specific retained denial.
+
+This adapts the existing import session, denial guide and main-owned settings action;
+no new native probe, IPC contract or persistent permission state is needed. The two
+old renderer cases assumed metadata success could clear copy denial. Their
+replacements reproduced three failures before the fix and now cover both panel and
+dialog, metadata-only foreground/recheck, successful settings navigation, launch
+failure/retry, unselected multiple profiles and explicit import retry. All 43 targeted
+browser-import/readiness tests pass. Full `pnpm check`, `pnpm format`, scoped
+Prettier and `pnpm run docs check` also pass. Pre-existing dirty files were preserved
+byte-for-byte. The copy-time denial is a deterministic fixture;
+the earlier signed Preview screenshots and acceptance do not establish this new
+failure/recovery case in a native package.

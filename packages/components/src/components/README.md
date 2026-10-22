@@ -85,7 +85,10 @@ clicking it reopens the same import dialog. Human takeover and MFA
 remain available on ordinary pages; the dedicated sign-in dialog is retired.
 Denied access clears profiles while retaining website choices. Returning to the
 window or explicit recheck refreshes profiles without reading cookies; Import stays
-unavailable until an actual profile is selected. Keychain failures remain separate.
+unavailable until an actual profile is selected. A cookie-copy denial stays actionable
+until Files & Folders opens, even if metadata rechecks succeed; a failed settings
+launch retains the guide for retry. Return/recheck can then restore profile choices,
+and only an explicit Import retries cookie reading. Keychain failures remain separate.
 
 Shortcuts settings starts with a fixed canvas reference backed by Bento's existing
 keyboard handlers, followed by editable application commands and desktop global

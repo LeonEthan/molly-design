@@ -2,6 +2,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const CLOUD_PROFILE = Object.freeze({
+  channel: 'stable',
   platform: 'cloud',
   namespace: 'lody',
   dataDirectoryName: '.lody',
@@ -12,6 +13,7 @@ const CLOUD_PROFILE = Object.freeze({
 });
 
 const LOCAL_PROFILE = Object.freeze({
+  channel: 'stable',
   platform: 'local',
   namespace: 'molly',
   dataDirectoryName: '.molly',
@@ -19,6 +21,17 @@ const LOCAL_PROFILE = Object.freeze({
   desktopProductName: 'Molly',
   desktopAppId: 'dev.molly-design.app',
   localCliHostPort: 17792,
+});
+
+const PREVIEW_PROFILE = Object.freeze({
+  channel: 'preview',
+  platform: 'local',
+  namespace: 'molly-preview',
+  dataDirectoryName: '.molly-preview',
+  desktopProtocol: 'molly-preview',
+  desktopProductName: 'Molly Preview',
+  desktopAppId: 'dev.molly-design.preview',
+  localCliHostPort: 17794,
 });
 
 function resolvePlatformKind(raw) {
@@ -30,8 +43,18 @@ function resolvePlatformKind(raw) {
   );
 }
 
-function getInstallationProfile(platform = resolvePlatformKind((process.env.MOLLY_PLATFORM ?? process.env.LODY_PLATFORM))) {
-  return platform === 'local' ? LOCAL_PROFILE : CLOUD_PROFILE;
+function getInstallationProfile(
+  platform = resolvePlatformKind(process.env.MOLLY_PLATFORM ?? process.env.LODY_PLATFORM),
+  channel = process.env.MOLLY_INSTALLATION_CHANNEL ?? 'stable'
+) {
+  if (channel !== 'stable' && channel !== 'preview') {
+    throw new Error(`Unrecognized MOLLY_INSTALLATION_CHANNEL: ${JSON.stringify(channel)}`);
+  }
+  return platform === 'cloud'
+    ? CLOUD_PROFILE
+    : channel === 'preview'
+      ? PREVIEW_PROFILE
+      : LOCAL_PROFILE;
 }
 
 function getMollyDataDir(platform, homeDir = os.homedir()) {

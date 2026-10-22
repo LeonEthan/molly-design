@@ -4,16 +4,18 @@ import path from 'node:path';
 import { resolvePlatformKind, type PlatformKind } from '../platform-kind';
 
 export type InstallationProfile = {
+  channel: 'stable' | 'preview';
   platform: PlatformKind;
-  namespace: 'lody' | 'molly';
-  dataDirectoryName: '.lody' | '.molly';
-  desktopProtocol: 'lody' | 'molly-design';
-  desktopProductName: 'Lody' | 'Molly';
-  desktopAppId: 'ai.lody.desktop' | 'dev.molly-design.app';
-  localCliHostPort: 17_788 | 17_792;
+  namespace: 'lody' | 'molly' | 'molly-preview';
+  dataDirectoryName: '.lody' | '.molly' | '.molly-preview';
+  desktopProtocol: 'lody' | 'molly-design' | 'molly-preview';
+  desktopProductName: 'Lody' | 'Molly' | 'Molly Preview';
+  desktopAppId: 'ai.lody.desktop' | 'dev.molly-design.app' | 'dev.molly-design.preview';
+  localCliHostPort: 17_788 | 17_792 | 17_794;
 };
 
 const CLOUD_PROFILE: InstallationProfile = {
+  channel: 'stable',
   platform: 'cloud',
   namespace: 'lody',
   dataDirectoryName: '.lody',
@@ -24,6 +26,7 @@ const CLOUD_PROFILE: InstallationProfile = {
 };
 
 const LOCAL_PROFILE: InstallationProfile = {
+  channel: 'stable',
   platform: 'local',
   namespace: 'molly',
   dataDirectoryName: '.molly',
@@ -33,6 +36,17 @@ const LOCAL_PROFILE: InstallationProfile = {
   localCliHostPort: 17_792,
 };
 
+const PREVIEW_PROFILE: InstallationProfile = {
+  channel: 'preview',
+  platform: 'local',
+  namespace: 'molly-preview',
+  dataDirectoryName: '.molly-preview',
+  desktopProtocol: 'molly-preview',
+  desktopProductName: 'Molly Preview',
+  desktopAppId: 'dev.molly-design.preview',
+  localCliHostPort: 17_794,
+};
+
 /**
  * Returns the immutable installation profile selected at process assembly.
  * Invalid values fail before any state path or IPC endpoint is used.
@@ -40,9 +54,17 @@ const LOCAL_PROFILE: InstallationProfile = {
 export function getInstallationProfile(
   platform: PlatformKind = resolvePlatformKind(
     process.env.MOLLY_PLATFORM ?? process.env.LODY_PLATFORM
-  )
+  ),
+  channel: string = process.env.MOLLY_INSTALLATION_CHANNEL ?? 'stable'
 ): InstallationProfile {
-  return platform === 'local' ? LOCAL_PROFILE : CLOUD_PROFILE;
+  if (channel !== 'stable' && channel !== 'preview') {
+    throw new Error(`Unrecognized MOLLY_INSTALLATION_CHANNEL: ${JSON.stringify(channel)}`);
+  }
+  return platform === 'cloud'
+    ? CLOUD_PROFILE
+    : channel === 'preview'
+      ? PREVIEW_PROFILE
+      : LOCAL_PROFILE;
 }
 
 /** Root for process-owned durable state. Callers may inject a home in tests. */

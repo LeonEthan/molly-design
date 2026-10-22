@@ -24,6 +24,37 @@ afterEach(() => {
 });
 
 describe('installation profile', () => {
+  it('isolates Preview state and endpoints with TypeScript/CommonJS parity', () => {
+    vi.stubEnv('MOLLY_INSTALLATION_CHANNEL', 'preview');
+    vi.stubEnv('MOLLY_DATA_DIR', undefined);
+    vi.stubEnv('LODY_DATA_DIR', undefined);
+    const preview = getInstallationProfile('local');
+    const stable = getInstallationProfile('local', 'stable');
+    expect(preview.desktopAppId).not.toBe(stable.desktopAppId);
+    expect(preview.desktopProtocol).not.toBe(stable.desktopProtocol);
+    expect(getMollyDataDir('local', '/home/alice')).toBe('/home/alice/.molly-preview');
+    expect(getLocalWorkspaceCatalogPath('local')).toContain('.molly-preview');
+    expect(getLocalControlSocketPath('local')).toContain('molly-preview-control');
+    expect(getLocalLoroDataPlaneSocketPath('local')).toContain('molly-preview-loro-data-plane');
+    const endpoint = getLocalCliHostEndpoint('local');
+    expect(endpoint).toMatchObject(
+      process.platform === 'win32'
+        ? { kind: 'pipe', path: expect.stringContaining('molly-preview-agent-host') }
+        : { kind: 'tcp', port: 17794 }
+    );
+    const commonJs = require('../src/node/installation-profile.cjs');
+    expect(commonJs.getInstallationProfile('local')).toEqual(preview);
+    expect(commonJs.getInstallationProfile('local', 'stable')).toEqual(stable);
+    expect(commonJs.getMollyDataDir('local', '/home/alice')).toBe(
+      getMollyDataDir('local', '/home/alice')
+    );
+    const commonHost = require('../src/node/local-cli-host-lease.cjs');
+    expect(commonHost.getLocalCliHostEndpoint('local')).toEqual(endpoint);
+    expect(getInstallationProfile('cloud').namespace).toBe('lody');
+    vi.stubEnv('MOLLY_INSTALLATION_CHANNEL', 'typo');
+    expect(() => getInstallationProfile('local')).toThrow('MOLLY_INSTALLATION_CHANNEL');
+    expect(() => commonJs.getInstallationProfile('local')).toThrow('MOLLY_INSTALLATION_CHANNEL');
+  });
   it('keeps cloud defaults backward compatible and gives local a disjoint namespace', () => {
     expect(getInstallationProfile('cloud')).toMatchObject({
       namespace: 'lody',

@@ -35,6 +35,12 @@
 //       overlay.png (B at 50% over A) and light-dark.png (each image over
 //       white and black), for visual review.
 //
+//   measure <image.png> <x,y,w,h>
+//       The region holds one or more lines of one text style. Prints one
+//       entry per line: ink bounds, baseline, x-height, cap/ascender height,
+//       descender depth, dominant stroke width and ink/background colors.
+//       Coordinates are original-image pixels. PNG only.
+//
 // Format support: PNG (8-bit gray/RGB/RGBA/palette, non-interlaced) is fully
 // decoded; JPEG/GIF/BMP/WEBP report dimensions in meta.json but raster
 // artifacts (grid/bands/palette/crop/alpha/trim/compare) require PNG — convert
@@ -783,6 +789,233 @@ function compare(aPath, bPath, outDir) {
   );
 }
 
+// ---- measure: one text style's line metrics from a region ----
+
+const MEASURE_INK_DISTANCE = 48;
+
+function colorDistance(a, b) {
+  return Math.sqrt(
+    (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
+  );
+}
+
+/** Most frequent 16-level-quantized color on the region's one-pixel border. */
+function borderBackground(rgb, imageWidth, x, y, w, h) {
+  const counts = new Map();
+  const sample = (px, py) => {
+    const d = (py * imageWidth + px) * 3;
+    const key = `${rgb[d] >> 4},${rgb[d + 1] >> 4},${rgb[d + 2] >> 4}`;
+    const entry = counts.get(key);
+    if (entry === undefined) counts.set(key, { count: 1, sum: [rgb[d], rgb[d + 1], rgb[d + 2]] });
+    else {
+      entry.count += 1;
+      entry.sum[0] += rgb[d];
+      entry.sum[1] += rgb[d + 1];
+      entry.sum[2] += rgb[d + 2];
+    }
+  };
+  for (let px = x; px < x + w; px++) {
+    sample(px, y);
+    if (h > 1) sample(px, y + h - 1);
+  }
+  for (let py = y + 1; py < y + h - 1; py++) {
+    sample(x, py);
+    if (w > 1) sample(x + w - 1, py);
+  }
+  let best = null;
+  for (const entry of counts.values()) {
+    if (best === null || entry.count > best.count) best = entry;
+  }
+  return best === null ? null : best.sum.map((v) => Math.round(v / best.count));
+}
+
+function hexTriple(color) {
+  return `#${color.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** Longest ink run whose length stays within one pixel of the most common run length. */
+function strokeWidth(mask, w, rowTop, rowBottom) {
+  const counts = new Map();
+  const runs = [];
+  for (let y = rowTop; y <= rowBottom; y++) {
+    let start = -1;
+    for (let x = 0; x <= w; x++) {
+      const ink = x < w && mask[y * w + x] === 1;
+      if (ink && start < 0) start = x;
+      if (!ink && start >= 0) {
+        const len = x - start;
+        counts.set(len, (counts.get(len) ?? 0) + 1);
+        runs.push(len);
+        start = -1;
+      }
+    }
+  }
+  let mode = 0;
+  let modeCount = 0;
+  for (const [len, count] of counts) {
+    if (count > modeCount) {
+      mode = len;
+      modeCount = count;
+    }
+  }
+  let best = 0;
+  for (const len of runs) {
+    if (Math.abs(len - mode) <= 1 && len > best) best = len;
+  }
+  return best;
+}
+
+function measure(imagePath, boxArg) {
+  const buf = readFileSync(imagePath);
+  const sniffed = sniffImage(buf);
+  if (sniffed.format !== 'PNG') {
+    fail(`measure needs a PNG reference (got ${sniffed.format}); convert to PNG first`);
+  }
+  const decoded = decodePng(buf);
+  const parts = boxArg.split(',').map((v) => Number.parseInt(v, 10));
+  if (parts.length !== 4 || parts.some((v) => !Number.isFinite(v))) {
+    fail('measure: region must be x,y,w,h integers');
+  }
+  const [x, y, w, h] = parts;
+  if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > decoded.width || y + h > decoded.height) {
+    fail(`measure: [${x},${y},${w},${h}] outside image ${decoded.width}x${decoded.height}`);
+  }
+  const background = borderBackground(decoded.rgb, decoded.width, x, y, w, h);
+  if (background === null) fail('measure: region has no border pixels');
+
+  const mask = new Uint8Array(w * h);
+  let inkPixels = 0;
+  let inkSum = [0, 0, 0];
+  for (let row = 0; row < h; row++) {
+    for (let col = 0; col < w; col++) {
+      const d = ((y + row) * decoded.width + (x + col)) * 3;
+      const color = [decoded.rgb[d], decoded.rgb[d + 1], decoded.rgb[d + 2]];
+      if (colorDistance(color, background) > MEASURE_INK_DISTANCE) {
+        mask[row * w + col] = 1;
+        inkPixels += 1;
+        inkSum[0] += color[0];
+        inkSum[1] += color[1];
+        inkSum[2] += color[2];
+      }
+    }
+  }
+  if (inkPixels === 0) fail('measure: no ink pixels (region is all background)');
+  const ink = inkSum.map((v) => Math.round(v / inkPixels));
+
+  const rowInk = new Array(h);
+  for (let row = 0; row < h; row++) {
+    let count = 0;
+    for (let col = 0; col < w; col++) count += mask[row * w + col];
+    rowInk[row] = count;
+  }
+  const lines = [];
+  let row = 0;
+  while (row < h) {
+    while (row < h && rowInk[row] === 0) row += 1;
+    if (row >= h) break;
+    const top = row;
+    let lastInkRow = row;
+    while (row < h && row - lastInkRow < 2) {
+      if (rowInk[row] > 0) lastInkRow = row;
+      row += 1;
+    }
+    lines.push({ top, bottom: lastInkRow });
+  }
+
+  const out = [];
+  for (const [index, line] of lines.entries()) {
+    const heightRows = line.bottom - line.top + 1;
+    const rowSpan = (r) => {
+      let col0 = -1;
+      let col1 = -1;
+      for (let col = 0; col < w; col++) {
+        if (mask[r * w + col]) {
+          if (col0 < 0) col0 = col;
+          col1 = col;
+        }
+      }
+      return col1 - col0 + 1;
+    };
+    // Rows whose span covers most of the line's ink form the core band;
+    // isolated ascenders and diacritics stay outside it. Scan from the top so
+    // sparse descender rows below the baseline are never merged in.
+    const spans = [];
+    for (let r = line.top; r <= line.bottom; r++) spans.push(rowSpan(r));
+    const spanThreshold = Math.max(...spans) * 0.5;
+    let core = null;
+    for (let i = 0; i < spans.length; i++) {
+      const r = line.top + i;
+      if (spans[i] < spanThreshold) continue;
+      if (core === null) {
+        core = { top: r, bottom: r };
+      } else if (r <= core.bottom + 1) {
+        core.bottom = r;
+      } else {
+        break;
+      }
+    }
+    // Ascenders and capitals rise from the core without an empty gap;
+    // descenders hang below it.
+    while (core.top > line.top && rowInk[core.top - 1] > 0) core.top -= 1;
+    const capHeight = core.bottom - core.top + 1;
+    const baseline = core.bottom;
+    let descender = 0;
+    for (let r = core.bottom + 1; r <= line.bottom; r++) {
+      if (rowInk[r] > 0) descender = r - core.bottom;
+    }
+    // Density within the core splits the lower-case x-band from the
+    // upper-case/ascender band above it: with both bands present the core
+    // shows a clear density step (weak rows carry well under half the core's
+    // peak density); a uniform line (all caps, all lowercase) stays dense and
+    // reports no x-height.
+    const coreDensity = [];
+    for (let r = core.top; r <= core.bottom; r++) coreDensity.push(rowInk[r] / rowSpan(r));
+    const maxCoreDensity = Math.max(...coreDensity);
+    let weakRows = 0;
+    for (const d of coreDensity) {
+      if (d < 0.5 * maxCoreDensity) weakRows += 1;
+    }
+    let xHeight = null;
+    if (weakRows >= 2 && weakRows * 2 <= coreDensity.length) {
+      // Weak rows cluster above the x-band; the x-band runs from the first
+      // dense row to the baseline.
+      for (let i = 0; i < coreDensity.length; i++) {
+        if (coreDensity[i] >= 0.5 * maxCoreDensity) {
+          const height = core.bottom - (core.top + i) + 1;
+          if (height < capHeight) xHeight = height;
+          break;
+        }
+      }
+    }
+    const ascender = core.top > line.top ? core.top - line.top : null;
+    let left = w;
+    let right = -1;
+    for (let r = line.top; r <= line.bottom; r++) {
+      for (let col = 0; col < w; col++) {
+        if (!mask[r * w + col]) continue;
+        if (col < left) left = col;
+        if (col > right) right = col;
+      }
+    }
+    const stroke = strokeWidth(mask, w, core.top, core.bottom);
+    const inkWidth = right - left + 1;
+    const lineHeight = line.bottom - line.top + 1;
+    let entry =
+      `line ${index + 1}: ink ${x + left},${y + line.top} ${inkWidth}x${lineHeight} | ` +
+      `baseline ${y + baseline} | ` +
+      (xHeight === null ? 'xHeight ?' : `xHeight ${xHeight}`) +
+      ' | ' +
+      (ascender === null ? `capOrAscender ${capHeight}` : `capOrAscender ${ascender}`) +
+      ` | descender ${descender} | stroke ${stroke} | ` +
+      `ink ${hexTriple(ink)} on ${hexTriple(background)}`;
+    const ratios = [];
+    if (xHeight !== null) ratios.push(`x/cap ${(xHeight / capHeight).toFixed(2)}`);
+    if (capHeight > 0 && stroke > 0) ratios.push(`stroke/cap ${(stroke / capHeight).toFixed(2)}`);
+    out.push(ratios.length > 0 ? `${entry}\n  ratios: ${ratios.join('  ')}` : entry);
+  }
+  console.log(out.join('\n'));
+}
+
 // ---- entry ----
 
 const args = process.argv.slice(2);
@@ -796,6 +1029,8 @@ if (args[0] === 'pack' && args.length === 3) {
   trim(args[1], args[2], args.slice(3));
 } else if (args[0] === 'compare' && args.length === 4) {
   compare(args[1], args[2], args[3]);
+} else if (args[0] === 'measure' && args.length === 3) {
+  measure(args[1], args[2]);
 } else {
   console.error(
     [
@@ -805,6 +1040,7 @@ if (args[0] === 'pack' && args.length === 3) {
       '  node reference-pack.mjs alpha <image.png> [--threshold N]',
       '  node reference-pack.mjs trim <image.png> <out.png> [--alpha-above N] [--margin M]',
       '  node reference-pack.mjs compare <a.png> <b.png> <out-dir>',
+      '  node reference-pack.mjs measure <image.png> <x,y,w,h>',
     ].join('\n')
   );
   process.exit(2);

@@ -6,7 +6,16 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -379,6 +388,228 @@ describe('reference-pack.mjs', () => {
     );
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('outside image');
+  });
+});
+
+describe('font-catalog.mjs', () => {
+  // The committed OFL fixture (scripts/fixtures/MollyTestSerif-Regular.ttf) is
+  // copied into an isolated dir per run; sibling faces are derived in-memory.
+  // The catalog cache is redirected per run so tests stay hermetic.
+  const fixtureDir = path.join(textSkillDir, 'scripts', 'fixtures');
+  const fixtureFont = path.join(fixtureDir, 'MollyTestSerif-Regular.ttf');
+  let catalogSeq = 0;
+
+  function setupFontDir(): { dir: string; cacheEnv: NodeJS.ProcessEnv } {
+    const dir = path.join(workdir(), `fonts-${catalogSeq++}`);
+    mkdirSync(dir, { recursive: true });
+    const cache = path.join(dir, 'cache.json');
+    const env = { ...process.env, MOLLY_FONT_CACHE: cache };
+    return { dir, cacheEnv: env };
+  }
+
+  function copyFixture(dir: string, name = 'MollyTestSerif-Regular.ttf'): string {
+    const dest = path.join(dir, name);
+    writeFileSync(dest, readFileSync(fixtureFont));
+    // A pinned mtime keeps the directory fingerprint stable across the calls
+    // in one test, so the second call exercises the cache.
+    utimesSync(dest, new Date('2020-01-01'), new Date('2020-01-01'));
+    return dest;
+  }
+
+  function runCatalog(
+    args: string[],
+    env: NodeJS.ProcessEnv
+  ): { status: number | null; stdout: string; stderr: string } {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(textSkillDir, 'scripts', 'font-catalog.mjs'), ...args],
+      { encoding: 'utf8', env }
+    );
+    return {
+      status: result.status,
+      stdout: result.stdout as string,
+      stderr: result.stderr as string,
+    };
+  }
+
+  it('lists the fixture face with parsed metrics', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    const fontPath = copyFixture(dir);
+    const result = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(result.status, result.stderr).toBe(0);
+    const prefix = `Molly Test Serif | Regular | 400 | 5 | x/cap 0.71 | `;
+    const suffix = `#0 | face "Molly Test Serif"`;
+    expect(result.stdout.trim()).toBe(prefix + realpathSync(fontPath) + suffix);
+  });
+
+  it('ranks a Regular-exact match first and predicts fontSize and spacing', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    const fontPath = copyFixture(dir);
+    // MOLLY advances sum to 2328 upem; at cap 100 the font size is
+    // 100 / 0.72 = 138.9 and the predicted width is 2328 * 138.9 / 1000 = 323.3,
+    // so a measured width of 367 fits with letterSpacing 4.7.
+    const result = runCatalog(
+      ['match', '--text', 'MOLLY', '--width', '367', '--cap', '100', '--dirs', dir],
+      cacheEnv
+    );
+    expect(result.status, result.stderr).toBe(0);
+    const lines = result.stdout.trim().split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe(
+      `1. Molly Test Serif | fontSize 138.9 | letterSpacing 4.7 | score 0.052 | ` +
+        `${realpathSync(fontPath)}#0`
+    );
+    expect(lines[1]).toContain('Next: molly_view_image { fonts: [top rows], text');
+  });
+
+  it('skips faces without cap height and filters uncovered text', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    // NoCap: OS/2 version 1 drops sxHeight/sCapHeight; the H yMax fallback
+    // supplies cap height (720) so the face stays matchable.
+    const source = readFileSync(fixtureFont);
+    const noCap = Buffer.from(source);
+    const numTables = noCap.readUInt16BE(4);
+    for (let i = 0; i < numTables; i++) {
+      const rec = 12 + i * 16;
+      if (noCap.toString('ascii', rec, rec + 4) === 'OS/2') {
+        const offset = noCap.readUInt32BE(rec + 8);
+        noCap.writeUInt16BE(1, offset);
+      }
+    }
+    writeFileSync(path.join(dir, 'NoCap.ttf'), noCap);
+    utimesSync(path.join(dir, 'NoCap.ttf'), new Date('2020-01-01'), new Date('2020-01-01'));
+    const listed = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(listed.status).toBe(0);
+    // The fallback found the H glyph: cap height is known, x-height is not.
+    expect(listed.stdout).toContain('NoCap.ttf#0 | face "Molly Test Serif"');
+    expect(listed.stdout).toContain('x/cap ? |');
+    // A glyph the face does not cover excludes it from match.
+    const uncovered = runCatalog(
+      ['match', '--text', 'MOLLYé', '--width', '300', '--cap', '100', '--dirs', dir],
+      cacheEnv
+    );
+    expect(uncovered.status).toBe(0);
+    expect(uncovered.stdout.trim()).toHaveLength(
+      'Next: molly_view_image { fonts: [top rows], text, path: <reference>, region: <text box> }, pick one, render once.'
+        .length
+    );
+  });
+
+  it('parses TTC collections with per-face indexes', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    // Minimal TTC: header + two copies of the fixture, table offsets rebased.
+    const face = readFileSync(fixtureFont);
+    const header = Buffer.alloc(12 + 8);
+    header.write('ttcf', 0, 'ascii');
+    header.writeUInt32BE(0x00010000, 4);
+    header.writeUInt32BE(2, 8);
+    header.writeUInt32BE(20, 12);
+    header.writeUInt32BE(20 + face.length, 16);
+    const rebase = (buf: Buffer, delta: number): Buffer => {
+      const out = Buffer.from(buf);
+      const numTables = out.readUInt16BE(4);
+      for (let i = 0; i < numTables; i++) {
+        const rec = 12 + i * 16;
+        out.writeUInt32BE(out.readUInt32BE(rec + 8) + delta, rec + 8);
+      }
+      return out;
+    };
+    const ttc = Buffer.concat([header, rebase(face, 20), rebase(face, 20 + face.length)]);
+    writeFileSync(path.join(dir, 'Pair.ttc'), ttc);
+    utimesSync(path.join(dir, 'Pair.ttc'), new Date('2020-01-01'), new Date('2020-01-01'));
+    const result = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(result.status, result.stderr).toBe(0);
+    const lines = result.stdout.trim().split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('Pair.ttc#0');
+    expect(lines[1]).toContain('Pair.ttc#1');
+  });
+
+  it('rejects invalid arguments with a clear error', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    const missing = runCatalog(['match', '--text', 'MOLLY', '--cap', '100', '--dirs', dir], cacheEnv);
+    expect(missing.status).toBe(1);
+    expect(missing.stderr).toContain('match needs --width');
+    const badWeight = runCatalog(
+      ['match', '--text', 'MOLLY', '--width', '100', '--cap', '100', '--weight', '50', '--dirs', dir],
+      cacheEnv
+    );
+    expect(badWeight.status).toBe(1);
+    expect(badWeight.stderr).toContain('--weight');
+    const usage = runCatalog(['bogus'], cacheEnv);
+    expect(usage.status).toBe(2);
+    expect(usage.stderr).toContain('usage:');
+  });
+});
+
+describe('reference-pack.mjs measure', () => {
+  // 120x90 cream. One mixed-case line: x-band rows 16..29 spanning the full
+  // ink width (x-height 14), caps and ascenders rows 4..15, descender band
+  // rows 30..34 (5). A second all-caps line at rows 55..74, stroke 3px.
+  const measurePng = (): Buffer =>
+    encodeTestPng(120, 90, 3, (x, y) => {
+      const stems = (t: number, b: number, w: number, gap: number, x0: number, x1: number) =>
+        y >= t && y <= b && x >= x0 && x <= x1 && (x - x0) % gap < w;
+      const ink =
+        stems(16, 29, 2, 4, 20, 79) ||
+        stems(10, 15, 2, 16, 20, 49) ||
+        stems(4, 9, 2, 16, 20, 49) ||
+        stems(30, 34, 2, 4, 20, 35) ||
+        stems(55, 74, 3, 6, 10, 109);
+      return ink ? [29, 29, 27, 255] : [244, 239, 230, 255];
+    });
+
+  it('reports ink box, baseline, heights, stroke and colors per line', () => {
+    const dir = workdir();
+    const ref = path.join(dir, 'ref.png');
+    writeFileSync(ref, measurePng());
+    const result = run('reference-pack.mjs', ['measure', ref, '0,0,120,90'], replicationSkillDir);
+    expect(result.status, result.stderr).toBe(0);
+    const lines = result.stdout.trim().split('\n');
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toBe(
+      'line 1: ink 20,4 58x31 | baseline 29 | xHeight 14 | capOrAscender 26 | ' +
+        'descender 5 | stroke 2 | ink #1d1d1b on #f4efe6'
+    );
+    expect(lines[1]).toBe('  ratios: x/cap 0.54  stroke/cap 0.08');
+    expect(lines[2]).toContain('line 2: ink 10,55 99x20 | baseline 74 | xHeight ?');
+    expect(lines[2]).toContain('capOrAscender 20 | descender 0 | stroke 3');
+    expect(lines[3]).toBe('  ratios: stroke/cap 0.15');
+  });
+
+  it('measures a sub-region in original image coordinates', () => {
+    const dir = workdir();
+    const ref = path.join(dir, 'ref.png');
+    writeFileSync(ref, measurePng());
+    const result = run('reference-pack.mjs', ['measure', ref, '5,50,110,30'], replicationSkillDir);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('line 1: ink 10,55 99x20 | baseline 74');
+  });
+
+  it('rejects malformed and out-of-bounds regions and non-PNG input', () => {
+    const dir = workdir();
+    const ref = path.join(dir, 'ref.png');
+    writeFileSync(ref, measurePng());
+    const bad = run('reference-pack.mjs', ['measure', ref, '9,9,120,90'], replicationSkillDir);
+    expect(bad.status).toBe(1);
+    expect(bad.stderr).toContain('outside image');
+    const malformed = run('reference-pack.mjs', ['measure', ref, 'bad'], replicationSkillDir);
+    expect(malformed.status).toBe(1);
+    expect(malformed.stderr).toContain('x,y,w,h');
+    const notPng = path.join(dir, 'ref.txt');
+    writeFileSync(notPng, 'not an image');
+    const wrong = run('reference-pack.mjs', ['measure', notPng, '0,0,4,4'], replicationSkillDir);
+    expect(wrong.status).toBe(1);
+    expect(wrong.stderr).toContain('needs a PNG');
+  });
+
+  it('fails when the region holds no ink', () => {
+    const dir = workdir();
+    const ref = path.join(dir, 'blank.png');
+    writeFileSync(ref, syntheticPng(32, 32, [200, 200, 200]));
+    const result = run('reference-pack.mjs', ['measure', ref, '0,0,32,32'], replicationSkillDir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('no ink pixels');
   });
 });
 

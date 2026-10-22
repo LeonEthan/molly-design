@@ -34,24 +34,32 @@ so make a PNG analysis copy or use your other image tools. Keep the original ass
 
 ## Fit type
 
-Fit each distinct text style once, with three calls rather than a loop:
+Fit each distinct text style with the same four steps, never a loop:
 
-1. **Measure.** `node scripts/reference-pack.mjs measure <reference.png> <x,y,w,h>`
-   on one line of that style gives its ink box, baseline, x-height,
-   cap/ascender height and stroke.
-2. **Shortlist.** From the `design-text` skill's directory,
-   `node scripts/font-catalog.mjs match --text "<the line as shown>" --width <ink width> --cap <cap height> [--x <x-height>] [--weight <guess>]`
-   ranks installed faces and gives each a font size and letter spacing.
-3. **Look once.** Pass the top three to five to `molly_view_image` with `fonts`,
+1. **Measure.** Run `node scripts/reference-pack.mjs measure <reference.png> <x,y,w,h>`
+   on one whole line of that style, with a few pixels of margin. It reports
+   the ink box, cap/ascender height, x-height, stroke, `glyphs` and
+   `glyphInk`. If it warns that ink touches the edge, widen the region and
+   measure again; that is the only repeat.
+2. **Shortlist.** From the `design-text` skill's directory, run
+   `node scripts/font-catalog.mjs match --text "<the line as shown>" --width <ink width> --cap <cap height> --stroke <stroke> --glyphs <glyphs> --glyph-ink <glyphInk> [--x <x-height>]`.
+   It lists one face per family with a font size and letter spacing.
+3. **Look once.** Pass every listed row to `molly_view_image` with `fonts`,
    the same `text`, and the reference `path` with `region` set to that line.
-   Pick the closest row by eye: letter shapes first, then width and weight.
+   Choose the family by letter shapes (terminals, `R`/`G`/`a` forms, round
+   versus square curves), not by width. Then run `match` once more with
+   `--family "<family>"` and the same measurements to get its weight, size
+   and spacing.
+4. **Render once.** Register the face, apply the size and spacing, and render
+   the artwork. Correct size or spacing at most twice, by the ratio the render
+   shows.
 
-Register the picked face, set the size and spacing from the shortlist, and
-render the artwork once. Correct size or spacing at most twice, by the ratio the
-render shows. If no row is close, keep the best one, name the difference in the
-report, and consider image lettering only when the `design-text` skill says the
-copy cannot be native. If `molly_view_image` lacks `fonts`, use the first
-shortlisted face and render once.
+The sheet decides, not the ranking: the shortlist only chooses what you look
+at. Do not compare fonts or sizes with your own scripts or by rendering the
+artwork repeatedly. If no row is close, keep the best one, name the difference
+in the report, and consider image lettering only when the `design-text` skill
+says the copy cannot be native. If `molly_view_image` lacks `fonts`, use the
+first shortlisted face and render once.
 
 Unclear wording, unavailable fonts, hidden geometry and ambiguous layers are
 fidelity limits: preserve what you know and report consequential assumptions.

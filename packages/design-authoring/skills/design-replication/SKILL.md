@@ -61,6 +61,6 @@ Supported non-interlaced 8-bit gray/RGB/RGBA/palette PNG is decoded via
 `node:zlib`; JPEG/GIF/BMP/WEBP report dimensions but raster artifacts require
 PNG. These are optional inspection aids, never gates.
 
-Batch independent measurements: compute several crops, bounds or color samples in one script and print a compact summary, instead of one command per measurement. Look at a detail with `molly_view_image` `region` rather than writing and reading a crop file.
+Batch independent measurements: compute several crops, bounds or color samples in one script and print a compact summary, instead of one command per measurement. Measure text only with `reference-pack.mjs measure`; never write your own glyph, font or size measuring script. Look at a detail with `molly_view_image` `region` rather than writing and reading a crop file.
 
 Do not brute-force a fit: never sweep fonts, sizes, tracking or positions in a search loop to match pixels. Fit type with the "Fit type" recipe in [references/replication.md](references/replication.md): measure, shortlist, view the candidates once, render once.

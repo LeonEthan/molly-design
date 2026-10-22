@@ -69,4 +69,5 @@ and use the optional helper from this skill's directory:
 ```sh
 node scripts/font-prepare.mjs --help
 node scripts/font-catalog.mjs list [--family <substr>] [--cjk]
+node scripts/font-catalog.mjs match --text "<copy>" --width <px> --cap <px> [--stroke <px>] [--glyphs <n> --glyph-ink <px>] [--x <px>] [--family <substr>]
 ```

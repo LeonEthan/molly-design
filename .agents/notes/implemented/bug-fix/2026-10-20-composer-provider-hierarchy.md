@@ -70,6 +70,31 @@ hierarchy, config-selection and picker component suites pass (44 tests).
 Before PR publication, full `pnpm check`, `pnpm format`, and `pnpm run docs check` passed.
 No native desktop or real-model acceptance was run for this follow-up.
 
+## 2026-10-21 follow-up: flat catalog default model submission
+
+[#213](https://github.com/LeonEthan/molly-design/issues/213) exposed a mismatch
+for an ungrouped registry/custom model config selector: the picker displayed the
+first usable model, while submission omitted an empty/invalid value or retained
+the unselected sentinel. Default-model backfill was nested inside the connections
+branch even though the hierarchy resolver also derives defaults for flat catalogs.
+
+The existing backfill now runs after the connections branch, reusing its guards
+and the hierarchy-derived model. Connections-mode model and reasoning normalization
+remain in their original branch. Valid model choices remain unchanged; a complete
+runtime snapshot that omits the model key still owns that omission unless the user
+edits it. The hierarchy resolver already supplies the display default, while the
+submission filter only validates offered values, so adapting backfill avoids new
+state, caller-specific defaults, or changing filter responsibilities.
+
+Eight deterministic submission cases cover absent/empty/sentinel/invalid preferences,
+an invalid runtime value, a valid second model, runtime omission, and a user edit
+over that omission. Five cases failed before the fix. After the fix, the related
+config-selection, hierarchy, and picker suites pass (52 tests). Full `pnpm check`
+passed outside the sandbox after local socket tests hit `listen EPERM` and stalled
+in the restricted run. Changed-file formatting and `pnpm run docs check` passed;
+existing docs size warnings remain. No native desktop or real-model acceptance
+was run for this follow-up.
+
 ## Related
 
 - Supersedes the Agent row in [three-level picker](2026-10-19-model-picker-three-levels.md).

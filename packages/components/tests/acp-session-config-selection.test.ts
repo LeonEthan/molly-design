@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { encodeMollyModelOption, MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
-import { pickComposerProvider } from '../src/lib/composer-provider-hierarchy';
+import {
+  pickComposerProvider,
+  resolveComposerProviderHierarchy,
+} from '../src/lib/composer-provider-hierarchy';
 import {
   EMPTY_ACP_SESSION_USER_CONFIG_EDITS,
   areAcpSessionConfigPreferencesEqual,
@@ -10,6 +13,7 @@ import {
   filterAcpSessionConfigOptionValues,
   overlayComposerProviderSelection,
   resolveAcpSessionConfigSelection,
+  type AcpSessionConfigSelectionInputs,
   type AcpSessionSelectorOptionsInput,
   type AcpSessionUserConfigEdits,
 } from '../src/lib/acp-session-config-selection';
@@ -662,6 +666,95 @@ describe('fenceAcpSessionUserEdits', () => {
       { cliType: 'builtin', agentType: 'molly' }
     );
     expect(resolved.configOptionValues.model).toBe(first);
+  });
+
+  describe('flat model config catalog submission', () => {
+    const options: AcpSessionSelectorOptionsInput = {
+      capabilityAuthority: 'authoritative',
+      modeOptions: [],
+      modelOptions: [],
+      defaultModeId: null,
+      defaultModelId: null,
+      configOptionSelectors: [
+        {
+          configId: 'model',
+          label: 'Model',
+          type: 'select',
+          category: 'model',
+          currentValue: '',
+          options: [
+            { value: MOLLY_UNSELECTED_MODEL, label: 'Select' },
+            { value: 'model-a', label: 'A' },
+            { value: 'model-b', label: 'B' },
+          ],
+        },
+      ],
+    };
+
+    it.each<{
+      name: string;
+      inputs: AcpSessionConfigSelectionInputs;
+      expected: string | undefined;
+    }>([
+      {
+        name: 'missing preference',
+        inputs: { edits: emptyEdits, preferences: {} },
+        expected: 'model-a',
+      },
+      ...['', MOLLY_UNSELECTED_MODEL, 'removed-model', 'model-b'].map((model) => ({
+        name: `stored ${model || 'empty'}`,
+        inputs: { edits: emptyEdits, preferences: { configOptionValues: { model } } },
+        expected: model === 'model-b' ? 'model-b' : 'model-a',
+      })),
+      {
+        name: 'invalid runtime value',
+        inputs: {
+          edits: emptyEdits,
+          preferences: {},
+          runtimePreferences: { configOptionValues: { model: 'removed-model' } },
+        },
+        expected: 'model-a',
+      },
+      {
+        name: 'runtime omission',
+        inputs: {
+          edits: emptyEdits,
+          preferences: { configOptionValues: { model: 'model-b' } },
+          runtimePreferences: { configOptionValues: {} },
+        },
+        expected: undefined,
+      },
+      {
+        name: 'explicit edit over runtime omission',
+        inputs: {
+          edits: { configOptions: { model: 'model-b' } },
+          preferences: {},
+          runtimePreferences: { configOptionValues: {} },
+        },
+        expected: 'model-b',
+      },
+    ])(
+      'submits the displayed model for $name unless the runtime omits it',
+      ({ inputs, expected }) => {
+        const resolved = resolveAcpSessionConfigSelection(inputs, options);
+        const selector = resolved.configOptionSelectors[0]!;
+        expect(selector.type).toBe('select');
+        if (selector.type !== 'select') throw new Error('Expected a model select');
+        const model = resolved.configOptionValues.model;
+        const displayed = resolveComposerProviderHierarchy({
+          modelOptions: selector.options,
+          selectedModelId: typeof model === 'string' ? model : null,
+        });
+        const submitted = filterAcpSessionConfigOptionValues(
+          resolved.configOptionValues,
+          resolved.configOptionSelectors
+        );
+        expect(displayed.mode).toBe('catalog');
+        expect(displayed.modelId).toBe(expected ?? 'model-a');
+        expect(submitted.model).toBe(expected);
+        if (expected !== undefined) expect(submitted.model).toBe(displayed.modelId);
+      }
+    );
   });
 
   it('keeps submit at off when the published ladder is empty but probe options omit off', () => {

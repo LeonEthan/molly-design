@@ -19,7 +19,14 @@
 // location), invalidated by directory mtimes.
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -221,9 +228,7 @@ function cmapSubtables(buf, cmapTable) {
   }
   subtables.sort((a, b) => a.rank - b.rank);
   const seen = new Set();
-  return subtables
-    .filter((s) => !seen.has(s.offset) && seen.add(s.offset))
-    .map((s) => s.offset);
+  return subtables.filter((s) => !seen.has(s.offset) && seen.add(s.offset)).map((s) => s.offset);
 }
 
 /** One codepoint → glyph id through a face's cmap. */
@@ -325,8 +330,7 @@ function parseFace(buf, sfntOffset, file, index) {
       const locaFormat = i16(buf, head.offset + 50);
       const locaOff = loca.offset + (locaFormat === 0 ? 2 * glyph : 4 * glyph);
       if (locaOff + (locaFormat === 0 ? 2 : 4) <= buf.length) {
-        const glyphOffset =
-          locaFormat === 0 ? u16(buf, locaOff) * 2 : u32(buf, locaOff);
+        const glyphOffset = locaFormat === 0 ? u16(buf, locaOff) * 2 : u32(buf, locaOff);
         const start = tables.get('glyf').offset + glyphOffset;
         if (start + 10 <= buf.length) {
           const ymax = i16(buf, start + 8);
@@ -601,12 +605,14 @@ function runMatch(argv) {
       a.face.file.localeCompare(b.face.file) ||
       a.face.index - b.face.index
   );
-  const lines = rows.slice(0, top).map(
-    (row, i) =>
-      `${i + 1}. ${row.face.face} | fontSize ${row.fontSize.toFixed(1)} | ` +
-      `letterSpacing ${row.letterSpacing.toFixed(1)} | score ${row.score.toFixed(3)} | ` +
-      `${row.face.file}#${row.face.index}`
-  );
+  const lines = rows
+    .slice(0, top)
+    .map(
+      (row, i) =>
+        `${i + 1}. ${row.face.face} | fontSize ${row.fontSize.toFixed(1)} | ` +
+        `letterSpacing ${row.letterSpacing.toFixed(1)} | score ${row.score.toFixed(3)} | ` +
+        `${row.face.file}#${row.face.index}`
+    );
   lines.push(
     'Next: molly_view_image { fonts: [top rows], text, path: <reference>, region: <text box> }, ' +
       'pick one, render once.'

@@ -794,9 +794,7 @@ function compare(aPath, bPath, outDir) {
 const MEASURE_INK_DISTANCE = 48;
 
 function colorDistance(a, b) {
-  return Math.sqrt(
-    (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
-  );
+  return Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2);
 }
 
 /** Most frequent 16-level-quantized color on the region's one-pixel border. */

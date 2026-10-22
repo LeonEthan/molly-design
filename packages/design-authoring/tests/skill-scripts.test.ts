@@ -527,11 +527,26 @@ describe('font-catalog.mjs', () => {
 
   it('rejects invalid arguments with a clear error', () => {
     const { dir, cacheEnv } = setupFontDir();
-    const missing = runCatalog(['match', '--text', 'MOLLY', '--cap', '100', '--dirs', dir], cacheEnv);
+    const missing = runCatalog(
+      ['match', '--text', 'MOLLY', '--cap', '100', '--dirs', dir],
+      cacheEnv
+    );
     expect(missing.status).toBe(1);
     expect(missing.stderr).toContain('match needs --width');
     const badWeight = runCatalog(
-      ['match', '--text', 'MOLLY', '--width', '100', '--cap', '100', '--weight', '50', '--dirs', dir],
+      [
+        'match',
+        '--text',
+        'MOLLY',
+        '--width',
+        '100',
+        '--cap',
+        '100',
+        '--weight',
+        '50',
+        '--dirs',
+        dir,
+      ],
       cacheEnv
     );
     expect(badWeight.status).toBe(1);

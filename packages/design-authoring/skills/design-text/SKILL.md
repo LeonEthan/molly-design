@@ -54,7 +54,10 @@ shapes are in the `graphic-design` skill's `references/artwork-format.md`.
 
 ## Fonts
 
-**Finding fonts.** Look only in the known font directories: on macOS `/System/Library/Fonts`, `/System/Library/Fonts/Supplemental`, `/Library/Fonts` and `~/Library/Fonts`; on Windows `C:\Windows\Fonts`; on Linux `fc-list` or `/usr/share/fonts`. Never search the whole filesystem or home directory (`find /`, `find ~`, unscoped `mdfind`); it can take minutes. If a wanted face is not there, use Inter (the bundled default) or a face you found and say so.
+**Finding fonts.** Look only in the known font directories: on macOS `/System/Library/Fonts`, `/System/Library/Fonts/Supplemental`, `/Library/Fonts` and `~/Library/Fonts`; on Windows `C:\Windows\Fonts`; on Linux `fc-list` or `/usr/share/fonts`. Never search the whole filesystem or home directory (`find /`, `find ~`, unscoped `mdfind`); it can take minutes. `node scripts/font-catalog.mjs list` prints those faces with their files and
+metrics in one call; `match` shortlists faces for copy measured in a reference
+(see the `design-replication` skill's "Fit type"). If a wanted face is not
+there, use Inter (the bundled default) or a face you found and say so.
 
 Register real font files as the format reference describes, keep each face's
 complete glyph set, and check Chinese, Japanese or Korean copy against the font
@@ -65,4 +68,5 @@ and use the optional helper from this skill's directory:
 
 ```sh
 node scripts/font-prepare.mjs --help
+node scripts/font-catalog.mjs list [--family <substr>] [--cjk]
 ```

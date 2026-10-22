@@ -54,6 +54,7 @@ node scripts/reference-pack.mjs crop <image> <x,y,w,h> <out.png>
 node scripts/reference-pack.mjs alpha <layer.png>           # real transparency check
 node scripts/reference-pack.mjs trim <layer.png> <out.png>  # drop transparent padding
 node scripts/reference-pack.mjs compare <a.png> <b.png> <out-dir>
+node scripts/reference-pack.mjs measure <image> <x,y,w,h>    # text line metrics
 ```
 
 Supported non-interlaced 8-bit gray/RGB/RGBA/palette PNG is decoded via
@@ -62,4 +63,4 @@ PNG. These are optional inspection aids, never gates.
 
 Batch independent measurements: compute several crops, bounds or color samples in one script and print a compact summary, instead of one command per measurement. Look at a detail with `molly_view_image` `region` rather than writing and reading a crop file.
 
-Do not brute-force a fit: never sweep fonts, sizes, tracking or positions in a search loop to match pixels. Measure once, place, render and compare; when the face is not available, use the closest available one and report it.
+Do not brute-force a fit: never sweep fonts, sizes, tracking or positions in a search loop to match pixels. Fit type with the "Fit type" recipe in [references/replication.md](references/replication.md): measure, shortlist, view the candidates once, render once.

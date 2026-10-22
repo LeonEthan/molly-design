@@ -87,8 +87,16 @@ bundled example, and optional helpers describe the YAML snapshot entry:
   complete-font WOFF compression. It preserves source/glyphs/metrics, checks the
   existing asset cap and refuses overwrites; it does not install globally or run
   from intake. See `design-text/references/font-preparation.md`.
+- `design-text/scripts/font-catalog.mjs` — dependency-free Node catalog of the
+  known system font directories (`list`: family/style/weight/width/x-over-cap
+  per face; `match`: ranks faces for one measured line of copy and returns a
+  font size and letter spacing). Parses sfnt/TTC tables directly, caches under
+  `$TMPDIR`, and never scans arbitrary paths.
 - `design-replication/scripts/reference-pack.mjs` — dependency-free Node port of the upstream Pillow
-  inspection tool (pack: meta/grid/bands/palette; crop). Supported non-interlaced
+  inspection tool (pack: meta/grid/bands/palette; crop), plus local helpers
+  (alpha/trim/compare/measure; measure reports text line metrics — ink box,
+  baseline, x/cap heights, stroke — for the replication "Fit type" recipe).
+  Supported non-interlaced
   8-bit gray/RGB/RGBA/palette PNG is decoded via `node:zlib`; JPEG/GIF/BMP/WEBP report dimensions but raster artifacts require
   PNG. Ported because neither Molly nor the migrated intake covers reference-image
   measurement, grid overlay, palette extraction, or raster cropping. These are

@@ -72,6 +72,8 @@ No native desktop or real-model acceptance was run for this follow-up.
 
 ## 2026-10-21 follow-up: flat catalog default model submission
 
+PR: [#228](https://github.com/LeonEthan/molly-design/pull/228)
+
 [#213](https://github.com/LeonEthan/molly-design/issues/213) exposed a mismatch
 for an ungrouped registry/custom model config selector: the picker displayed the
 first usable model, while submission omitted an empty/invalid value or retained

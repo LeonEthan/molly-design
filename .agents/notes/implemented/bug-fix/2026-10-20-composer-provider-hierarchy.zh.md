@@ -30,6 +30,8 @@ PR: [#227](https://github.com/LeonEthan/molly-design/pull/227)
 
 ## 2026-10-21 后续修复：扁平目录默认模型的提交
 
+PR: [#228](https://github.com/LeonEthan/molly-design/pull/228)
+
 [#213](https://github.com/LeonEthan/molly-design/issues/213) 暴露了未分组 registry/custom 模型配置选择器的显示与提交不一致：界面显示第一个可用模型，但提交会丢弃空值或无效值，或保留未选择占位值。层级解析器已经能为扁平目录推导默认模型，默认模型回填却仍嵌套在 connections 分支内。
 
 现有回填逻辑移到 connections 分支之后，复用原有保护条件与层级解析出的模型。connections 模式的模型及推理规范化仍留在原分支。有效模型选择保持原样；完整运行时快照省略模型字段时，除非用户编辑该字段，否则继续保持省略。层级解析器已经提供界面默认值，提交过滤器仅校验候选值，因此适配回填即可修复，无需新增状态、在调用方分别设置默认值或改变过滤器职责。

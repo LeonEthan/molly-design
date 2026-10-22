@@ -525,6 +525,50 @@ describe('font-catalog.mjs', () => {
     expect(lines[1]).toContain('Pair.ttc#1');
   });
 
+  it('lists each face once when a root nests another scanned directory', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    // macOS scans /System/Library/Fonts and its Supplemental subdirectory;
+    // the face must still appear exactly once.
+    const nested = path.join(dir, 'Supplemental');
+    mkdirSync(nested);
+    copyFixture(nested);
+    const result = runCatalog(['list', '--dirs', `${dir},${nested}`], cacheEnv);
+    expect(result.status, result.stderr).toBe(0);
+    const lines = result.stdout.trim().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('MollyTestSerif-Regular.ttf#0');
+  });
+
+  it('excludes hidden system faces whose family starts with a dot', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    // Same face with the family name rewritten to a hidden one (the record
+    // keeps the same length: 16 code units -> '.Molly Test Seri').
+    const source = readFileSync(fixtureFont);
+    const hidden = Buffer.from(source);
+    const oldName = Buffer.from('Molly Test Serif', 'utf16le').swap16();
+    const newName = Buffer.from('.Molly Test Seri', 'utf16le').swap16();
+    let replaced = 0;
+    for (let at = hidden.indexOf(oldName); at !== -1; at = hidden.indexOf(oldName, at + 2)) {
+      newName.copy(hidden, at);
+      replaced += 1;
+    }
+    expect(replaced).toBeGreaterThan(0);
+    const hiddenPath = path.join(dir, 'Hidden.ttf');
+    writeFileSync(hiddenPath, hidden);
+    utimesSync(hiddenPath, new Date('2020-01-01'), new Date('2020-01-01'));
+    const listed = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(listed.status, listed.stderr).toBe(0);
+    expect(listed.stdout).toContain('MollyTestSerif-Regular.ttf#0');
+    expect(listed.stdout).not.toContain('Hidden.ttf');
+    const matched = runCatalog(
+      ['match', '--text', 'MOLLY', '--width', '367', '--cap', '100', '--dirs', dir],
+      cacheEnv
+    );
+    expect(matched.status, matched.stderr).toBe(0);
+    expect(matched.stdout).not.toContain('Hidden.ttf');
+  });
+
   it('rejects invalid arguments with a clear error', () => {
     const { dir, cacheEnv } = setupFontDir();
     const missing = runCatalog(

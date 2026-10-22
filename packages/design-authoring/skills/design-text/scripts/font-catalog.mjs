@@ -15,7 +15,7 @@
 //
 // Only the known system font directories are scanned (macOS, Windows, Linux),
 // never arbitrary paths; --dirs exists for fixtures and tests. Results cache
-// in $TMPDIR/molly-font-catalog-v1.json (MOLLY_FONT_CACHE overrides the
+// in $TMPDIR/molly-font-catalog-v2.json (MOLLY_FONT_CACHE overrides the
 // location), invalidated by directory mtimes.
 
 import { createHash } from 'node:crypto';
@@ -31,7 +31,7 @@ import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 
 const SCAN_DEPTH = 3;
-const CACHE_NAME = 'molly-font-catalog-v1.json';
+const CACHE_NAME = 'molly-font-catalog-v2.json';
 const CJK_RANGES = [
   [0x2e80, 0x9fff],
   [0xf900, 0xfaff],
@@ -85,6 +85,7 @@ function knownDirsLabel() {
 
 function scanFontFiles(rootDirs) {
   const files = [];
+  const visited = new Set();
   const walk = (dir, depth) => {
     let entries;
     try {
@@ -95,13 +96,34 @@ function scanFontFiles(rootDirs) {
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (depth < SCAN_DEPTH) walk(full, depth + 1);
+        if (depth >= SCAN_DEPTH) continue;
+        // One pass per real directory: a nested known root (macOS
+        // Supplemental) is not scanned twice.
+        let real;
+        try {
+          real = realpathSync(full);
+        } catch {
+          continue;
+        }
+        if (visited.has(real)) continue;
+        visited.add(real);
+        walk(full, depth + 1);
       } else if (entry.isFile() && /\.(ttf|otf|ttc)$/i.test(entry.name)) {
         files.push(full);
       }
     }
   };
-  for (const root of rootDirs) walk(root, 1);
+  for (const root of rootDirs) {
+    let real;
+    try {
+      real = realpathSync(root);
+    } catch {
+      continue;
+    }
+    if (visited.has(real)) continue;
+    visited.add(real);
+    walk(root, 1);
+  }
   return files.sort();
 }
 
@@ -415,6 +437,7 @@ function dirFingerprint(rootDirs) {
 
 function buildCatalog(rootDirs) {
   const faces = [];
+  const seenFaces = new Set();
   for (const file of scanFontFiles(rootDirs)) {
     let buf;
     try {
@@ -429,13 +452,18 @@ function buildCatalog(rootDirs) {
       // Keep the scanned path when realpath fails.
     }
     for (const [index, offset] of sfntOffsets(buf).entries()) {
+      // One catalog entry per face, whatever path reached it.
+      const key = `${realFile}#${index}`;
+      if (seenFaces.has(key)) continue;
+      seenFaces.add(key);
       let face;
       try {
         face = parseFace(buf, offset, realFile, index);
       } catch {
         continue;
       }
-      if (face !== null) faces.push(face);
+      // Families starting with "." are OS-private UI faces, not design choices.
+      if (face !== null && !face.family.startsWith('.')) faces.push(face);
     }
   }
   faces.sort(
@@ -450,6 +478,7 @@ function buildCatalog(rootDirs) {
 
 function loadCatalog(rootDirs) {
   const fingerprint = dirFingerprint(rootDirs);
+  let catalog = null;
   try {
     const cached = JSON.parse(readFileSync(cachePath(), 'utf8'));
     if (
@@ -458,19 +487,26 @@ function loadCatalog(rootDirs) {
       cached.fingerprint === fingerprint &&
       Array.isArray(cached.faces)
     ) {
-      return cached;
+      catalog = cached;
     }
   } catch {
     // A missing or corrupt cache rebuilds below.
   }
-  const catalog = buildCatalog(rootDirs);
-  try {
-    const cache = cachePath();
-    mkdirSync(path.dirname(cache), { recursive: true });
-    writeFileSync(cache, JSON.stringify(catalog));
-  } catch {
-    // Caching is advisory; output still works without a writable $TMPDIR.
+  if (catalog === null) {
+    catalog = buildCatalog(rootDirs);
+    try {
+      const cache = cachePath();
+      mkdirSync(path.dirname(cache), { recursive: true });
+      writeFileSync(cache, JSON.stringify(catalog));
+    } catch {
+      // Caching is advisory; output still works without a writable $TMPDIR.
+    }
   }
+  // Families starting with "." are OS-private UI faces, not design choices;
+  // the filter applies to cached catalogs from any source as well.
+  catalog.faces = catalog.faces.filter(
+    (face) => typeof face.family === 'string' && !face.family.startsWith('.')
+  );
   return catalog;
 }
 

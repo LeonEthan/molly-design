@@ -391,7 +391,9 @@ export const resolveAcpSessionConfigSelection = (
     reasoningValue: typeof thoughtConfigValue === 'string' ? thoughtConfigValue : null,
     modelReasoningEfforts,
     fallbackReasoningLevels:
-      thoughtSelector?.type === 'select' ? thoughtSelector.options.map((option) => option.value) : undefined,
+      thoughtSelector?.type === 'select'
+        ? thoughtSelector.options.map((option) => option.value)
+        : undefined,
   });
   if (hierarchy.mode === 'connections') {
     if (hierarchy.modelId !== selectedModelId) {
@@ -411,9 +413,7 @@ export const resolveAcpSessionConfigSelection = (
     if (resolvedThought?.type === 'select') {
       const configId = resolvedThought.configId;
       const runtimeOmittedKey =
-        runtimeTable != null &&
-        !(configId in runtimeTable) &&
-        !(configId in edits.configOptions);
+        runtimeTable != null && !(configId in runtimeTable) && !(configId in edits.configOptions);
       if (!runtimeOmittedKey) {
         const offered = resolvedThought.options.map((option) => option.value);
         configOptionValues[configId] =
@@ -424,28 +424,24 @@ export const resolveAcpSessionConfigSelection = (
               : defaultComposerReasoning(offered, true);
       }
     }
-    const modelSelector = selectors.find(
-      (selector) => selector.type === 'select' && selector.category === 'model'
-    );
-    if (
-      modelOptions.length === 0 &&
-      modelSelector?.type === 'select' &&
-      hierarchy.modelId
-    ) {
-      const modelConfigId = modelSelector.configId;
-      const runtimeOmittedModelKey =
-        runtimeTable != null &&
-        !(modelConfigId in runtimeTable) &&
-        !(modelConfigId in edits.configOptions);
-      if (!runtimeOmittedModelKey) {
-        const storedModel = configOptionValues[modelConfigId];
-        const modelUnset =
-          storedModel === undefined ||
-          storedModel === MOLLY_UNSELECTED_MODEL ||
-          !modelSelector.options.some((option) => option.value === storedModel);
-        if (modelUnset) {
-          configOptionValues[modelConfigId] = hierarchy.modelId;
-        }
+  }
+  const modelSelector = selectors.find(
+    (selector) => selector.type === 'select' && selector.category === 'model'
+  );
+  if (modelOptions.length === 0 && modelSelector?.type === 'select' && hierarchy.modelId) {
+    const modelConfigId = modelSelector.configId;
+    const runtimeOmittedModelKey =
+      runtimeTable != null &&
+      !(modelConfigId in runtimeTable) &&
+      !(modelConfigId in edits.configOptions);
+    if (!runtimeOmittedModelKey) {
+      const storedModel = configOptionValues[modelConfigId];
+      const modelUnset =
+        storedModel === undefined ||
+        storedModel === MOLLY_UNSELECTED_MODEL ||
+        !modelSelector.options.some((option) => option.value === storedModel);
+      if (modelUnset) {
+        configOptionValues[modelConfigId] = hierarchy.modelId;
       }
     }
   }

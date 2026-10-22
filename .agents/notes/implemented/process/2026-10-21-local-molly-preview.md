@@ -3,6 +3,8 @@
 Status: implemented
 Translation: pending
 
+PR: [#230](https://github.com/LeonEthan/molly-design/pull/230)
+
 ## Abstract
 
 Development launch does not exercise all packaged Electron paths, which makes local

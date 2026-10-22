@@ -22,6 +22,8 @@ Issue: [#192](https://github.com/LeonEthan/molly-design/issues/192)
 
 ## 2026-10-21 后续修复：切换服务商时的共享推理档位
 
+PR: [#227](https://github.com/LeonEthan/molly-design/pull/227)
+
 [#212](https://github.com/LeonEthan/molly-design/issues/212) 修复子项重新校验中的遗漏：分组的 registry/custom 目录切换服务商后，若目标模型缺少专属映射，原有共享推理档位列表会被丢弃。现在目标映射缺失时，层级解析使用调用方传入的 fallback；显式目标映射仍优先，空映射仍表示显示并发送 `off`。不再需要的原模型参数一并删除。
 
 菜单和服务商循环命令已共用该 resolver，selector 规范化也已在模型缺少映射时保留共享选项。复用这些路径即可修复，无需在调用方分别处理或新增状态。这恢复既有的有效子项保留保证，不改变直接选择模型的行为，也不涉及 #213 的 catalog 默认模型范围。回归测试先复现失败，再在修复后通过；覆盖未提供映射表、缺失或部分映射、显式空及非空目标映射、循环选择和实际提交配置。相关层级、配置选择及选择器组件测试共 44 项通过。PR 发布前，全量 `pnpm check`、`pnpm format` 与 `pnpm run docs check` 通过。本次未运行原生桌面或真实模型验收。

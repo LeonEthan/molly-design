@@ -50,6 +50,8 @@ acceptance on Linux is recorded in the pull request.
 
 ## 2026-10-21 follow-up: shared reasoning on provider change
 
+PR: [#227](https://github.com/LeonEthan/molly-design/pull/227)
+
 [#212](https://github.com/LeonEthan/molly-design/issues/212) fixes a gap in child
 re-validation: a grouped registry/custom catalog lost its shared reasoning ladder
 when a provider change selected a different model without a per-model mapping.

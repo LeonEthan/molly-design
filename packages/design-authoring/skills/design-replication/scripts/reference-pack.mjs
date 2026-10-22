@@ -38,8 +38,10 @@
 //   measure <image.png> <x,y,w,h>
 //       The region holds one or more lines of one text style. Prints one
 //       entry per line: ink bounds, baseline, x-height, cap/ascender height,
-//       descender depth, dominant stroke width and ink/background colors.
-//       Coordinates are original-image pixels. PNG only.
+//       descender depth, dominant stroke width, glyph count and summed glyph
+//       ink width (column runs, so tracking is excluded) and ink/background
+//       colors. Warns when a line touches the region edge. Coordinates are
+//       original-image pixels. PNG only.
 //
 // Format support: PNG (8-bit gray/RGB/RGBA/palette, non-interlaced) is fully
 // decoded; JPEG/GIF/BMP/WEBP report dimensions in meta.json but raster
@@ -897,7 +899,12 @@ function measure(imagePath, boxArg) {
       }
     }
   }
-  if (inkPixels === 0) fail('measure: no ink pixels (region is all background)');
+  if (inkPixels === 0) {
+    fail(
+      'measure: no ink pixels (region is all background); region uses the ' +
+        `reference's own pixels, ${decoded.width}x${decoded.height}`
+    );
+  }
   const ink = inkSum.map((v) => Math.round(v / inkPixels));
 
   const rowInk = new Array(h);
@@ -979,7 +986,7 @@ function measure(imagePath, boxArg) {
       for (let i = 0; i < coreDensity.length; i++) {
         if (coreDensity[i] >= 0.5 * maxCoreDensity) {
           const height = core.bottom - (core.top + i) + 1;
-          if (height < capHeight) xHeight = height;
+          if (height < capHeight * 0.9) xHeight = height;
           break;
         }
       }
@@ -996,6 +1003,19 @@ function measure(imagePath, boxArg) {
     }
     const stroke = strokeWidth(mask, w, core.top, core.bottom);
     const inkWidth = right - left + 1;
+    let glyphs = 0;
+    let glyphInk = 0;
+    let inRun = false;
+    for (let col = left; col <= right; col++) {
+      let hasInk = false;
+      for (let r = line.top; r <= line.bottom && !hasInk; r++) hasInk = mask[r * w + col] === 1;
+      if (hasInk) {
+        glyphInk += 1;
+        if (!inRun) glyphs += 1;
+      }
+      inRun = hasInk;
+    }
+    const touchesEdge = line.top === 0 || line.bottom === h - 1 || left === 0 || right === w - 1;
     const lineHeight = line.bottom - line.top + 1;
     let entry =
       `line ${index + 1}: ink ${x + left},${y + line.top} ${inkWidth}x${lineHeight} | ` +
@@ -1003,12 +1023,15 @@ function measure(imagePath, boxArg) {
       (xHeight === null ? 'xHeight ?' : `xHeight ${xHeight}`) +
       ' | ' +
       (ascender === null ? `capOrAscender ${capHeight}` : `capOrAscender ${ascender}`) +
-      ` | descender ${descender} | stroke ${stroke} | ` +
+      ` | descender ${descender} | stroke ${stroke} | glyphs ${glyphs} | glyphInk ${glyphInk} | ` +
       `ink ${hexTriple(ink)} on ${hexTriple(background)}`;
     const ratios = [];
     if (xHeight !== null) ratios.push(`x/cap ${(xHeight / capHeight).toFixed(2)}`);
     if (capHeight > 0 && stroke > 0) ratios.push(`stroke/cap ${(stroke / capHeight).toFixed(2)}`);
-    out.push(ratios.length > 0 ? `${entry}\n  ratios: ${ratios.join('  ')}` : entry);
+    if (ratios.length > 0) entry += `\n  ratios: ${ratios.join('  ')}`;
+    if (touchesEdge)
+      entry += '\n  warning: ink touches the region edge; widen the region to the whole line';
+    out.push(entry);
   }
   console.log(out.join('\n'));
 }

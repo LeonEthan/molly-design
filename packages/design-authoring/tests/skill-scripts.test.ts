@@ -446,8 +446,9 @@ describe('font-catalog.mjs', () => {
     const { dir, cacheEnv } = setupFontDir();
     const fontPath = copyFixture(dir);
     // MOLLY advances sum to 2328 upem; at cap 100 the font size is
-    // 100 / 0.72 = 138.9 and the predicted width is 2328 * 138.9 / 1000 = 323.3,
-    // so a measured width of 367 fits with letterSpacing 4.7.
+    // 100 / 0.72 = 138.9. The measured width runs ink to ink, so half of the
+    // outer M and Y side bearings come off the predicted 323.3 px width,
+    // leaving letterSpacing 4.5 for a measured width of 367.
     const result = runCatalog(
       ['match', '--text', 'MOLLY', '--width', '367', '--cap', '100', '--dirs', dir],
       cacheEnv
@@ -456,10 +457,10 @@ describe('font-catalog.mjs', () => {
     const lines = result.stdout.trim().split('\n');
     expect(lines).toHaveLength(2);
     expect(lines[0]).toBe(
-      `1. Molly Test Serif | fontSize 138.9 | letterSpacing 4.7 | score 0.052 | ` +
+      `1. Molly Test Serif | fontSize 138.9 | letterSpacing 4.5 | score 0.052 | ` +
         `${realpathSync(fontPath)}#0`
     );
-    expect(lines[1]).toContain('Next: molly_view_image { fonts: [top rows], text');
+    expect(lines[1]).toContain('Next: molly_view_image { fonts: [these rows], text');
   });
 
   it('skips faces without cap height and filters uncovered text', () => {
@@ -489,10 +490,7 @@ describe('font-catalog.mjs', () => {
       cacheEnv
     );
     expect(uncovered.status).toBe(0);
-    expect(uncovered.stdout.trim()).toHaveLength(
-      'Next: molly_view_image { fonts: [top rows], text, path: <reference>, region: <text box> }, pick one, render once.'
-        .length
-    );
+    expect(uncovered.stdout.trim()).toMatch(/^Next: molly_view_image/);
   });
 
   it('parses TTC collections with per-face indexes', () => {
@@ -569,6 +567,97 @@ describe('font-catalog.mjs', () => {
     expect(matched.stdout).not.toContain('Hidden.ttf');
   });
 
+  function writeVariant(
+    dir: string,
+    name: string,
+    { family, weight }: { family?: string; weight?: number }
+  ): void {
+    const variant = Buffer.from(readFileSync(fixtureFont));
+    if (family !== undefined) {
+      // Same-length rewrite keeps every name record offset valid.
+      const oldName = Buffer.from('Molly Test Serif', 'utf16le').swap16();
+      const newName = Buffer.from(family, 'utf16le').swap16();
+      for (let at = variant.indexOf(oldName); at !== -1; at = variant.indexOf(oldName, at + 2)) {
+        newName.copy(variant, at);
+      }
+    }
+    if (weight !== undefined) {
+      const numTables = variant.readUInt16BE(4);
+      for (let i = 0; i < numTables; i++) {
+        const rec = 12 + i * 16;
+        if (variant.toString('ascii', rec, rec + 4) === 'OS/2') {
+          variant.writeUInt16BE(weight, variant.readUInt32BE(rec + 8) + 4);
+        }
+      }
+    }
+    writeFileSync(path.join(dir, name), variant);
+    utimesSync(path.join(dir, name), new Date('2020-01-01'), new Date('2020-01-01'));
+  }
+
+  const scoreOf = (line: string | undefined): string =>
+    /score ([\d.]+)/.exec(line ?? '')?.[1] ?? '';
+
+  it('ranks by summed glyph ink so added tracking does not change the score', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    const base = ['match', '--text', 'MOLLY', '--cap', '100', '--glyphs', '5'];
+    const tight = runCatalog(
+      [...base, '--width', '300', '--glyph-ink', '280', '--dirs', dir],
+      cacheEnv
+    );
+    const tracked = runCatalog(
+      [...base, '--width', '500', '--glyph-ink', '280', '--dirs', dir],
+      cacheEnv
+    );
+    expect(tight.status, tight.stderr).toBe(0);
+    expect(tracked.status, tracked.stderr).toBe(0);
+    const tightRow = tight.stdout.split('\n')[0];
+    const trackedRow = tracked.stdout.split('\n')[0];
+    expect(scoreOf(tightRow)).toBe(scoreOf(trackedRow));
+    expect(tightRow).not.toBe(trackedRow);
+    // A glyph count that disagrees with the copy falls back to line width.
+    const merged = runCatalog(
+      [...base.slice(0, -1), '4', '--width', '300', '--glyph-ink', '280', '--dirs', dir],
+      cacheEnv
+    );
+    expect(merged.status, merged.stderr).toBe(0);
+    expect(merged.stdout).toContain(
+      'note: measure found 4 glyphs for 5 letters; ranking by line width'
+    );
+  });
+
+  it('estimates weight from stroke and shows one row per family', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    writeVariant(dir, 'SerifBold.ttf', { weight: 700 });
+    writeVariant(dir, 'Sans.ttf', { family: 'Molly Test Sanz' });
+    const args = ['match', '--text', 'MOLLY', '--width', '367', '--cap', '100'];
+    // stroke/cap 0.21 maps to weight 700.
+    const families = runCatalog([...args, '--stroke', '21', '--dirs', dir], cacheEnv);
+    expect(families.status, families.stderr).toBe(0);
+    const rows = families.stdout.trim().split('\n');
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toContain('SerifBold.ttf#0');
+    expect(rows[1]).toContain('Molly Test Sanz');
+    expect(rows[2]).toContain('match --family');
+    const serif = runCatalog(
+      [...args, '--stroke', '21', '--family', 'molly test serif', '--dirs', dir],
+      cacheEnv
+    );
+    expect(serif.status, serif.stderr).toBe(0);
+    const serifRows = serif.stdout.trim().split('\n');
+    expect(serifRows).toHaveLength(3);
+    expect(serifRows[0]).toContain('SerifBold.ttf#0');
+    expect(serifRows[1]).toContain('MollyTestSerif-Regular.ttf#0');
+    expect(serifRows[2]).toContain("use the first row's fontSize");
+    // Light strokes favor the regular face instead.
+    const light = runCatalog(
+      [...args, '--stroke', '12', '--family', 'molly test serif', '--dirs', dir],
+      cacheEnv
+    );
+    expect(light.stdout.split('\n')[0]).toContain('MollyTestSerif-Regular.ttf#0');
+  });
+
   it('rejects invalid arguments with a clear error', () => {
     const { dir, cacheEnv } = setupFontDir();
     const missing = runCatalog(
@@ -628,11 +717,13 @@ describe('reference-pack.mjs measure', () => {
     expect(lines).toHaveLength(4);
     expect(lines[0]).toBe(
       'line 1: ink 20,4 58x31 | baseline 29 | xHeight 14 | capOrAscender 26 | ' +
-        'descender 5 | stroke 2 | ink #1d1d1b on #f4efe6'
+        'descender 5 | stroke 2 | glyphs 15 | glyphInk 30 | ink #1d1d1b on #f4efe6'
     );
     expect(lines[1]).toBe('  ratios: x/cap 0.54  stroke/cap 0.08');
     expect(lines[2]).toContain('line 2: ink 10,55 99x20 | baseline 74 | xHeight ?');
-    expect(lines[2]).toContain('capOrAscender 20 | descender 0 | stroke 3');
+    expect(lines[2]).toContain(
+      'capOrAscender 20 | descender 0 | stroke 3 | glyphs 17 | glyphInk 51'
+    );
     expect(lines[3]).toBe('  ratios: stroke/cap 0.15');
   });
 
@@ -643,6 +734,20 @@ describe('reference-pack.mjs measure', () => {
     const result = run('reference-pack.mjs', ['measure', ref, '5,50,110,30'], replicationSkillDir);
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain('line 1: ink 10,55 99x20 | baseline 74');
+  });
+
+  it('warns when a line touches the region edge', () => {
+    const dir = workdir();
+    const ref = path.join(dir, 'ref.png');
+    writeFileSync(ref, measurePng());
+    const cut = run('reference-pack.mjs', ['measure', ref, '0,0,120,20'], replicationSkillDir);
+    expect(cut.status, cut.stderr).toBe(0);
+    expect(cut.stdout).toContain(
+      'warning: ink touches the region edge; widen the region to the whole line'
+    );
+    const whole = run('reference-pack.mjs', ['measure', ref, '0,0,120,45'], replicationSkillDir);
+    expect(whole.status, whole.stderr).toBe(0);
+    expect(whole.stdout).not.toContain('warning');
   });
 
   it('rejects malformed and out-of-bounds regions and non-PNG input', () => {
@@ -669,6 +774,7 @@ describe('reference-pack.mjs measure', () => {
     const result = run('reference-pack.mjs', ['measure', ref, '0,0,32,32'], replicationSkillDir);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('no ink pixels');
+    expect(result.stderr).toContain("reference's own pixels, 32x32");
   });
 });
 

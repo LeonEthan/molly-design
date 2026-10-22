@@ -9,13 +9,17 @@
 //       family | style | weight | width | x/cap | file#index | face "<Pango description>"
 //
 //   match --text "<copy as shown>" --width <px> --cap <px>
-//         [--x <px>] [--weight <100-900>] [--cjk] [--top 5] [--dirs <dir,dir,...>]
+//         [--stroke <px>] [--glyphs <n> --glyph-ink <px>] [--x <px>]
+//         [--weight <100-900>] [--family <substr>] [--cjk] [--top 5] [--dirs <dir,dir,...>]
 //       Ranks faces that cover every character of --text and prints fontSize,
-//       letterSpacing and score for the closest ones.
+//       letterSpacing and score for the closest one per family (all faces of
+//       one family with --family). --glyphs/--glyph-ink come from
+//       reference-pack.mjs measure and compare summed glyph ink widths, so
+//       tracking does not affect the ranking; --stroke estimates the weight.
 //
 // Only the known system font directories are scanned (macOS, Windows, Linux),
 // never arbitrary paths; --dirs exists for fixtures and tests. Results cache
-// in $TMPDIR/molly-font-catalog-v2.json (MOLLY_FONT_CACHE overrides the
+// in $TMPDIR/molly-font-catalog-v3.json (MOLLY_FONT_CACHE overrides the
 // location), invalidated by directory mtimes.
 
 import { createHash } from 'node:crypto';
@@ -31,7 +35,18 @@ import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 
 const SCAN_DEPTH = 3;
-const CACHE_NAME = 'molly-font-catalog-v2.json';
+const CACHE_NAME = 'molly-font-catalog-v3.json';
+const INK_RANGE_END = 0x24f;
+const CFF_INK_PER_ADVANCE = 0.88;
+const STROKE_WEIGHTS = [
+  [0.08, 300],
+  [0.12, 400],
+  [0.15, 500],
+  [0.18, 600],
+  [0.21, 700],
+  [0.25, 800],
+  [0.3, 900],
+];
 const CJK_RANGES = [
   [0x2e80, 0x9fff],
   [0xf900, 0xfaff],
@@ -344,24 +359,22 @@ function parseFace(buf, sfntOffset, file, index) {
     }
   }
   const cmap = tables.get('cmap');
-  if (sCapHeight === null && tables.has('glyf') && tables.has('loca') && cmap !== undefined) {
+  const glyphBox = glyphBoxReader(buf, tables, head, numGlyphs);
+  if (sCapHeight === null && glyphBox !== null && cmap !== undefined) {
     // Faces without sCapHeight fall back to the H glyph's yMax.
-    const glyph = cmapLookup(buf, cmap, 0x48);
-    if (glyph > 0 && glyph < numGlyphs) {
-      const loca = tables.get('loca');
-      const locaFormat = i16(buf, head.offset + 50);
-      const locaOff = loca.offset + (locaFormat === 0 ? 2 * glyph : 4 * glyph);
-      if (locaOff + (locaFormat === 0 ? 2 : 4) <= buf.length) {
-        const glyphOffset = locaFormat === 0 ? u16(buf, locaOff) * 2 : u32(buf, locaOff);
-        const start = tables.get('glyf').offset + glyphOffset;
-        if (start + 10 <= buf.length) {
-          const ymax = i16(buf, start + 8);
-          if (ymax > 0) sCapHeight = ymax;
-        }
-      }
-    }
+    const box = glyphBox(cmapLookup(buf, cmap, 0x48));
+    if (box !== null && box.yMax > 0) sCapHeight = box.yMax;
   }
   const coverage = cmapRanges(buf, cmap);
+  // Ink widths (xMax - xMin) for Latin letters and digits; CFF faces have none.
+  const inks = [];
+  if (glyphBox !== null && cmap !== undefined) {
+    for (let code = 0x21; code <= INK_RANGE_END; code++) {
+      if (!inRanges(coverage, code)) continue;
+      const box = glyphBox(cmapLookup(buf, cmap, code));
+      if (box !== null) inks.push([code, box.xMax - box.xMin]);
+    }
+  }
   // Keep advances only for BMP letters and digits; match looks them up.
   const advances = [];
   const hmtx = tables.get('hmtx');
@@ -392,6 +405,25 @@ function parseFace(buf, sfntOffset, file, index) {
     sCapHeight,
     coverage,
     advances,
+    inks,
+  };
+}
+
+function glyphBoxReader(buf, tables, head, numGlyphs) {
+  const glyf = tables.get('glyf');
+  const loca = tables.get('loca');
+  if (glyf === undefined || loca === undefined) return null;
+  const longOffsets = i16(buf, head.offset + 50) !== 0;
+  const entry = (glyph) =>
+    longOffsets ? u32(buf, loca.offset + 4 * glyph) : u16(buf, loca.offset + 2 * glyph) * 2;
+  return (glyph) => {
+    if (glyph <= 0 || glyph >= numGlyphs) return null;
+    if (loca.offset + (longOffsets ? 4 : 2) * (glyph + 2) > buf.length) return null;
+    const start = entry(glyph);
+    if (entry(glyph + 1) === start) return { xMin: 0, xMax: 0, yMax: 0 };
+    const at = glyf.offset + start;
+    if (at + 10 > buf.length) return null;
+    return { xMin: i16(buf, at + 2), xMax: i16(buf, at + 6), yMax: i16(buf, at + 8) };
   };
 }
 
@@ -590,6 +622,18 @@ function runList(argv) {
   console.log(lines.join('\n'));
 }
 
+function weightFromStroke(ratio) {
+  if (ratio <= STROKE_WEIGHTS[0][0]) return STROKE_WEIGHTS[0][1];
+  for (let i = 1; i < STROKE_WEIGHTS.length; i++) {
+    const [r1, w1] = STROKE_WEIGHTS[i];
+    if (ratio <= r1) {
+      const [r0, w0] = STROKE_WEIGHTS[i - 1];
+      return w0 + ((ratio - r0) / (r1 - r0)) * (w1 - w0);
+    }
+  }
+  return STROKE_WEIGHTS[STROKE_WEIGHTS.length - 1][1];
+}
+
 function runMatch(argv) {
   const args = parseCli(argv, ['cjk']);
   if (args.text === undefined || args.text === '') fail('match needs --text "<copy as shown>"');
@@ -598,60 +642,119 @@ function runMatch(argv) {
   if (width === undefined || cap === undefined) fail('match needs --width <px> and --cap <px>');
   const x = parseNumber(args, 'x', { min: 1 });
   const weight = parseNumber(args, 'weight', { integer: true, min: 100, max: 900 });
+  const stroke = parseNumber(args, 'stroke', { min: 1 });
+  const glyphs = parseNumber(args, 'glyphs', { integer: true, min: 1 });
+  const glyphInk = parseNumber(args, 'glyph-ink', { min: 1 });
   const top = parseNumber(args, 'top', { integer: true, min: 1, max: 20 }) ?? 5;
+  const familyFilter = args.family?.toLowerCase();
   const catalog = loadCatalog(dirsFromCli(args));
   const needCjk = args.cjk !== undefined;
+  const letters = [...args.text].filter((ch) => !/\s/u.test(ch));
+  const chars = letters.length;
+  const notes = [];
+  let useGlyphs = false;
+  if (glyphs !== undefined && glyphInk !== undefined) {
+    if (glyphs === chars) {
+      useGlyphs = true;
+    } else {
+      notes.push(
+        `note: measure found ${glyphs} glyphs for ${chars} letters; ranking by line width`
+      );
+    }
+  }
+  const targetWeight =
+    weight ?? (stroke === undefined ? undefined : weightFromStroke(stroke / cap));
 
   const rows = [];
   for (const face of catalog.faces) {
     if (face.sCapHeight === null || face.sCapHeight === 0) continue;
+    if (familyFilter !== undefined && !face.family.toLowerCase().includes(familyFilter)) continue;
     if (!coversText(face, args.text)) continue;
     if (needCjk && !coversCjk(face)) continue;
     const advances = new Map(face.advances);
-    let advanceSum = 0;
+    const inks = new Map(face.inks ?? []);
+    const letterAdvances = [];
+    const letterInks = [];
     let covered = true;
-    for (const ch of args.text) {
-      if (/\s/u.test(ch)) continue;
-      const advance = advances.get(ch.codePointAt(0));
+    for (const ch of letters) {
+      const code = ch.codePointAt(0);
+      const advance = advances.get(code);
       if (typeof advance !== 'number') {
         covered = false;
         break;
       }
-      advanceSum += advance;
+      const ink = inks.get(code);
+      letterAdvances.push(advance);
+      letterInks.push(typeof ink === 'number' ? ink : advance * CFF_INK_PER_ADVANCE);
     }
-    if (!covered || advanceSum <= 0) continue;
-    const fontSize = cap / (face.sCapHeight / face.unitsPerEm);
-    const predicted = advanceSum * (fontSize / face.unitsPerEm);
-    const chars = [...args.text].filter((ch) => !/\s/u.test(ch)).length;
-    const letterSpacing = chars > 1 ? (width - predicted) / (chars - 1) : 0;
-    let score = Math.abs(Math.log(predicted / width));
+    const letterAdvanceSum = letterAdvances.reduce((sum, v) => sum + v, 0);
+    if (!covered || letterAdvanceSum <= 0) continue;
+    const inkSum = letterInks.reduce((sum, v) => sum + v, 0);
+    let advanceSum = 0;
+    for (const ch of args.text) {
+      const advance = advances.get(ch.codePointAt(0));
+      if (typeof advance === 'number') advanceSum += advance;
+    }
+    // The measured width runs ink to ink: drop the outer side bearings,
+    // assumed even on both sides of the first and last letter.
+    const outerBearings =
+      (letterAdvances[0] - letterInks[0]) / 2 +
+      (letterAdvances[chars - 1] - letterInks[chars - 1]) / 2;
+    const scale = cap / face.sCapHeight;
+    const fontSize = face.unitsPerEm * scale;
+    const predicted = (advanceSum - outerBearings) * scale;
+    const gaps = [...args.text].length - 1;
+    const letterSpacing = gaps > 0 ? (width - predicted) / gaps : 0;
+    let score = useGlyphs
+      ? Math.abs(Math.log((inkSum * scale) / glyphInk))
+      : Math.abs(Math.log((letterAdvanceSum * scale) / width));
     if (x !== undefined && face.sxHeight !== null && face.sxHeight > 0) {
-      const fontX = face.sxHeight * (fontSize / face.unitsPerEm);
+      const fontX = face.sxHeight * scale;
       score += Math.abs(Math.log(fontX / x));
     }
-    if (weight !== undefined) {
-      score += 0.3 * (Math.abs(face.weight - weight) / 100);
+    if (targetWeight !== undefined) {
+      score += 0.3 * (Math.abs(face.weight - targetWeight) / 100);
     }
     rows.push({ face, fontSize, letterSpacing, score });
   }
   rows.sort(
     (a, b) =>
       a.score - b.score ||
-      Math.abs(a.face.weight - (weight ?? 400)) - Math.abs(b.face.weight - (weight ?? 400)) ||
+      Math.abs(a.face.weight - (targetWeight ?? 400)) -
+        Math.abs(b.face.weight - (targetWeight ?? 400)) ||
       a.face.file.localeCompare(b.face.file) ||
       a.face.index - b.face.index
   );
-  const lines = rows
-    .slice(0, top)
-    .map(
-      (row, i) =>
-        `${i + 1}. ${row.face.face} | fontSize ${row.fontSize.toFixed(1)} | ` +
-        `letterSpacing ${row.letterSpacing.toFixed(1)} | score ${row.score.toFixed(3)} | ` +
-        `${row.face.file}#${row.face.index}`
+  let shown = rows.slice(0, top);
+  const also = new Map();
+  if (familyFilter === undefined) {
+    shown = [];
+    for (const row of rows) {
+      const others = also.get(row.face.family);
+      if (others === undefined) {
+        if (shown.length >= top) continue;
+        shown.push(row);
+        also.set(row.face.family, []);
+      } else if (others.length < 3 && !others.includes(row.face.style)) {
+        others.push(row.face.style);
+      }
+    }
+  }
+  const lines = shown.map((row, i) => {
+    const others = also.get(row.face.family) ?? [];
+    return (
+      `${i + 1}. ${row.face.face} | fontSize ${row.fontSize.toFixed(1)} | ` +
+      `letterSpacing ${row.letterSpacing.toFixed(1)} | score ${row.score.toFixed(3)} | ` +
+      `${row.face.file}#${row.face.index}` +
+      (others.length > 0 ? ` | also: ${others.join(', ')}` : '')
     );
+  });
+  lines.push(...notes);
   lines.push(
-    'Next: molly_view_image { fonts: [top rows], text, path: <reference>, region: <text box> }, ' +
-      'pick one, render once.'
+    familyFilter === undefined
+      ? 'Next: molly_view_image { fonts: [these rows], text, path: <reference>, region: <line box> }; ' +
+          'pick a family by letter shapes, then match --family "<family>" for its weight. Render once.'
+      : "Next: use the first row's fontSize and letterSpacing unless the sheet showed another weight. Render once."
   );
   console.log(lines.join('\n'));
 }
@@ -667,7 +770,8 @@ if (args[0] === 'list') {
       'usage:',
       '  node font-catalog.mjs list [--family <substr>] [--cjk] [--dirs <dir,...>]',
       '  node font-catalog.mjs match --text "<copy>" --width <px> --cap <px>' +
-        ' [--x <px>] [--weight <100-900>] [--cjk] [--top 5] [--dirs <dir,...>]',
+        ' [--stroke <px>] [--glyphs <n> --glyph-ink <px>] [--x <px>] [--weight <100-900>]' +
+        ' [--family <substr>] [--cjk] [--top 5] [--dirs <dir,...>]',
       `scans only the known font directories: ${knownDirsLabel()}`,
     ].join('\n')
   );

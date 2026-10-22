@@ -14,6 +14,7 @@
     "dev:cli": "corepack pnpm --filter molly dev",
     "dev:local": "corepack pnpm --dir apps/electron dev:local",
     "start:local": "corepack pnpm --dir apps/electron start:local",
+    "preview:install": "corepack pnpm --dir apps/electron preview:install",
     "storybook": "corepack pnpm --filter @molly/components storybook",
     "clean": "corepack pnpm -r run clean",
     "format": "corepack pnpm -r run format",

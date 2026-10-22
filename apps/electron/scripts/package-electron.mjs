@@ -3,6 +3,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { previewPackagingConfig } from './preview-packaging.mjs'
 import { fileURLToPath } from 'node:url'
 import {
   isMacPackaging,
@@ -112,6 +113,19 @@ function resolveRunner() {
 }
 
 const forwardedArguments = stripArgumentSeparators(process.argv.slice(2))
+const previewIndex = forwardedArguments.indexOf('--preview')
+const preview = previewIndex !== -1
+if (preview) forwardedArguments.splice(previewIndex, 1)
+if (
+  preview &&
+  (process.platform !== 'darwin' ||
+    forwardedArguments.some((argument) => /^(?:--win|--linux|-w|-l)(?:=|$)/u.test(argument)))
+) {
+  throw new Error('Molly Preview packaging supports local macOS builds only')
+}
+if (preview && forwardedArguments.some((argument) => /^(?:--publish|-p)(?:=|$)/u.test(argument))) {
+  throw new Error('Molly Preview cannot be published')
+}
 if (forwardedArguments.some((argument) => /^(?:--linux|-l)(?:=|$)/u.test(argument))) {
   throw new Error('Linux desktop packaging is no longer supported. Use macOS or Windows.')
 }
@@ -140,6 +154,12 @@ const generatedConfig = {
         : {})
     }
   }
+}
+if (preview) {
+  const previewConfig = previewPackagingConfig()
+  Object.assign(generatedConfig, previewConfig, {
+    extraMetadata: { ...generatedConfig.extraMetadata, ...previewConfig.extraMetadata }
+  })
 }
 writeFileSync(generatedConfigPath, `${JSON.stringify(generatedConfig, null, 2)}\n`, 'utf8')
 

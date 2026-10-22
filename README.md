@@ -197,6 +197,12 @@ corepack pnpm start:local
 
 The first build also assembles the Bento editor in a temporary checkout and may need network access. Quit any running Molly first; only one instance can run. To keep development data separate, set `MOLLY_DATA_DIR="$(pwd)/.molly-dev-data"`. The open-source build needs no `.env` file, account or cloud variables.
 
+For daily testing on Apple Silicon macOS, run `pnpm preview:install`. It builds through
+the release packaging pipeline and installs **Molly Preview.app** in `~/Applications`,
+ready to open from Finder. Preview has separate settings, data and background services,
+can run alongside Molly, and never uses the release updater. Quit Preview before
+rebuilding; reinstalling preserves its test data. See [local Preview](apps/electron/README.md#local-preview).
+
 Before a pull request, run `pnpm check`, `pnpm format` and `pnpm run docs check`. Details are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Project structure

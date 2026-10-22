@@ -1,9 +1,7 @@
 # Electron contributor guidelines
 
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
-Root `AGENTS.md` also applies. Main/preload/renderer module boundaries, IPC
-contracts, and window/renderer integration rules live in
-[`src/AGENTS.md`](src/AGENTS.md) and are read whenever `src/**` changes.
+Root rules apply. Before `src/**` changes, read [source contracts](src/AGENTS.md).
 
 ## Local OSS composition
 
@@ -18,9 +16,8 @@ contracts, and window/renderer integration rules live in
 - Run desktop development from the repository root with `pnpm start:local`. It must
   rebuild the embedded CLI and local renderer before launching the bundled CLI; do
   not reuse production/cloud artifacts.
-- Cloud desktop development must likewise build and sync the CLI before
-  `electron-vite dev`; the direct `apps/cli/dist` lookup is only a missing-staging
-  fallback and must not let an older `resources/cli` shadow a fresh build.
+- Cloud dev also builds/syncs CLI before `electron-vite dev`. `apps/cli/dist` is a
+  missing-staging fallback; stale `resources/cli` must not shadow fresh builds.
 - The local Agent runtime and local Loro data plane are required product services.
   Start or attach to them on every desktop launch; do not add a control-only mode.
 - `localPlatform.getSnapshot` atomically supplies the persistent `local:*` user and
@@ -78,6 +75,10 @@ and native source outside the package. See [driver build](native/agent-browser/R
   `locales/en-US.pak` is a release gate.
 
 ## Release packaging and auto-update
+
+- Preview reuses release packaging. Before stores open, select its isolated profile
+  from package metadata; pin CLI children. Skip migrations and updates. Replace only
+  stopped Preview apps; preserve data.
 
 - Molly updates must use its independent release feed and trusted signing identity.
   Never enable an inherited Lody feed or bypass verification. Installation must wait

@@ -50,6 +50,44 @@ for the regression and verification limits.
 an OSS build that has already been prepared. It deliberately skips rebuilding
 and should not be used as the normal development command.
 
+### Local Preview
+
+On Apple Silicon macOS, run from the repository root:
+
+```bash
+pnpm preview:install
+```
+
+The command builds the local app and uses `package-electron.mjs --preview --dir`
+with the release resource, native dependency, signing and integrity hooks. It installs
+`~/Applications/Molly Preview.app`; open it from Finder or pin it to the Dock.
+Quit Preview before replacing it. A replacement is staged and signature-verified
+before the previous Preview is moved aside; installation preserves test data and
+refuses to replace another product's bundle. Molly can stay running.
+
+| Identity                                                          | Molly Preview                                 |
+| ----------------------------------------------------------------- | --------------------------------------------- |
+| Bundle ID                                                         | `dev.molly-design.preview`                    |
+| Desktop configuration, encrypted connections and browser sessions | `~/Library/Application Support/Molly Preview` |
+| CLI state, sessions, artwork and runtime files                    | `~/.molly-preview`                            |
+| Host lease                                                        | `127.0.0.1:17794`                             |
+| URL scheme                                                        | `molly-preview://`                            |
+
+The package metadata selects Preview before storage initialization, independently
+of Finder's environment. Generic data overrides and `--user-data-dir` cannot redirect
+Preview into a release profile. CLI children pin the installation channel after
+login-shell environment merging. Preview skips legacy data migrations, starts with
+its own configuration, and disables all application updates, including manual checks.
+Rebuild and rerun the same command to update it; settings and test artworks survive.
+
+The version includes `preview.g<commit>` and `.dirty` for an uncommitted checkout;
+the existing About screen displays it. Build output stays under `dist/preview`.
+Signing honors `CSC_NAME`/`CSC_LINK`; otherwise the command selects an available
+Developer ID Application identity, falling back to ad-hoc
+when neither exists. Ad-hoc packages cannot import browser accounts. Local Preview
+skips notarization, remote signing timestamps and installer creation; final DMG, Gatekeeper and real upgrade
+acceptance remain release checks. No artifacts are published.
+
 ### Image export verification
 
 Run `node apps/electron/scripts/image-preview-export-probe.mjs` from the repository

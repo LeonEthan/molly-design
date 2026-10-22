@@ -10,6 +10,21 @@ As of 2026-09-21, Linux desktop support is retired, including packaging, updates
 
 Issue: [#32](https://github.com/LeonEthan/molly-design/issues/32)
 
+## Local Preview (2026-10-21)
+
+Maintainers can build and install local Molly Preview with one command, then launch
+it from Finder to test packaged behavior. Preview reuses release build, resource,
+signing and integrity steps. Its settings, connections, browser sessions, artwork
+and background state remain separate from Molly; both can run together without
+migrating release data. Reinstallation preserves test data and refuses to replace
+a running Preview. Package metadata selects its identity without terminal setup,
+and background children inherit that isolation. Preview updates through manual
+rebuilds, uses no release application updater and is never published. An unnotarized
+local app does not replace final DMG, Gatekeeper or release upgrade acceptance;
+browser account import restrictions remain explicit when stable signing is absent.
+This addition preserves release data identity, distribution support and this Spec's
+draft status.
+
 ## 2026-09-17 naming-unification revision proposal (pending review)
 
 The target spelling has been confirmed as `Molly` / `molly`. The implemented naming-unification decision proposes converging the current product display name to Molly, and unifying first-party packages, code identifiers, environment variables and newly written formats/paths under the molly naming. If this revision is adopted, the "item-by-item rulings on internal names" below are refined by that proposal, and the exclusion "no blanket rename of internal packages" changes to: first-party internal packages are included; external protocols and provenance are not.

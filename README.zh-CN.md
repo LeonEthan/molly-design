@@ -197,6 +197,11 @@ corepack pnpm start:local
 
 首次构建还会在临时 checkout 中组装 Bento 编辑器，可能需要网络。请先退出正在运行的 Molly；只能运行一个实例。若要与开发数据隔离，可设置 `MOLLY_DATA_DIR="$(pwd)/.molly-dev-data"`。开源构建无需 `.env`、账户或云环境变量。
 
+Apple Silicon macOS 日常真机测试可运行 `pnpm preview:install`。命令复用正式打包流程，
+将 **Molly Preview.app** 安装到 `~/Applications`，可直接从 Finder 启动。
+Preview 的配置、数据和后台服务独立，可与 Molly 同时运行，并关闭正式更新源。
+重新构建前先退出 Preview；重复安装保留测试数据。参见[本地 Preview](apps/electron/README.md#local-preview)。
+
 提交拉取请求前请运行 `pnpm check`、`pnpm format` 与 `pnpm run docs check`。细节见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 项目结构

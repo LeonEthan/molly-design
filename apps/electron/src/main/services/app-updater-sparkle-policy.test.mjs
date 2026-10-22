@@ -11,6 +11,21 @@ import {
   sparklePackageJsonPathFromModuleEntry
 } from './app-updater-sparkle-policy.ts'
 
+void test('Preview cannot enable the release updater even with a force flag', () => {
+  for (const forceEnable of [false, true]) {
+    assert.equal(
+      shouldConstructUpdaterEnabled({
+        installationChannel: 'preview',
+        localPlatform: true,
+        forceEnable,
+        platform: 'darwin',
+        arch: 'arm64'
+      }),
+      false
+    )
+  }
+})
+
 void test('Molly supports updates only on its first-release platform', () => {
   assert.equal(
     shouldConstructUpdaterEnabled({

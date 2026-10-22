@@ -16,7 +16,9 @@ export function shouldConstructUpdaterEnabled(input: {
   forceEnable: boolean
   platform?: string
   arch?: string
+  installationChannel?: 'stable' | 'preview'
 }): boolean {
+  if (input.installationChannel === 'preview') return false
   // The first supported Molly release is macOS arm64. A force flag cannot expand it.
   return !input.localPlatform || (input.platform === 'darwin' && input.arch === 'arm64')
 }

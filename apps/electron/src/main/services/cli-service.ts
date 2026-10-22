@@ -57,7 +57,7 @@ import {
   type LaunchHandle,
   type PreparedLaunch
 } from '@molly/cli-supervisor'
-import { mainPlatformKind } from '../platform'
+import { desktopInstallationProfile, mainPlatformKind } from '../platform'
 import { getUserShellEnvCached, shouldUseWindowsShell } from './shell-env'
 import { applyProxyEnvFallback, resolveSystemProxyEnv } from './system-proxy-env'
 import type { CliOutputEvent, CliRunResult } from '../types'
@@ -104,6 +104,7 @@ async function bundledCliEnvironment(
     ...process.env,
     ...(shellEnv ?? {}),
     ...(options.envOverrides ?? {}),
+    ...buildCliRuntimeEnvOverrides(),
     ELECTRON_RUN_AS_NODE: '1'
   }
   delete env.MOLLY_DAEMON_SUPERVISED
@@ -274,7 +275,11 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 }
 
 function buildCliRuntimeEnvOverrides(): NodeJS.ProcessEnv {
-  return { MOLLY_PLATFORM: mainPlatformKind, MOLLY_DATA_DIR }
+  return {
+    MOLLY_PLATFORM: mainPlatformKind,
+    MOLLY_DATA_DIR,
+    MOLLY_INSTALLATION_CHANNEL: desktopInstallationProfile.channel
+  }
 }
 
 function buildSystemProxyProbeUrls(): string[] {
@@ -469,7 +474,6 @@ export class CliService {
 
     const finalArgs = ['start']
     const envOverrides: NodeJS.ProcessEnv = {
-      ...buildCliRuntimeEnvOverrides(),
       [CLI_ELECTRON_BOOTSTRAP_ENV]: '1',
       [MOLLY_SUPERVISOR_CONTRACT_ENV]: LOCAL_CLI_SUPERVISOR_CONTRACT_VERSION,
       [MOLLY_SUPERVISOR_PID_ENV]: String(process.pid),
@@ -959,7 +963,7 @@ export class CliService {
   ): Promise<PrivateHelperResult> {
     const entry = resolveBundledCliEntry()
     if (!entry || limits.signal?.aborted) return { kind: 'unavailable' }
-    const env = await bundledCliEnvironment({ envOverrides: buildCliRuntimeEnvOverrides() })
+    const env = await bundledCliEnvironment({})
     if (limits.signal?.aborted) return { kind: 'cancelled' }
     const child = spawn(resolveBundledCliRuntime(), ['--max-old-space-size=256', entry, ...args], {
       env,

@@ -85,6 +85,8 @@ Molly's public local profile uses machine token `molly`. Isolate its data,
 endpoint, protocol, app ID, packaged identity and CLI markers from Lody.
 Update both TypeScript and CommonJS installation profiles together; never migrate
 or delete Lody data.
+Preview uses its own profile for state, sockets, host lease and desktop identity;
+the desktop selects its channel from package metadata and pins child environments.
 
 ## Local reference attachments
 

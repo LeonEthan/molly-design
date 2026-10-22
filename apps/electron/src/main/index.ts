@@ -213,6 +213,7 @@ if (hasSingleInstanceLock) {
     let cliStoppedForRelaunch = false
     const appUpdaterService = new AppUpdaterService({
       enabled: shouldConstructUpdaterEnabled({
+        installationChannel: desktopInstallationProfile.channel,
         localPlatform: isLocalPlatform(),
         forceEnable:
           (process.env.MOLLY_ELECTRON_ENABLE_UPDATER ??

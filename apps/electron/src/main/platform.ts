@@ -1,3 +1,4 @@
+import { desktopInstallationChannel } from './installation-channel'
 import { promises as fs } from 'node:fs'
 import { resolvePlatformKind, type PlatformKind } from '@molly/shared/platform-kind'
 import { getLocalWorkspaceCatalogPath } from '@molly/shared/node/local-workspace-catalog'
@@ -15,7 +16,10 @@ if (configuredPlatformKind !== 'local') {
   throw new Error('Molly desktop supports only the local platform')
 }
 export const mainPlatformKind: PlatformKind = configuredPlatformKind
-export const desktopInstallationProfile = getInstallationProfile(mainPlatformKind)
+export const desktopInstallationProfile = getInstallationProfile(
+  mainPlatformKind,
+  desktopInstallationChannel
+)
 
 export function isLocalPlatform(): boolean {
   return mainPlatformKind === 'local'

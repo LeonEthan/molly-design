@@ -266,10 +266,14 @@ function cmapRanges(buf, cmapTable) {
   }
   const sorted = [...points].sort((a, b) => a - b);
   const ranges = [];
+  let lastEnd = -1;
   for (const code of sorted) {
-    const last = ranges[ranges.length - 1];
-    if (last !== undefined && code === last[1] + 1) last[1] = code;
-    else ranges.push([code, code]);
+    if (ranges.length > 0 && code === lastEnd + 1) {
+      ranges[ranges.length - 1][1] = code;
+    } else {
+      ranges.push([code, code]);
+    }
+    lastEnd = code;
   }
   return ranges;
 }
@@ -569,7 +573,7 @@ function runMatch(argv) {
     for (const ch of args.text) {
       if (/\s/u.test(ch)) continue;
       const advance = advances.get(ch.codePointAt(0));
-      if (advance === undefined) {
+      if (typeof advance !== 'number') {
         covered = false;
         break;
       }

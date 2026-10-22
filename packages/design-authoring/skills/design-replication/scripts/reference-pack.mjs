@@ -924,7 +924,6 @@ function measure(imagePath, boxArg) {
 
   const out = [];
   for (const [index, line] of lines.entries()) {
-    const heightRows = line.bottom - line.top + 1;
     const rowSpan = (r) => {
       let col0 = -1;
       let col1 = -1;

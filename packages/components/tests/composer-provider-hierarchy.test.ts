@@ -161,6 +161,47 @@ describe('composer provider hierarchy', () => {
     ).toEqual({ modelId: review, reasoning: 'max' });
   });
 
+  it.each([
+    { name: 'no mapping table', efforts: undefined, reasoning: 'low', levels: ['low', 'high'] },
+    { name: 'missing mapping', efforts: {}, reasoning: 'low', levels: ['low', 'high'] },
+    {
+      name: 'source-only mapping',
+      efforts: { 'model-a': ['low', 'high'] },
+      reasoning: 'low',
+      levels: ['low', 'high'],
+    },
+    { name: 'empty mapping', efforts: { 'model-b': [] }, reasoning: 'off', levels: ['off'] },
+    {
+      name: 'target-specific mapping',
+      efforts: { 'model-b': ['max'] },
+      reasoning: 'max',
+      levels: ['max'],
+    },
+  ])(
+    'revalidates shared reasoning on provider change with $name',
+    ({ efforts, reasoning, levels }) => {
+      const input = {
+        modelOptions: [
+          { value: 'model-a', label: 'A', group: 'A' },
+          { value: 'model-b', label: 'B', group: 'B' },
+        ],
+        selectedModelId: 'model-a',
+        providerId: 'group:B',
+        reasoningValue: 'low',
+        modelReasoningEfforts: efforts,
+        fallbackReasoningLevels: ['off', 'low', 'high'],
+      };
+      const next = resolveComposerProviderHierarchy(input);
+      expect(next.modelId).toBe('model-b');
+      expect(next.reasoning).toBe(reasoning);
+      expect(next.reasoningLevels).toEqual(levels);
+      expect(pickComposerProvider(input)).toEqual({
+        modelId: 'model-b',
+        reasoning: reasoning === 'low' ? null : reasoning,
+      });
+    }
+  );
+
   it('leaves an ungrouped catalog unscoped and keeps its reasoning', () => {
     const resolved = resolveComposerProviderHierarchy({
       modelOptions: [{ value: 'gpt-5.5', label: '5.5' }],

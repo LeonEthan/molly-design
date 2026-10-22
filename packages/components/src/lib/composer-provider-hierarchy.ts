@@ -105,7 +105,6 @@ type ResolvedModelReasoningLevels =
 
 function levelsForModel(
   modelId: string | null,
-  originalModelId: string | null,
   efforts: Record<string, readonly string[] | undefined> | undefined,
   fallback: readonly string[] | undefined
 ): ResolvedModelReasoningLevels {
@@ -114,16 +113,7 @@ function levelsForModel(
     if (!mapped || mapped.length === 0) return { kind: 'published-empty' };
     return { kind: 'levels', levels: mapped };
   }
-  const originalIsUnset =
-    originalModelId === null || originalModelId === MOLLY_UNSELECTED_MODEL;
-  if (
-    fallback &&
-    fallback.length > 0 &&
-    (modelId === originalModelId || originalIsUnset)
-  ) {
-    return { kind: 'levels', levels: fallback };
-  }
-  return { kind: 'levels', levels: [] };
+  return { kind: 'levels', levels: fallback ?? [] };
 }
 
 function chooseReasoning(
@@ -162,7 +152,6 @@ export function resolveComposerProviderHierarchy(input: {
   selectedModelId: string | null;
   reasoningValue?: string | null;
   modelReasoningEfforts?: Record<string, readonly string[] | undefined>;
-  /** Levels already normalized for `selectedModelId`, before a parent change. */
   fallbackReasoningLevels?: readonly string[];
   /** Set when the user picks a provider. Invalid ids are ignored. */
   providerId?: string | null;
@@ -212,7 +201,8 @@ export function resolveComposerProviderHierarchy(input: {
       ? input.providerId
       : null;
   const selectedOption = models.find((option) => option.value === input.selectedModelId);
-  const providerId = requested ?? (selectedOption ? providerIdOf(selectedOption) : providers[0]!.id);
+  const providerId =
+    requested ?? (selectedOption ? providerIdOf(selectedOption) : providers[0]!.id);
   const provider = providers.find((entry) => entry.id === providerId) ?? providers[0]!;
   const scoped = models.filter((option) => providerIdOf(option) === provider.id);
   const modelId =
@@ -221,7 +211,6 @@ export function resolveComposerProviderHierarchy(input: {
       : (scoped[0]?.value ?? null);
   const resolvedLevels = levelsForModel(
     modelId,
-    input.selectedModelId,
     input.modelReasoningEfforts,
     input.fallbackReasoningLevels
   );

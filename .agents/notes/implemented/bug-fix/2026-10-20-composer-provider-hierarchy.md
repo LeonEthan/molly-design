@@ -48,6 +48,26 @@ publishes only `off` showing Reasoning Off, an ungrouped row staying out of
 the first provider, and the provider cycle command. Desktop
 acceptance on Linux is recorded in the pull request.
 
+## 2026-10-21 follow-up: shared reasoning on provider change
+
+[#212](https://github.com/LeonEthan/molly-design/issues/212) fixes a gap in child
+re-validation: a grouped registry/custom catalog lost its shared reasoning ladder
+when a provider change selected a different model without a per-model mapping.
+The hierarchy now uses the supplied fallback whenever the target mapping is absent.
+Explicit target mappings still take priority, including an empty mapping that means
+display and dispatch `off`. The obsolete original-model parameter is removed.
+
+The menu and provider-cycle command already share this resolver, and selector
+normalization already retains shared options for an unmapped model. Reusing these
+paths avoids caller-specific fixes or new state. This restores the existing valid-child
+guarantee; it does not change model-pick behavior or the catalog-default scope of #213.
+Regression tests first failed for missing mappings, then passed after the fix;
+they cover absent tables, missing/partial mappings, explicit empty and nonempty
+target mappings, cycle selection, and effective submit values. The related
+hierarchy, config-selection and picker component suites pass (44 tests).
+Before PR publication, full `pnpm check`, `pnpm format`, and `pnpm run docs check` passed.
+No native desktop or real-model acceptance was run for this follow-up.
+
 ## Related
 
 - Supersedes the Agent row in [three-level picker](2026-10-19-model-picker-three-levels.md).

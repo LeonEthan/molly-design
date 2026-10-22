@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { encodeMollyModelOption, MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
+import { pickComposerProvider } from '../src/lib/composer-provider-hierarchy';
 import {
   EMPTY_ACP_SESSION_USER_CONFIG_EDITS,
   areAcpSessionConfigPreferencesEqual,
@@ -23,6 +24,55 @@ const baseOptions: AcpSessionSelectorOptionsInput = {
   defaultModelId: 'gpt-5.5',
   configOptionSelectors: [],
 };
+
+it.each<{ name: string; modelReasoningEfforts: Record<string, string[]>; expected: string }>([
+  { name: 'missing', modelReasoningEfforts: {}, expected: 'low' },
+  { name: 'empty', modelReasoningEfforts: { 'model-b': [] }, expected: 'off' },
+])(
+  'submits provider-change reasoning with a $name target mapping',
+  ({ modelReasoningEfforts, expected }) => {
+    const modelOptions = [
+      { value: 'model-a', label: 'A', group: 'A' },
+      { value: 'model-b', label: 'B', group: 'B' },
+    ];
+    const picked = pickComposerProvider({
+      modelOptions,
+      selectedModelId: 'model-a',
+      reasoningValue: 'low',
+      modelReasoningEfforts,
+      fallbackReasoningLevels: ['off', 'low', 'high'],
+      providerId: 'group:B',
+    });
+    const resolved = resolveAcpSessionConfigSelection(
+      {
+        edits: {
+          model: { value: picked.modelId! },
+          configOptions: { reasoning_effort: picked.reasoning ?? 'low' },
+        },
+        preferences: { modelId: 'model-a' },
+      },
+      {
+        ...baseOptions,
+        capabilityAuthority: 'authoritative',
+        modelOptions,
+        defaultModelId: 'model-a',
+        modelReasoningEfforts,
+        configOptionSelectors: [
+          {
+            configId: 'reasoning_effort',
+            label: 'Reasoning',
+            type: 'select',
+            category: 'thought_level',
+            currentValue: 'low',
+            options: ['off', 'low', 'high'].map((value) => ({ value, label: value })),
+          },
+        ],
+      }
+    );
+    expect(resolved.selectedModelId).toBe('model-b');
+    expect(resolved.configOptionValues.reasoning_effort).toBe(expected);
+  }
+);
 
 describe('ACP session config derivation', () => {
   it('retains an unrecognized preference until authoritative capabilities arrive', () => {
@@ -384,9 +434,8 @@ describe('ACP session config derivation', () => {
       ).reasoning_effort
     ).toBe('xhigh');
     expect(
-      filterAcpSessionConfigOptionValues(resolved.configOptionValues, [
-        staleGrokReasoningSelector,
-      ]).reasoning_effort
+      filterAcpSessionConfigOptionValues(resolved.configOptionValues, [staleGrokReasoningSelector])
+        .reasoning_effort
     ).toBeUndefined();
   });
 

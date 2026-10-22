@@ -72,8 +72,10 @@ permission, platform unavailability and Molly's own off switch.
 Advanced settings keep plain-language capability descriptions visible and move
 package/version/license/build metadata under Technical details. Website accounts,
 the Browser menu and the Pinterest setup chip share `BrowserAccountImportDialog`.
-It adapts existing Dialog, Select, Checkbox and Collapsible primitives: browser
-and profile share one picker; the curated design/commerce website list starts
+It adapts existing Dialog, Select, Checkbox and Collapsible primitives. Its shared
+`BrowserImportAccess` explains access before metadata reads, guides denied access
+with the actual app name, and shows a neutral readable status above Profile. The
+curated design/commerce website list starts
 collapsed and fully selected. One Import action reads and writes without a preview
 step. Source errors, pending authorization, cancellation and retained/skipped
 counts remain in this dialog. `PublicBrowserSurface` hides under covering dialogs.
@@ -81,8 +83,9 @@ Cookie counts describe local data, not verified sign-in; with cookies present th
 Pinterest chip says "Imported · check in Molly's browser" and stays unticked, and
 clicking it reopens the same import dialog. Human takeover and MFA
 remain available on ordinary pages; the dedicated sign-in dialog is retired.
-A browser-file access denial returns the dialog to its ready state silently,
-keeping the browser, profile and website selections for an explicit retry.
+Denied access clears profiles while retaining website choices. Returning to the
+window or explicit recheck refreshes profiles without reading cookies; Import stays
+unavailable until an actual profile is selected. Keychain failures remain separate.
 
 Shortcuts settings starts with a fixed canvas reference backed by Bento's existing
 keyboard handlers, followed by editable application commands and desktop global

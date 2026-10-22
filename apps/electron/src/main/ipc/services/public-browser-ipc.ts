@@ -1,4 +1,6 @@
 import { BrowserAccountError } from '../../services/browser-account-error'
+import { app, shell } from 'electron'
+import { openBrowserImportSettings } from '../../services/browser-import-settings'
 import { getIpcContext, IpcMethod, IpcService } from 'electron-ipc-decorator'
 import {
   ElectronPublicBrowserBoundsInputSchema,
@@ -183,7 +185,16 @@ export class PublicBrowserIpc extends IpcService {
   @IpcMethod()
   async getImportSources() {
     assertTrustedSender()
-    return await getIpcServiceDeps().publicBrowserService.getImportSources()
+    return {
+      ...(await getIpcServiceDeps().publicBrowserService.getImportSources()),
+      applicationName: app.getName()
+    }
+  }
+
+  @IpcMethod()
+  async openImportSettings() {
+    assertTrustedSender()
+    return openBrowserImportSettings((url) => shell.openExternal(url), process.platform)
   }
 
   @IpcMethod()

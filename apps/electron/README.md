@@ -173,8 +173,9 @@ resolution; checkbox actions never repeat a click to force a state change.
 No second Chromium is installed. Hidden Agent pages stay
 renderable in a hidden host window and reattach when the panel opens. The macOS account flow uses one shared import dialog from Website accounts,
 the Browser menu and the Pinterest setup chip. Opening discovers installed browsers
-and lists the selected browser's real profiles; native metadata access requests
-system authorization when needed. A single profile is shown by name and still waits
+and explains access before reading profile metadata. Open Settings attempts the
+selected browser's profile listing; a file-access denial opens the fixed Files &
+Folders pane and shows the actual application name, including Molly Preview. A single profile is shown by name and still waits
 for Import; multiple profiles require an explicit selection in the same picker.
 A collapsed, fully selected catalog
 covers 13 design and 14 commerce platforms; expanding shows exact domain scope.
@@ -213,14 +214,16 @@ Keychain grants; OS policy or signature changes can prompt again. Development
 folder permission may be attributed to Molly's launcher, and macOS may refuse to
 offer that launcher a prompt. OS policy can also deny an isolated signed app
 without offering a prompt; a separate bundle identity does not guarantee one.
-A confirmed browser-file access denial is silent:
-the dialog clears its profile list and choice, shows no recovery UI, and re-lists
-on window focus or an explicit Import click. Website selections stay intact;
+A confirmed browser-file denial clears the profile list and choice and displays
+concise settings guidance. Return via native window foreground, window focus or
+explicit recheck re-lists while the same surface remains open; it never imports
+cookies automatically. Readable profiles replace the guide with a neutral status.
+A genuine empty catalog stays distinct from denied access. Website selections stay intact;
 starting a new dialog resets them. Keychain denial and other read failures show
 their own reason. Granting a native prompt continues the same valid request.
 No Agent resumes automatically.
 See the [user guide](../../USER_GUIDE.md#built-in-browser-research-current-development-build)
-and [profile-first import evidence](../../.agents/notes/implemented/bug-fix/2026-10-14-browser-import-profile-first.md)
+and [permission guide evidence](../../.agents/notes/implemented/bug-fix/2026-10-22-browser-import-permission-guide.md)
 for the current acceptance results and limits. The earlier
 [permission-intent revision](../../.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md)
 records the previous permission timing.

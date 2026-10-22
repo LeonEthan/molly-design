@@ -196,3 +196,9 @@ Both macOS arm64 and x64 resources compiled and passed seal/architecture checks;
 the arm64 resource also loaded in Electron. x64 execution was not claimed. A
 read-only Codex CLI second opinion found no P0/P1 in this correction; it is
 advisory and separate from the PR's GitHub review gate.
+
+## Permission guide follow-up (2026-10-22)
+
+The [#220 permission guide](2026-10-22-browser-import-permission-guide.md) supersedes
+the on-open metadata timing and silent-denial UI in this historical record. Profile
+validation, private snapshots, native `.8` classification and per-site reports remain.

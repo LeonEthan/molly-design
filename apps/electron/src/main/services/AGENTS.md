@@ -106,9 +106,10 @@ input and await child exit before quitting. Closed workers never restart.
 
 ## Browser account imports
 
-Opening lists profiles (cancellable); main re-lists, fails `profile-changed` if moved;
-discovery drops linked root/profile paths. Keep typed file/Keychain failures; EPERM/EACCES
-silent. Prepare before Agent pause/isolation. Read a private 0700 O_NOFOLLOW copy;
+Explain before cancellable listing; re-list on import, fail `profile-changed` if moved.
+Drop linked paths. Trusted IPC opens only Files & Folders.
+EPERM/EACCES guides; Keychain stays separate. Prepare before isolation.
+Read a private 0700 O_NOFOLLOW copy;
 extraction warnings are `source-incomplete`. Main filters IDs/fields, reports per-site
 counts. Isolate pages/Workers/network; preflight quotas, merge identities, verify
 writes/rollback. Failed recovery holds browsing until cleared. Quit awaits revoked

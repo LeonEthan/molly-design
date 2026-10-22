@@ -5,9 +5,9 @@ verify staged bytes before use and after signing. This macOS N-API addon runs in
 main process and uses Security.framework directly. Never fall back to an external Keychain
 helper or an unpatched package. Keep keys native, request-scoped and zeroized.
 Preserve typed selected-source EPERM/EACCES and Keychain denial; main exposes safe codes.
-Profiles list when the dialog opens, never at cookie import. Main copies the selected
+Profiles list after the explained access action and are verified again before import. Main copies the selected
 Cookies DB and sidecars to a private temp dir (symlinks refused) and the addon reads that
-copy through `fromPath`; the dialog swallows native EPERM/EACCES file denials silently.
+copy through `fromPath`; native EPERM/EACCES file denials lead to settings guidance.
 Molly inventory preserves raw rows for main-side site selection and field validation;
 retain row/decryption/host failures and reject lossy expiration conversion. Keep the
 ordinary snapshot policy unchanged and apply profile budgets before normalization.

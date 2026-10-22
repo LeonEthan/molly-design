@@ -3191,5 +3191,19 @@
   "settings.browserImport.errors.restore-incomplete": "Import failed and full restoration could not be verified. Browsing is paused. Clear website data in Website accounts before trying again.",
   "settings.browserImport.errors.unavailable": "Import is unavailable. Check your Molly installation, then retry.",
   "settings.check.modelFailures.key_rejected": "The key was rejected. Check the key and try again.",
-  "settings.check.modelFailures.unreachable": "Can't reach the server from your computer. Check the URL and your network."
+  "settings.check.modelFailures.unreachable": "Can't reach the server from your computer. Check the URL and your network.",
+  "settings.browserImport.permission.beforeTitle": "Bring your sign-ins with you",
+  "settings.browserImport.permission.beforeDescription": "Allow {{app}} to access {{browser}} to continue.",
+  "settings.browserImport.permission.deniedTitle": "Enable {{browser}} access",
+  "settings.browserImport.permission.deniedDescription": "Turn on the switch in System Settings, then return here.",
+  "settings.browserImport.permission.settingsGuide": "System Settings guide",
+  "settings.browserImport.permission.privacy": "Privacy & Security",
+  "settings.browserImport.permission.files": "Files & Folders",
+  "settings.browserImport.permission.returnHint": "Turn on {{browser}}, then return here.",
+  "settings.browserImport.permission.recheck": "Check access again",
+  "settings.browserImport.permission.stillDenied": "Access is still off. Check the switch.",
+  "settings.browserImport.permission.granted": "Access allowed",
+  "settings.browserImport.permission.openSettings": "Open Settings",
+  "settings.browserImport.permission.settingsFailed": "Could not open System Settings. Open Privacy & Security → Files & Folders manually.",
+  "settings.browserImport.permission.privacyNote": "Only selected website sign-ins are imported, not browsing history or saved passwords."
 }

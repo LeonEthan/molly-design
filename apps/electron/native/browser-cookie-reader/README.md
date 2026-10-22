@@ -8,15 +8,15 @@ the npm package supplies TypeScript declarations only.
 The local patch keeps upstream discovery, SQLite snapshotting and Chromium
 unsealing. Resource version `0.6.0+molly-native-keychain.8` preserves native filesystem
 EPERM/EACCES for the selected source and explicit Keychain user-cancellation/authentication
-failure. Native listing and main's private copy both map EPERM/EACCES to the silent
-`source-access-denied`, which clears profile choices and allows focus or Import to
-re-list without offering recovery UI. Generic errors without a recognized errno and
+failure. Native listing and main's private copy both map EPERM/EACCES to
+`source-access-denied`. The shared dialog clears profile choices, guides the user to
+Files & Folders, and re-lists on return or explicit recheck without importing cookies. Generic errors without a recognized errno and
 other Keychain failures remain unavailable sources.
 It replaces the macOS Keychain helper with Security.framework calls
 inside Molly, frees and zeroizes returned credential bytes, and marks that lookup
 cooperative because an OS authorization dialog cannot be force-cancelled. No
-credential is supplied by JavaScript. Profile metadata access starts when the import
-dialog opens; cookie access starts after Import. Real native access may trigger
+credential is supplied by JavaScript. Profile metadata access starts after the
+explained Open Settings action; cookie access starts after Import. Real native access may trigger
 system authorization. There is no separate grant API,
 non-interactive permission probe or guarantee that denial can prompt again.
 A native SQL preflight and staged-row budget
@@ -69,8 +69,8 @@ records the scope and validation limits.
 The [permission-intent revision](../../../../.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md)
 records the earlier delayed discovery and narrow native permission-error propagation.
 The [profile-first revision](../../../../.agents/notes/implemented/bug-fix/2026-10-14-browser-import-profile-first.md)
-supersedes that discovery timing. A classified browser-file denial stays silent:
-the dialog clears the profile list and choice, then re-lists on focus or Import;
-a Keychain denial reports its own reason. Synthetic reader
+records the earlier on-open listing and silent denial. The
+[permission guide revision](../../../../.agents/notes/implemented/bug-fix/2026-10-22-browser-import-permission-guide.md)
+supersedes that timing and silence; Keychain denial still reports its own reason. Synthetic reader
 checks do not establish first/retained grants, launcher attribution or denial
 behavior in a real signed application.

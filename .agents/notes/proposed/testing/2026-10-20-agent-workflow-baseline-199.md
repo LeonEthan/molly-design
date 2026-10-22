@@ -343,3 +343,27 @@ still swept fonts and sizes to fit pixels despite the no-brute-force guidance
 browsed an archive instead of searching, with no search extension. Two runs per
 case on one machine; the bundle changes several things together, so effects are
 not isolated, and no human visual review was performed.
+
+## Round 5 (#223 C, PR #231, 343b7476)
+
+Status: proposed
+Measured: `343b7476f7c3d7dd3e17d22b1046c4822fcc15c8` (PR #231 head), 2026-10-22
+Model: `deepseek-flash`, reasoning `high`; no image-model call
+Runs: case C twice, serially, built local Electron app, isolated data/profile per run, 20-minute hard cap. Both runs committed under the cap. Both failed the no-sweep criterion: run 1 swept candidate fonts/sizes in bespoke Python/Pillow measurements; run 2 continued font comparisons and made six renders.
+
+The prior Round 4 fixture file was not present in the checkout or retained artifact directories. I used the same prescribed copy and described Blue Hour composition as a fresh synthetic 1080 × 1350 SVG for both runs, with Avenir Next Condensed as its declared reference face. The fixture and output images are in ignored `e2e/artifacts/ab-223-r5/`; captured Pi transcripts and traces remain local and are not committed. Because the original Round 4 fixture was unavailable, visual and timing comparisons are approximate rather than a byte-identical fixture rerun.
+
+| Run | 20-minute rule | Completed / total | First preview | Tool calls / bash | Preview renders | `reference-pack.mjs measure` | `font-catalog.mjs match` | `molly_view_image` with `fonts` | Type fitting sweep |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Round 4 C1 | Pass | 10.5 min | 2.7 min | not recorded | not recorded | not recorded | not recorded | used | Yes |
+| Round 4 C2 | Pass | 5.2 min | 3.9 min | not recorded | not recorded | not recorded | not recorded | used | Yes |
+| Round 5 run 1 | Pass | 7m 40.6s | 5m 56.6s | 75 / 53 | 3 | 0 | 3 | 1 call | Yes |
+| Round 5 run 2 | Pass | 14m 26.6s | 6m 38.6s | 112 / 77 | 6 | 3 calls | 1 | 5 calls | Yes |
+
+Reference face: Avenir Next Condensed. Run 1 embedded the face under the custom family names `Poster Sans` (700) and `Poster Sans Demi` (600); run 2 used `Avenir Next Condensed Bold` and `Avenir Next Condensed Demi Bold` directly. Headline `fontSize` / `letterSpacing` were 243 / −5 (`BLUE`) and 243 / −6 (`HOUR`) in run 1, and 244.35 / −5.6 and 244.35 / −6.6 in run 2. The remaining pairs (run 1 → run 2) were `SESSIONS` 87.6 / 13 → 88.98 / 12.4, `LIVE JAZZ` 62.1 / 8.25 → 62.85 / 7.97, `EVERY THURSDAY 9PM` 38.1 / 5.41 → 40.96 / 4, and `THE LANTERN ROOM` 35.3 / 4.75 → 38.14 / 3.35.
+
+Both picked a visually close Avenir Next Condensed face and produced close side-by-side reconstructions. The no-sweep goal was not met. Run 1 never used `reference-pack.mjs measure`; instead it repeatedly probed candidate fonts and sizes with Python/Pillow. Its catalog shortlist favored Helvetica Neue Condensed Black and Avenir Next Condensed Heavy/Heavy Italic for `BLUE`, rather than the final Bold face. Run 2 used the measurement helper, but its first set of lower-text regions returned a 7-pixel partial line and a no-ink result; it corrected the crop and continued. Its catalog shortlist favored Futura Condensed ExtraBold for `HOUR` and did not identify the final Avenir Next Condensed Bold/Demi variants. The image viewer was used with font comparisons in both runs; no viewer failure was observed. These misses led to more manual inspection and fitting rather than a bounded measure→match→choose flow.
+
+Compared with Round 4 C, Round 5 run 1 was faster overall than C1 (7.7 vs 10.5 min) but had a later first preview (5.9 vs 2.7 min); run 2 was slower than C2 (14.4 vs 5.2 min) and had a later first preview (6.6 vs 3.9 min). Tool/bash and helper-use counts were not retained per Round 4 run, so no count comparison is available. Round 4 and Round 5 both completed both runs within 20 minutes, but all four C runs still swept type choices. Two samples per round, one machine, and a regenerated synthetic fixture limit the comparison; the side-by-side images allow the owner to judge visual quality.
+
+Artifacts: `e2e/artifacts/ab-223-r5/run-1/` and `e2e/artifacts/ab-223-r5/run-2/` (reference, final render, side-by-side, `design.yaml`, runtime/session metadata, screen capture, local trace, and captured transcript; run 2 also retains `receipt.json`). Run 1's committed receipt was confirmed before harness cleanup, but its temporary receipt file was not retained. The transcripts and traces are ignored local evidence and must not be committed.

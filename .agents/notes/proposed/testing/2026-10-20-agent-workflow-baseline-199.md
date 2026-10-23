@@ -431,68 +431,106 @@ change was reverted. Only this note is included in the E2E commit.
 
 ## #223 A round 2 (Pinterest, PR #232, 4e26013e)
 
-Setup attempted on the Mac mini on 2026-10-22 (local date). `pnpm install`
-and `pnpm build` completed at
-`4e26013e05fe1d68aa14bd4150a8e2420df51f27`, including the bundled CLI and
-Electron type checks. The existing Round 1 runner, Electron harness and Settings
-browser-import Page Object were reused. No product or harness code changed.
-The prepared runner uses the Case A prompt with only the site label changed to
-Pinterest, and retains DeepSeek Flash / High and the Round 4 image connection
-as the intended measured configuration.
+Measured on the Mac mini on 2026-10-22 (local date), using the exact Case A
+prompt with only `(typographicposters.com)` replaced by `(Pinterest)`, no
+attachment, DeepSeek Flash / High, and the Round 4 image connection
+(`gpt-image-2.5-sunburst` through the local proxy). `pnpm install` and
+`pnpm build` completed from `4e26013e05fe1d68aa14bd4150a8e2420df51f27`;
+the intervening `48cc7733` changed only this note, so both runs consumed that
+same built app. The Round 1 runner, existing Electron harness and Settings
+browser-import Page Object were reused; no product or harness code changed.
 
-**Blocked before measurement:** Settings listed three Chrome profiles and
-required a profile selection. Only Pinterest was selected for import, but no
-profile was selected and no import was submitted. An asynchronous request asked
-the owner which profile contains the Pinterest session. Automatic approval
-review rejected proceeding with the first listed profile because it could
-import the wrong account's session. The profile choice remains required; this
-is not evidence that Chrome lacks a Pinterest session or that import fails.
+Both runs used fresh isolated profiles, serially, outside the sandbox, with
+owned host ports 62954 and 49621. Neither `LODY_*` nor
+`ELECTRON_RUN_AS_NODE` was inherited. Before each prompt, the daemon reached
+ready and the authenticated proxy model catalog returned HTTP 200 with
+`deepseek-flash`. The model picker showed Flash / High.
 
-Two unmeasured preflights used fresh isolated profiles through
-`electron-harness.ts`, outside the sandbox, with owned host ports and no
-inherited `LODY_*` or `ELECTRON_RUN_AS_NODE`. Both daemons reached ready. The
-first stopped on a runner-only exact button-name mismatch before any import;
-the second reached the Chrome profile selector after selecting Pinterest only.
-No proxy readiness probe, model connection setup, prompt submission or model
-request was reached. No Pinterest home page was opened, so there is no signed-in
-feed screenshot. Local Settings screenshots and metadata establish only the
-setup state. No cookies were read by the runner, imported or exported, and no
-profile export was invoked. The owned harness processes were closed.
+The earlier setup blocker was resolved by the owner's explicit selection of
+Chrome's Default profile. In each isolated profile, Settings imported only
+Pinterest: 12 discovered, 12 imported, zero skipped or failed. Opening `/`
+redirected the signed-in account to Business Hub; setup then opened the site's
+Home feed at `https://www.pinterest.com/homefeed/`. The runner inspected and
+retained the home-feed screenshot with visible pins and no login overlay before
+sending the prompt. A2's seasonal promotion was dismissed during setup. No
+cookie values were read by the runner, copied to evidence or exported; no profile
+export was invoked. Both owned process trees and endpoints closed successfully.
+Two earlier unmeasured preflights remain separate from these samples.
 
 | Metric | A1 | A2 |
 | --- | --- | --- |
-| Verdict | Blocked at setup; not measured | Not started; profile choice pending |
-| Committed receipt | No | No |
-| Total time / first preview | — / — | — / — |
-| Top-level tools / bash / codemode | 0 / 0 / 0 | 0 / 0 / 0 |
-| Searches and query/URL | 0; none | 0; none |
-| Search-results screenshots / scrolls | 0 / 0 | 0 / 0 |
-| One-script search survey | Not exercised | Not exercised |
-| Thread extension | Not exercised | Not exercised |
-| `save_image` picks / `molly_view_image` | 0 / 0 | 0 / 0 |
-| Image-model calls / preview calls | 0 / 0 | 0 / 0 |
-| Over-15-minute cause | No measured turn | No measured turn |
-| Final render / `design.yaml` | None | None |
+| Research acceptance | **Pass** | **Fail**: repeated search submissions and one-screen revisits |
+| Committed receipt | Yes | Yes |
+| Total to committed receipt | 424.3 s (7.07 min) | 497.7 s (8.29 min) |
+| First preview invocation | 336.0 s (5.60 min) | 355.8 s (5.93 min) |
+| Top-level tools / bash / codemode | 53 / 25 / 12 | 62 / 19 / 25 |
+| Search-URL submissions / distinct queries | 3 / 3 | 5 / 2 |
+| Screenshots / scrolls per submission, in order | 3/3, 3/3, 3/3 | 3/3, 3/3, 1/3, 1/1, 1/3 |
+| All search-results screenshots / scrolls | 9 / 10, including one later pick-position scroll | 9 / 13 |
+| One-script survey | Yes; first query navigation was separate from its three-screen loop | Yes; both initial queries combined navigation and a three-screen loop |
+| Thread extension | Yes, vintage/mid-century poster style | Yes, mid-century blue/night poster style |
+| `save_image` picks / `molly_view_image` calls | 3 / 8 | 3 / 9 |
+| Image-model calls | 2 successful edits | 2 successful edits |
+| Preview calls | 3, all successful | 5, all successful |
+| Over-15-minute cause | None; under 15 min | None; under 15 min |
+| Final render | 1080 × 1350, committed | 1080 × 1350, committed |
 
-Counts concern the product Agent, not runner setup actions. The pair has
-**no acceptance pass**: neither run can be assessed against the 20-minute,
-two-screens-per-search, extension or maximum-count gates. Zero calls means the
-round's five-call image budget is unused; the run-1 three-call stop rule was not
-reached. There are no final renders, picks, YAML or committed receipts to retain.
-Evidence remains ignored under `e2e/artifacts/ab-223-a2/preflight-{1,2}/`;
-`run-1/` contains the prepared runner only, and `run-2/` was not created.
+Search URLs, in submission order (each is
+`https://www.pinterest.com/search/pins/?q=` plus the encoded query):
 
-Round 1 completed A1 in 11.55 minutes and capped A2 at 20 minutes; both extended
-no thread and surveyed archives rather than successful searches. Round 4 A1/A2
-completed in 13.6/11.2 minutes, with first previews at 10.0/7.9 minutes and no
-extension. This round adds no timing or research-behaviour sample and cannot
-show whether the `4e26013e` skill wording works on Pinterest. Resume from a fresh
-isolated profile after the owner identifies the Chrome profile, verify the
-signed-in Pinterest feed, and then perform the two serial measured runs.
+| Run / submission | Exact query parameter | Screenshots | Scrolls |
+| --- | --- | ---: | ---: |
+| A1 / 1 | `late%20night%20jazz%20poster` | 3 | 3 × 900 px |
+| A1 / 2 | `mid%20century%20jazz%20poster` | 3 | 3 × 900 px |
+| A1 / 3 | `smoky%20jazz%20club%20poster` | 3 | 3 × 900 px |
+| A2 / 1 | `late%20night%20jazz%20poster%20design` | 3 | 3 × 950 px |
+| A2 / 2 | `mid%20century%20jazz%20poster%20blue%20night` | 3 | 3 × 950 px |
+| A2 / 3 | `mid%20century%20jazz%20poster%20blue%20night` | 1 | 950, 950, 200 px |
+| A2 / 4 | `late%20night%20jazz%20poster%20design` | 1 | 120 px |
+| A2 / 5 | `mid%20century%20jazz%20poster%20blue%20night` | 1 | 950, 950, 200 px |
 
-Validation: `pnpm check` initially failed in the sandbox on denied local socket
-binds (`EPERM`), then passed outside the sandbox, including tests and the public
-boundary check. `pnpm run docs check` passed with 18 existing warnings and no
-registered SHA-protected topics. `pnpm format` completed; its unrelated Electron
-formatter change was reverted. Only this note is included in the record commit;
-no transcripts, cookies, traces, profiles or artifacts are included.
+For scoring, a fresh `navigate` to a search URL counts as a submission even
+when the query repeats. A2's final three submissions revisited its two existing
+queries to locate and save picks; they are not three new query ideas. Counting
+only distinct queries would give A2 two searches, each initially surveyed across
+three screens, and a pass under that narrower interpretation. The strict
+submission-based verdict above preserves the repeat-search and one-screen
+coverage failures. A1 later used Back, a 1,200 px forward scroll and snapshots
+to select picks; this is reported separately from its three URL submissions.
+
+The extension is a style/term thread, not a named pin, board or designer detail
+page. A1's first survey showed vintage jazz posters, including the visible
+“Vintage Jazz Wall Art Poster” and “The Blue Lantern” references; its next query
+followed the mid-century style before the smoky-club query. A2 likewise followed
+its first survey with the narrower mid-century blue/night query. All nine
+returned research screenshots in each run are distinct images. The browser
+still supplies no measured scroll-position signal, so screenshot and scroll
+counts do not establish an exact viewport overlap. A1 recovered from one
+snapshot error after Back; A2 made one unsuccessful browser `wait` call. Neither
+caused a long run or a runner retry of an image request.
+
+Compared with Round 1 (11.55 min completion / 20 min cap; first previews
+6.83/5.88 min), both runs now committed, A1's first preview was earlier and A2's
+was similar. Round 1 had zero successful searches and no extension. Compared
+with Round 4 A1/A2 (13.6/11.2 min total, 10.0/7.9 min first preview), both totals
+and first previews were earlier. This round establishes searched multi-screen
+surveys and style-thread follow-ups on signed-in Pinterest, but the pair
+**fails the strict per-submission acceptance** because of A2's revisits. It does
+not isolate the wording change from the different site and signed-in account.
+Repository checks overlapped A1, so load was not controlled. Two serial samples
+on one machine and a live personalized site do not establish a stable timing
+distribution. The owner judges the posters; no human
+visual-quality verdict is claimed.
+
+Final renders, three saved picks per run, portable `design.yaml`/media,
+committed receipts, sign-in screenshots, metrics and checksummed evidence
+manifests are retained locally under `e2e/artifacts/ab-223-a2/run-{1,2}/`.
+Total image usage was 4/5. A1 stayed below the three-call stop threshold, so A2
+was authorized to proceed. No measured turn was stopped or restarted. Cookies,
+profiles, transcripts, traces and artifacts are not committed.
+
+Validation: `pnpm check` passed outside the sandbox, including tests and the
+public-boundary check. `pnpm run docs check` passed with 18 existing warnings
+and no registered SHA-protected topics. `pnpm format` completed; its unrelated
+Electron formatter change was reverted. Only this note is included in the E2E
+results commit.

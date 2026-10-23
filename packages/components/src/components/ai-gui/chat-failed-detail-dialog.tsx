@@ -86,7 +86,7 @@ export function ChatFailedDetailDialog({
         onCloseAutoFocus={onCloseAutoFocus}
       >
         <DialogHeader className="pr-6 text-left sm:text-left">
-          <DialogTitle className="flex items-start gap-2 text-base">
+          <DialogTitle className="flex items-start gap-2">
             <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
             <span className="min-w-0 break-words">{title}</span>
           </DialogTitle>

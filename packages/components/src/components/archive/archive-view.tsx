@@ -618,7 +618,7 @@ export function ArchiveView() {
   const removedProjectGroupLabel = t('archive.localProject.removedGroup', 'Removed local project');
   const restoreUnavailableLabel = t(
     'archive.localProject.restoreUnavailable',
-    'Re-add this local project to restore its conversations.'
+    'Re-add this local project to restore its designs.'
   );
 
   // Preserve historical archived sessions while respecting local-project ownership.
@@ -713,7 +713,7 @@ export function ArchiveView() {
       localProjectLabelByKey,
       groupMode,
       sortMode,
-      flatLabel: t('archive.allSessions', 'All sessions'),
+      flatLabel: t('archive.allSessions', 'All designs'),
     }).map((group) => {
       if (groupMode === 'flat') return group;
       if (group.kind !== 'chat') return group;
@@ -750,7 +750,7 @@ export function ArchiveView() {
         return;
       }
       console.error('Failed to restore archived conversation', error);
-      toast.error(t('archive.restoreFailed', 'Failed to restore conversation.'));
+      toast.error(t('archive.restoreFailed', 'Failed to restore design.'));
     });
   };
 
@@ -959,16 +959,16 @@ export function ArchiveView() {
     }
   }, [scopedArchivedSessions, selectedIds, isMultiSelectMode]);
 
-  const restoreLabel = t('archive.restore', 'Restore session');
+  const restoreLabel = t('archive.restore', 'Restore design');
   const deleteLabel = t('archive.delete', 'Delete permanently');
   const deleteButtonLabel = t('common.delete', 'Delete');
   const chatLabel = t('archive.chats', 'Designs');
   const emptyLabel = normalizedSearchQuery
-    ? t('archive.emptySearch', 'No matching archived sessions')
-    : t('archive.empty', 'No archived sessions');
+    ? t('archive.emptySearch', 'No matching archived designs')
+    : t('archive.empty', 'No archived designs');
   const emptyDescription = normalizedSearchQuery
     ? t('archive.emptySearchDescription', 'Try a different search or clear filters.')
-    : t('archive.emptyDescription', 'Sessions you archive will appear here.');
+    : t('archive.emptyDescription', 'Designs you archive will appear here.');
 
   const sortLabel =
     sortMode === 'oldest'
@@ -992,7 +992,7 @@ export function ArchiveView() {
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={t('archive.searchPlaceholder', 'Search archived sessions…')}
+            placeholder={t('archive.searchPlaceholder', 'Search archived designs…')}
             aria-label={t('archive.search', 'Search archive')}
             className="h-8 border-foreground/[0.10] bg-background pl-8 text-sm shadow-none dark:border-input-border dark:bg-input"
           />
@@ -1079,7 +1079,7 @@ export function ArchiveView() {
 
   const archiveContent = (
     <div className="mx-auto box-border w-full max-w-3xl px-4 py-4 sm:px-6">
-      {archiveToolbar}
+      {scopedArchivedSessions.length > 0 ? archiveToolbar : null}
       {groupedSessions.length === 0 || filteredArchivedSessions.length === 0 ? (
         <div className="flex w-full flex-col items-center justify-center py-12 text-center">
           <Archive className="h-12 w-12 text-muted-foreground/40" />
@@ -1133,7 +1133,7 @@ export function ArchiveView() {
                   )
                 : t(
                     'archive.deleteConfirm.description.chatSession',
-                    'This will permanently delete the chat session.'
+                    'This will permanently delete the design.'
                   )}
             </DialogDescription>
           </DialogHeader>
@@ -1164,7 +1164,7 @@ export function ArchiveView() {
         <DialogContent className={cn('max-w-sm')}>
           <DialogHeader>
             <DialogTitle>
-              {t('archive.bulkDeleteConfirm.title', 'Delete {{count}} sessions permanently?', {
+              {t('archive.bulkDeleteConfirm.title', 'Delete {{count}} designs permanently?', {
                 count: selectedCount,
               })}
             </DialogTitle>
@@ -1176,7 +1176,7 @@ export function ArchiveView() {
                   )
                 : t(
                     'archive.bulkDeleteConfirm.description.chatOnly',
-                    'This will permanently delete the selected sessions.'
+                    'This will permanently delete the selected designs.'
                   )}
             </DialogDescription>
           </DialogHeader>

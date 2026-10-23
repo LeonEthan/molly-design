@@ -108,7 +108,8 @@ export function createProductSession(options: {
     const input = { type: 'notes-sync', notesEpoch, notesInstance, notes };
     const sendKeepalive =
       keepalive &&
-      new TextEncoder().encode(JSON.stringify(input)).byteLength < DESIGN_NOTES_KEEPALIVE_BODY_LIMIT;
+      new TextEncoder().encode(JSON.stringify(input)).byteLength <
+        DESIGN_NOTES_KEEPALIVE_BODY_LIMIT;
     const response = await post(input, sendKeepalive);
     if (!response.ok) throw Error(`Notes sync failed with status ${response.status}`);
   };
@@ -146,7 +147,10 @@ export function createProductSession(options: {
     request,
     elements: options.elements,
     select: options.select,
-    onToggle: (open) => layersButton.classList.toggle('on', open),
+    onToggle: (open) => {
+      layersButton.classList.toggle('open', open);
+      layersButton.setAttribute('aria-pressed', String(open));
+    },
   });
   const keys = new AbortController();
   window.addEventListener(
@@ -185,8 +189,8 @@ export function createProductSession(options: {
 .ed-scroll{bottom:calc(var(--molly-dock-bottom) + var(--molly-dock-height))}
 /* Atelier palette (2026-10-04 redesign): the artwork rests on a quiet light
    table one step off the shell ground; chrome is warm ink with hairlines. */
-:root,:root[data-theme="light"]{--ink:#2b2c22;--ink-2:#4a4b40;--chrome:#ebe8e1;--chrome-2:#e2ded4;--line:#ddd6c7;--muted:#6f6b5b;--surface:#fbf8f0;--grid-dot:#d2ccc0;--accent:#c2dc72;--on-accent:#1a220a;--signal:#b3cf60;--outside:#b7791f;--slide-shadow:0 1px 2px rgb(60 50 30 / .08),0 28px 60px -22px rgb(60 50 30 / .3)}
-:root[data-theme="dark"]{--ink:#ece7da;--ink-2:#b9b4a6;--chrome:#141511;--chrome-2:#2a2b24;--line:#34352d;--muted:#a29d8c;--surface:#22231d;--grid-dot:#26271f;--accent:#bdd97e;--on-accent:#1a220a;--signal:#bdd97e;--outside:#d9a441;--slide-shadow:0 0 0 1px rgb(255 255 255 / .05),0 32px 80px -24px rgb(0 0 0 / .85)}
+:root,:root[data-theme="light"]{--ink:#2b2c22;--ink-2:#4a4b40;--chrome:#ebe8e1;--chrome-2:#e2ded4;--line:#ddd6c7;--muted:#6f6b5b;--surface:#fbf8f0;--grid-dot:#d2ccc0;--accent:#c2dc72;--on-accent:#1a220a;--signal:#b3cf60;--selection:hsl(71.1 52.9% 90%);--ring:hsl(76.3 70.6% 26.7%);--destructive:hsl(12.4 50.4% 45.1%);--outside:#b7791f;--slide-shadow:0 1px 2px rgb(60 50 30 / .08),0 28px 60px -22px rgb(60 50 30 / .3)}
+:root[data-theme="dark"]{--ink:#ece7da;--ink-2:#b9b4a6;--chrome:#141511;--chrome-2:#2a2b24;--line:#34352d;--muted:#a29d8c;--surface:#22231d;--grid-dot:#26271f;--accent:#bdd97e;--on-accent:#1a220a;--signal:#bdd97e;--selection:hsl(77.1 35% 15.7%);--ring:#bdd97e;--destructive:hsl(12.6 67.5% 62.5%);--outside:#d9a441;--slide-shadow:0 0 0 1px rgb(255 255 255 / .05),0 32px 80px -24px rgb(0 0 0 / .85)}
 .ed-zoombar{box-shadow:none;border-color:var(--line)}
 .ed-panel-toggle,.ed-resizer,.ed-logo,.ed-title,.ed-insert,.ed-group-right,.ed-sidebar,.ed-present-pill,.ed-phone-only,.ed-props,.ed-topbar,.c2a-surface{display:none!important}
 .ed-corner-br{inset-inline-end:auto!important;left:14px!important}
@@ -203,15 +207,16 @@ export function createProductSession(options: {
 .ed-stage-scale .moveable-control-box .moveable-e::after,.ed-stage-scale .moveable-control-box .moveable-w::after{width:5px;height:14px;border-radius:999px}
 .ed-stage-scale .moveable-control-box .moveable-control:hover::after{border-color:#627994;background:#edf2f7}
 /* Reserve the 281px dock, the 14px edge inset and a 12px minimum gap. */
-#autosave-status{position:fixed;bottom:14px;right:14px;z-index:9999;display:flex;align-items:center;gap:7px;max-width:calc(50vw - 168px);box-sizing:border-box;padding:6px 12px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:999px;font:500 10.5px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase}
+#autosave-status{position:fixed;bottom:14px;right:14px;z-index:9999;display:flex;align-items:center;gap:7px;max-width:calc(50vw - 168px);box-sizing:border-box;padding:6px 12px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:999px;font:400 12px/1.2 system-ui}
 #autosave-status .message{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#autosave-status .dot{width:5px;height:5px;border-radius:50%;background:#14ae5c;flex:none}
-#autosave-status[data-state="saving"] .dot,#autosave-status[data-state="pending"] .dot,#autosave-status[data-state="editing"] .dot,#autosave-status[data-state="loading"] .dot{background:#888}
-#autosave-status[data-state="error"] .dot,#autosave-status[data-state="conflict"] .dot{background:#f24822}
+#autosave-status .dot{width:6px;height:6px;border-radius:50%;background:var(--ring);flex:none}
+#autosave-status[data-state="saving"] .dot,#autosave-status[data-state="pending"] .dot,#autosave-status[data-state="editing"] .dot,#autosave-status[data-state="loading"] .dot{background:var(--muted)}
+#autosave-status[data-state="error"] .dot,#autosave-status[data-state="conflict"] .dot{background:var(--destructive)}
 .molly-dock{position:fixed;left:50%;bottom:var(--molly-dock-bottom);height:var(--molly-dock-height);transform:translateX(-50%);z-index:2147483000;display:flex;align-items:center;gap:4px;max-width:calc(100vw - 24px);box-sizing:border-box;overflow-x:auto;scrollbar-width:none;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 8px;box-shadow:0 1px 2px rgb(60 50 30 / .06),0 14px 32px -14px rgb(60 50 30 / .28)}
 .molly-dock button{width:38px;height:38px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:50%;background:transparent;color:inherit;cursor:pointer;font:400 18px system-ui;padding:0}
 .molly-dock button:hover{background:var(--chrome-2)}
 .molly-dock button.on{background:var(--accent);color:var(--on-accent)}
+.molly-dock button.open{background:var(--selection);color:var(--ink)}
 .molly-dock svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.35;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .molly-dock .sep{width:1px;height:18px;background:var(--line);margin:0 4px}
 .molly-dock .caret{width:12px;height:12px;margin-left:-2px}
@@ -249,8 +254,7 @@ export function createProductSession(options: {
     button.title = say(label);
     button.setAttribute('aria-label', say(label));
     if (extraClass) button.className = extraClass;
-    button.disabled =
-      readonly && ['create', 'history', 'comment', 'brush'].includes(extraClass);
+    button.disabled = readonly && ['create', 'history', 'comment', 'brush'].includes(extraClass);
     button.onclick = onClick;
     dock.append(button);
     return button;
@@ -758,7 +762,11 @@ export function createProductSession(options: {
         return pins.read(expected);
       },
       settleNotes(expected: number, sent: boolean, instance?: string | null) {
-        return pins.settle(expected, sent, typeof instance === 'string' && instance ? instance : undefined);
+        return pins.settle(
+          expected,
+          sent,
+          typeof instance === 'string' && instance ? instance : undefined
+        );
       },
       restoreNotes(notes: Parameters<typeof pins.restore>[0]) {
         pins.restore(notes);

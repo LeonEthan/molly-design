@@ -148,6 +148,8 @@ export interface LoroSidebarProps {
   topContent?: ReactNode;
   /** Reserves the filter trigger's space in the first visible section header. */
   desktopFilterPlaceholder?: ReactNode;
+  /** An empty list has nothing to organize, so the filter trigger and its reserved row are dropped. */
+  hideDesktopFilter?: boolean;
   /**
    * In-flow content rendered after {@link sessionListProps} inside the scroll
    * viewport (workspace mode only). LoroAppSidebar uses this to place the Chats
@@ -554,6 +556,7 @@ export const LoroSidebar = memo(function LoroSidebar({
   activeNav = null,
   topContent,
   desktopFilterPlaceholder,
+  hideDesktopFilter = false,
   afterSessionListContent,
   bottomFloatingContent,
   repoSections = defaultRepoSections,
@@ -690,7 +693,7 @@ export const LoroSidebar = memo(function LoroSidebar({
 
   // This instance never moves between section headers: only its same-sized
   // placeholder moves. That keeps an open popover open across organize changes.
-  const desktopFilterNode = (
+  const desktopFilterNode = hideDesktopFilter ? null : (
     <SidebarFilterPopover
       organize={organizeMode}
       onOrganizeChange={onOrganizeModeChange}
@@ -700,9 +703,9 @@ export const LoroSidebar = memo(function LoroSidebar({
       triggerClassName="h-5 w-5 [&_svg]:h-3.5 [&_svg]:w-3.5"
     />
   );
-  const sectionHeaderFilterPlaceholder = desktopFilterPlaceholder ?? (
-    <span aria-hidden="true" className="block h-5 w-5" />
-  );
+  const sectionHeaderFilterPlaceholder = hideDesktopFilter
+    ? null
+    : (desktopFilterPlaceholder ?? <span aria-hidden="true" className="block h-5 w-5" />);
   const hasPinnedItems = Boolean(pinnedItems?.length);
   const workspaceIdentityStatus: WorkspaceIdentityStatus | null =
     connectionUiState && connectionUiState !== 'online'

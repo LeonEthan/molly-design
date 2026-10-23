@@ -8,8 +8,8 @@ import {
 import { getIpcServices } from '@/lib/electron-ipc-client';
 
 /**
- * Design-session model readiness, shared by Settings (design-readiness.tsx),
- * onboarding, and the landing composer so the three surfaces can never drift.
+ * Design-session model readiness, shared by onboarding and the landing composer
+ * so the two surfaces can never drift.
  * Readiness describes saved configuration only: it never probes a key.
  */
 export function getModelConnectionOAuthSendBlock(

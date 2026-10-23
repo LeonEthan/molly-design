@@ -26,7 +26,6 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const githubArgs = {
-  kind: 'github',
   isWorktree: true,
   repoFullName: 'loro-dev/lody',
   machineName: 'Studio Mac',
@@ -41,7 +40,6 @@ export const HistoricalGithubWorktree: Story = {
 
 export const LocalWorktree: Story = {
   args: {
-    kind: 'local',
     title: 'Refactor persistence layer',
     isWorktree: true,
     folderName: 'lody',
@@ -53,7 +51,6 @@ export const LocalWorktree: Story = {
 
 export const LocalPlain: Story = {
   args: {
-    kind: 'local',
     title: 'Tidy up logging output',
     isWorktree: false,
     folderName: 'loro',
@@ -65,7 +62,6 @@ export const LocalPlain: Story = {
 
 export const ChatMinimal: Story = {
   args: {
-    kind: 'chat',
     title: 'Brainstorm onboarding copy',
     latestMessageAt: minutesAgo(30),
   },

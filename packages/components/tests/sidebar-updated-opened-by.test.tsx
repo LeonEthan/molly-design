@@ -288,7 +288,7 @@ describe('SidebarUpdatedSessionList opened-by rendering', () => {
       opened?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     });
     const openerItem = Array.from(document.querySelectorAll('[role="menuitem"]')).find((item) =>
-      item.textContent?.includes('Go to Opener Session')
+      item.textContent?.includes('Go to Opener Design')
     );
     flushSync(() => {
       openerItem?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));

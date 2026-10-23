@@ -19,6 +19,7 @@ import {
 export type LayerElement = {
   id: string;
   kind: string;
+  shapeName?: string;
   bounds: readonly number[];
   rotation?: number;
   opacity?: number;
@@ -39,14 +40,24 @@ const KIND_ICONS: Record<string, readonly UiIconNode[]> = {
   chart: table2Icon,
 };
 
+const SHAPE_LABELS: Record<string, readonly [string, string]> = {
+  rect: ['shapeRectangle', 'Rectangle'],
+  roundRect: ['shapeRectangle', 'Rectangle'],
+  ellipse: ['shapeEllipse', 'Ellipse'],
+  oval: ['shapeEllipse', 'Ellipse'],
+  triangle: ['shapeTriangle', 'Triangle'],
+  arrow: ['shapeArrow', 'Arrow'],
+};
+
 const STYLE = `
 .molly-layers{position:fixed;top:14px;right:14px;bottom:76px;z-index:2147482990;display:none;flex-direction:column;width:244px;max-width:calc(100vw - 28px);box-sizing:border-box;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 40px -20px rgb(0 0 0 / .35);font:12.5px/1.35 system-ui;overflow:hidden}
 .molly-layers.open{display:flex}
+body.molly-layers-open .ed-scroll{right:min(270px,50vw)}
 .molly-layers header{display:flex;align-items:center;justify-content:space-between;padding:10px 8px 6px 14px;font-weight:600}
 .molly-layers header button{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:7px;background:transparent;color:var(--muted);cursor:pointer}
 .molly-layers header button:hover{background:var(--chrome-2);color:var(--ink)}
 .molly-layers svg{width:15px;height:15px;flex:none;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.molly-layers .props{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;padding:4px 14px 12px;border-bottom:1px solid var(--line)}
+.molly-layers .props{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;padding:12px 14px;border-top:1px solid var(--line);max-height:60%;overflow:auto;flex:none}
 .molly-layers .props[hidden]{display:none}
 .molly-layers label{display:flex;flex-direction:column;gap:3px;min-width:0;color:var(--muted);font-size:11px}
 .molly-layers input{width:100%;box-sizing:border-box;height:26px;padding:0 7px;border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--ink);font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
@@ -54,12 +65,12 @@ const STYLE = `
 .molly-layers .arrange{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px}
 .molly-layers .arrange button{height:26px;border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--ink);font:11.5px system-ui;cursor:pointer}
 .molly-layers .arrange button:hover{background:var(--chrome-2)}
-.molly-layers .error{grid-column:1/-1;color:#d33b1f;font-size:11px}
+.molly-layers .error{grid-column:1/-1;color:var(--destructive);font-size:11px}
 .molly-layers .error:empty{display:none}
 .molly-layers ol{list-style:none;margin:0;padding:6px;overflow:auto;flex:1}
 .molly-layers li button{display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;height:auto;min-height:30px;padding:6px 8px;border:none;border-radius:8px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .molly-layers li button:hover{background:var(--chrome-2)}
-.molly-layers li button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.molly-layers li button[aria-pressed="true"]{background:var(--selection);color:var(--ink)}
 .molly-layers li span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .molly-layers .empty{padding:10px 8px;color:var(--muted)}
 .molly-layers input:disabled,.molly-layers .arrange button:disabled{opacity:.4;cursor:default}
@@ -99,7 +110,7 @@ export function createLayersPanel(options: {
   const props = document.createElement('div');
   props.className = 'props';
   const list = document.createElement('ol');
-  root.append(header, props, list);
+  root.append(header, list, props);
   document.head.append(style);
   document.body.append(root);
 
@@ -203,8 +214,15 @@ export function createLayersPanel(options: {
     props.append(arrange, error);
   };
 
-  const kindName = (kind: string) =>
-    label(`layer${kind[0]?.toUpperCase()}${kind.slice(1)}`, kind[0]?.toUpperCase() + kind.slice(1));
+  const kindName = (element: LayerElement) => {
+    const shape = element.kind === 'shape' ? SHAPE_LABELS[element.shapeName ?? ''] : undefined;
+    if (shape) return label(shape[0], shape[1]);
+    const { kind } = element;
+    return label(
+      `layer${kind[0]?.toUpperCase()}${kind.slice(1)}`,
+      kind[0]?.toUpperCase() + kind.slice(1)
+    );
+  };
 
   const renderList = (elements: readonly LayerElement[]) => {
     list.replaceChildren();
@@ -221,8 +239,8 @@ export function createLayersPanel(options: {
       button.type = 'button';
       button.setAttribute('aria-pressed', String(selectedIds.includes(element.id)));
       const name = document.createElement('span');
-      name.textContent = preview(element) || kindName(element.kind);
-      button.title = `${kindName(element.kind)} · ${element.id}`;
+      name.textContent = preview(element) || kindName(element);
+      button.title = `${kindName(element)} · ${element.id}`;
       button.innerHTML = renderUiIconSvg(KIND_ICONS[element.kind] ?? squareIcon);
       button.append(name);
       button.onclick = (event) => {
@@ -252,6 +270,7 @@ export function createLayersPanel(options: {
 
   const setOpen = (open: boolean) => {
     root.classList.toggle('open', open);
+    document.body.classList.toggle('molly-layers-open', open);
     options.onToggle(open);
     refresh();
   };

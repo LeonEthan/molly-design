@@ -2,7 +2,8 @@ import { useAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
 import { settingsActiveTabAtom } from '@/atoms';
 import { isElectronRenderer } from '@/lib/electron';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/tabs';
+import { SegmentedControl } from '@/components/shared/segmented-control';
+import { cn } from '@/lib/utils';
 import { settingContainerClass } from '.';
 import { BundledCapabilitiesSetting } from './bundled-capabilities-setting';
 import { CliDaemonSetting } from './cli-daemon-setting';
@@ -23,32 +24,25 @@ export function AdvancedSettings() {
   const view: AdvancedView = isAdvancedView(activeTab) ? activeTab : 'advanced';
 
   return (
-    <Tabs
-      value={view}
-      onValueChange={(next) => setActiveTab(next as AdvancedView)}
-      className="flex h-full min-h-0 flex-col"
-    >
-      <TabsList className="h-8 self-start">
-        <TabsTrigger value="advanced" className="px-2.5 text-xs">
-          {t('settings.advanced.system')}
-        </TabsTrigger>
-        <TabsTrigger value="mcp" className="px-2.5 text-xs">
-          {t('settings.advanced.mcp')}
-        </TabsTrigger>
-        <TabsTrigger value="projects" className="px-2.5 text-xs">
-          {t('settings.tabs.projects')}
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="advanced" className="mt-5">
-        <AdvancedSystemSettings />
-      </TabsContent>
-      <TabsContent value="mcp" className="mt-5">
-        <McpSetting />
-      </TabsContent>
-      <TabsContent value="projects" className="mt-5 min-h-0 flex-1">
-        <ProjectSettingsComponent />
-      </TabsContent>
-    </Tabs>
+    <div className="flex h-full min-h-0 flex-col">
+      <SegmentedControl
+        ariaLabel={t('settings.tabs.advanced')}
+        size="sm"
+        className="self-start"
+        value={view}
+        onChange={setActiveTab}
+        options={[
+          { value: 'advanced', label: t('settings.advanced.system') },
+          { value: 'mcp', label: t('settings.advanced.mcp') },
+          { value: 'projects', label: t('settings.tabs.projects') },
+        ]}
+      />
+      <div className={cn('mt-5', view === 'projects' && 'min-h-0 flex-1')}>
+        {view === 'advanced' ? <AdvancedSystemSettings /> : null}
+        {view === 'mcp' ? <McpSetting /> : null}
+        {view === 'projects' ? <ProjectSettingsComponent /> : null}
+      </div>
+    </div>
   );
 }
 

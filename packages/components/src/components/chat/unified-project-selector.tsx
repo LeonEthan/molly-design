@@ -22,8 +22,7 @@ export interface LocalProjectSelection {
 }
 
 export type UnifiedProjectSelection =
-  | { kind: 'none' }
-  | ({ kind: 'local' } & LocalProjectSelection);
+  { kind: 'none' } | ({ kind: 'local' } & LocalProjectSelection);
 
 type UnifiedProjectOption = {
   value: string;
@@ -125,12 +124,6 @@ export interface UnifiedProjectSelectorViewProps extends Omit<
 > {
   localProjects: ReadonlyArray<UnifiedLocalProjectOption>;
   /**
-   * Where the menu opens relative to the trigger. Chat landing keeps `top`
-   * (footer chrome); task surfaces open `bottom` so the list falls into the
-   * page rather than covering the property rail above.
-   */
-  contentSide?: 'top' | 'bottom';
-  /**
    * `chip` — compact pill used on chat landing.
    * `property-row` — full-width ghost row matching Linear-style property rails
    * (task detail sidebar). Same searchable menu either way.
@@ -192,7 +185,6 @@ export function UnifiedProjectSelectorView({
   localProjects,
   className,
   onAddLocalProject,
-  contentSide = 'top',
   triggerVariant = 'chip',
   contentClassName,
   contentStyle,
@@ -223,6 +215,7 @@ export function UnifiedProjectSelectorView({
     return combined.sort(compareUnifiedProjectOptions);
   }, [localProjects]);
 
+  const hasProjects = options.length > 0;
   const selectedValue = getSelectionValue(value);
   const selectedOption = useMemo(
     () => options.find((option) => option.value === selectedValue),
@@ -308,65 +301,74 @@ export function UnifiedProjectSelectorView({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          side={contentSide}
+          side="bottom"
           align="start"
-          avoidCollisions={contentSide === 'bottom'}
           className={cn('w-[min(20rem,calc(100vw-2rem))]', contentClassName)}
           style={contentStyle}
         >
-          <div className="relative mb-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              ref={searchInputRef}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Escape') event.stopPropagation();
-              }}
-              placeholder={t('chat.projectPicker.searchPlaceholder', 'Search projects')}
-              className="h-8 border-border/50 bg-background/45 pl-8 text-xs shadow-none"
-            />
-          </div>
-          <div className="scrollbar-pro max-h-[min(50vh,13rem)] overflow-y-auto">
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((option) => {
-                const localPath = option.description;
-                const labelNode = (
-                  <span className={cn('truncate', option.value === selectedValue && 'font-medium')}>
-                    {option.label}
-                  </span>
-                );
-                return (
-                  <DropdownMenuItem
-                    key={option.value}
-                    onSelect={() => onChange(option.selection)}
-                    className="gap-2 py-1.5 items-center"
-                  >
-                    <span className="shrink-0">{option.icon}</span>
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      {localPath ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>{labelNode}</TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-[22rem] break-all">
-                            {localPath}
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        labelNode
-                      )}
-                    </span>
-                    {option.value === selectedValue ? (
-                      <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    ) : null}
-                  </DropdownMenuItem>
-                );
-              })
-            ) : (
-              <div className="px-2.5 py-5 text-center text-xs text-muted-foreground">
-                {t('chat.projectPicker.emptyText', 'No projects found')}
+          {hasProjects ? (
+            <>
+              <div className="relative mb-1">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  ref={searchInputRef}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Escape') event.stopPropagation();
+                  }}
+                  placeholder={t('chat.projectPicker.searchPlaceholder', 'Search projects')}
+                  className="h-8 border-border/50 bg-background/45 pl-8 text-xs shadow-none"
+                />
               </div>
-            )}
-          </div>
+              <div className="scrollbar-pro max-h-[min(50vh,13rem)] overflow-y-auto">
+                {filteredOptions.length > 0 ? (
+                  filteredOptions.map((option) => {
+                    const localPath = option.description;
+                    const labelNode = (
+                      <span
+                        className={cn('truncate', option.value === selectedValue && 'font-medium')}
+                      >
+                        {option.label}
+                      </span>
+                    );
+                    return (
+                      <DropdownMenuItem
+                        key={option.value}
+                        onSelect={() => onChange(option.selection)}
+                        className="gap-2 py-1.5 items-center"
+                      >
+                        <span className="shrink-0">{option.icon}</span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          {localPath ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>{labelNode}</TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-[22rem] break-all">
+                                {localPath}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            labelNode
+                          )}
+                        </span>
+                        {option.value === selectedValue ? (
+                          <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        ) : null}
+                      </DropdownMenuItem>
+                    );
+                  })
+                ) : (
+                  <div className="px-2.5 py-5 text-center text-xs text-muted-foreground">
+                    {t('chat.projectPicker.emptyText', 'No projects found')}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="px-2.5 py-4 text-center text-xs text-muted-foreground">
+              {t('chat.projectPicker.noneYet', 'No projects yet')}
+            </div>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => onChange({ kind: 'none' })}>
             <CircleSlash2 className="h-4 w-4 shrink-0 text-muted-foreground" />

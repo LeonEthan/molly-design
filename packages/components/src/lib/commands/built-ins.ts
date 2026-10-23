@@ -108,7 +108,7 @@ const UNAVAILABLE_COMMANDS: BuiltInCommandDefinition[] = [
   {
     id: 'session.newTab',
     titleKey: 'commands.session.newTab',
-    title: 'New Tab',
+    title: 'New design tab',
     category: 'Session',
   },
   {
@@ -168,7 +168,7 @@ const UNAVAILABLE_COMMANDS: BuiltInCommandDefinition[] = [
   {
     id: 'mention.toggleSessionProjectScope',
     titleKey: 'commands.mention.toggleSessionProjectScope',
-    title: 'Toggle Session Mention Project Scope',
+    title: 'Toggle Design Mention Project Scope',
     category: 'Editor',
   },
 ];

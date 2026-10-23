@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -10,8 +10,17 @@ export type SegmentedControlOption<TValue extends string> = {
 };
 
 export type SegmentedControlSize = 'md' | 'sm';
+
+const ROVING_STEPS: Record<string, 1 | -1 | 'first' | 'last'> = {
+  ArrowRight: 1,
+  ArrowDown: 1,
+  ArrowLeft: -1,
+  ArrowUp: -1,
+  Home: 'first',
+  End: 'last',
+};
 /**
- * De-pilled segmented control (spec §5): a muted track with a raised popover
+ * De-pilled segmented control (spec §5): a muted track with a `selection`-tinted
  * segment for the selected value — explicitly not a pill. One home for the
  * recipe so a chrome refresh edits a single string instead of hand-synced
  * copies (TransportToggle and QueuedMessageBehaviorControl were byte-identical
@@ -40,8 +49,31 @@ export function SegmentedControl<TValue extends string>({
   pill?: boolean;
 }) {
   const selectedIndex = options.findIndex((option) => option.value === value);
+  const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const focusableIndex =
+    selectedIndex >= 0 && !options[selectedIndex]?.disabled
+      ? selectedIndex
+      : options.findIndex((option) => !option.disabled);
+  const moveSelection = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = ROVING_STEPS[event.key];
+    if (step === undefined || disabled) return;
+    const enabled = options.flatMap((option, index) => (option.disabled ? [] : [index]));
+    if (enabled.length === 0) return;
+    event.preventDefault();
+    const current = enabled.indexOf(focusableIndex);
+    const nextPosition =
+      step === 'first'
+        ? 0
+        : step === 'last'
+          ? enabled.length - 1
+          : (current + step + enabled.length) % enabled.length;
+    const nextIndex = enabled[nextPosition]!;
+    buttonRefs.current[nextIndex]?.focus();
+    onChange(options[nextIndex]!.value);
+  };
   return (
     <div
+      onKeyDown={moveSelection}
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(
@@ -58,18 +90,22 @@ export function SegmentedControl<TValue extends string>({
         <span
           aria-hidden
           data-segmented-thumb
-          className="absolute inset-y-[2px] left-[2px] z-0 rounded-full bg-popover shadow-sm transition-transform duration-200 ease-out"
+          className="absolute inset-y-[2px] left-[2px] z-0 rounded-full bg-selection transition-transform duration-200 ease-out"
           style={{
             width: `calc((100% - 4px) / ${options.length})`,
             transform: `translateX(${selectedIndex * 100}%)`,
           }}
         />
       ) : null}
-      {options.map((option) => {
+      {options.map((option, index) => {
         const selected = value === option.value;
         return (
           <button
             key={option.value}
+            ref={(element) => {
+              buttonRefs.current[index] = element;
+            }}
+            tabIndex={index === focusableIndex ? 0 : -1}
             type="button"
             role="radio"
             aria-checked={selected}
@@ -86,8 +122,8 @@ export function SegmentedControl<TValue extends string>({
               selected
                 ? pill
                   ? // The thumb carries the selected surface.
-                    'text-foreground'
-                  : 'bg-popover text-foreground shadow-sm'
+                    'text-selection-foreground'
+                  : 'bg-selection text-selection-foreground'
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >

@@ -300,7 +300,7 @@ export function RemoveLocalProjectDialog({
                   })
                 : t(
                     'sidebar.localProjects.remove.archiveDescriptionEmpty',
-                    'Any conversations in this project will move to Archive.'
+                    'Any designs in this project will move to Archive.'
                   )}
             </p>
             {target && target.runningSessionCount > 0 ? (
@@ -561,12 +561,12 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
   const contextMenuLabels = useMemo(
     () => ({
       rename: t('sessions.contextMenu.rename', 'Rename'),
-      pin: t('sessions.contextMenu.pin', 'Pin Session'),
-      unpin: t('sessions.contextMenu.unpin', 'Unpin Session'),
-      archive: t('sessions.contextMenu.archive', 'Archive Session'),
-      markUnread: t('sessions.contextMenu.markUnread', 'Mark as unread'),
-      copyUrl: t('sessions.contextMenu.copyUrl', 'Copy Session URL'),
-      goToOpenerSession: t('sessions.contextMenu.goToOpenerSession', 'Go to Opener Session'),
+      pin: t('sessions.contextMenu.pin', 'Pin Design'),
+      unpin: t('sessions.contextMenu.unpin', 'Unpin Design'),
+      archive: t('sessions.contextMenu.archive', 'Archive Design'),
+      markUnread: t('sessions.contextMenu.markUnread', 'Mark as Unread'),
+      copyUrl: t('sessions.contextMenu.copyUrl', 'Copy Design Link'),
+      goToOpenerSession: t('sessions.contextMenu.goToOpenerSession', 'Go to Opener Design'),
     }),
     [t]
   );
@@ -594,7 +594,7 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
       onDragStart={(event) => startSessionMentionDrag(event, { sessionId: session.id, title })}
       className={cn(
         'group min-h-9 w-full rounded-lg px-2 text-left',
-        'py-[7px]',
+        'py-1.5',
         'border border-transparent bg-transparent',
         !showSelectedState &&
           'hover:bg-sidebar-foreground/[0.04] data-[menu-open]:bg-sidebar-foreground/[0.04]',
@@ -740,7 +740,6 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
   return (
     <>
       <SessionInfoHoverCard
-        kind="local"
         author={author ?? undefined}
         title={title}
         isWorktree={showWorktreeIcon}
@@ -1430,7 +1429,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
     (sessionId: string) => {
       void copySessionUrl(
         sessionId,
-        t('sessions.urlCopied', 'Session URL copied to clipboard')
+        t('sessions.urlCopied', 'Design link copied to clipboard')
       ).catch(() => toast.error(t('sessions.copyFailed', 'Unable to copy')));
     },
     [copySessionUrl, t]
@@ -2008,7 +2007,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
     [allSidebarItems]
   );
 
-  const archiveTooltipLabel = useMemo(() => t('sessions.archive', 'Archive session'), [t]);
+  const archiveTooltipLabel = useMemo(() => t('sessions.archive', 'Archive design'), [t]);
 
   const archiveConfirmLabel = useMemo(() => t('common.confirm', 'Confirm'), [t]);
   const removeProjectLabel = useMemo(
@@ -2048,8 +2047,11 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
     }),
     [t]
   );
+  const hasNoDesigns = !sessionsListLoading && allSidebarItems.length === 0;
   const sidebarFilterPlaceholder =
-    pinnedItems.length === 0 ? <span aria-hidden="true" className="block h-6 w-6" /> : null;
+    pinnedItems.length === 0 && !hasNoDesigns ? (
+      <span aria-hidden="true" className="block h-6 w-6" />
+    ) : null;
   const localProjectsTopContent =
     localProjectSections.length === 0 ? null : (
       // Sections carry their own bottom margin (see sidebarTopContent): 12px
@@ -2769,6 +2771,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
         activeNav={activeNav}
         topContent={sidebarTopContent ?? undefined}
         desktopFilterPlaceholder={sidebarFilterPlaceholder ?? undefined}
+        hideDesktopFilter={hasNoDesigns}
         afterSessionListContent={sidebarChatsContent ?? undefined}
         bottomFloatingContent={sidebarBottomFloatingContent ?? undefined}
         labels={labels}

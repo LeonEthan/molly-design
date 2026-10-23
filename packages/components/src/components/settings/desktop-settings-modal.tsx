@@ -144,9 +144,7 @@ function SettingsModalBody() {
             <DialogTitle className="sr-only">{t(activeTabConfig.labelKey)}</DialogTitle>
           ) : (
             <header className="flex min-h-20 shrink-0 items-center px-7 pr-14">
-              <DialogTitle className="font-editorial text-[30px] leading-tight">
-                {t(navigationTabConfig.labelKey)}
-              </DialogTitle>
+              <DialogTitle className="text-[30px]">{t(navigationTabConfig.labelKey)}</DialogTitle>
             </header>
           )}
           <div className="min-h-0 flex-1">

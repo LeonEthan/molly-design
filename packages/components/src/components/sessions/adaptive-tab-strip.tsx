@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { observeResizeOnAnimationFrame } from '@/lib/resize-observer';
 
 export const ACTIVE_TAB_MIN_WIDTH = 180;
+export const INACTIVE_TAB_MIN_WIDTH = 96;
 
 export type AdaptiveTabStripItemLayout = {
   id: string;
@@ -36,6 +37,7 @@ export type AllocateAdaptiveTabStripLayoutOptions = {
   paddingLeft: number;
   paddingRight: number;
   activeMinWidth: number;
+  inactiveMinWidth?: number;
 };
 
 const toNonNegativeInteger = (value: number): number =>
@@ -58,6 +60,7 @@ export function allocateAdaptiveTabStripLayout({
   paddingLeft,
   paddingRight,
   activeMinWidth,
+  inactiveMinWidth = INACTIVE_TAB_MIN_WIDTH,
 }: AllocateAdaptiveTabStripLayoutOptions): AdaptiveTabStripLayout {
   const width = toNonNegativeInteger(viewportWidth);
   const effectivePaddingLeft = Math.min(toNonNegativeInteger(paddingLeft), width);
@@ -88,7 +91,12 @@ export function allocateAdaptiveTabStripLayout({
   if (itemIds.length === 1 || activeIndex === -1 || allTabsFitMinimum) {
     itemWidths = distributeEvenly(itemWidthBudget, itemIds.length);
   } else {
-    const activeWidth = Math.min(minimumActiveWidth, itemWidthBudget);
+    const inactiveMinimum = toNonNegativeInteger(inactiveMinWidth);
+    const inactiveFloorsFit = itemWidthBudget >= inactiveMinimum * itemIds.length;
+    const activeCeiling = inactiveFloorsFit
+      ? itemWidthBudget - inactiveMinimum * (itemIds.length - 1)
+      : itemWidthBudget;
+    const activeWidth = Math.min(minimumActiveWidth, activeCeiling);
     const inactiveWidths = distributeEvenly(itemWidthBudget - activeWidth, itemIds.length - 1);
     let inactiveIndex = 0;
 

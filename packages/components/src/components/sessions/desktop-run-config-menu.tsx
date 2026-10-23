@@ -210,12 +210,7 @@ export function DesktopMachineMenu({
           ) : null}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        side="top"
-        align="start"
-        avoidCollisions={false}
-        className="min-w-52 max-w-72"
-      >
+      <DropdownMenuContent side="bottom" align="start" className="min-w-52 max-w-72">
         <DropdownMenuLabel className="px-2.5 pb-1 pt-1.5 text-[0.68rem] font-medium tracking-wide text-muted-foreground/70">
           {t('chat.machineSelector.placeholder', 'Machine')}
         </DropdownMenuLabel>
@@ -277,6 +272,8 @@ export type DesktopRunConfigMenuProps = {
   modelReasoningEfforts?: Record<string, readonly string[] | undefined>;
   /** Opens Settings → Connections when no provider is configured. */
   onOpenConnections?: () => void;
+  /** The configured image model, listed after Reasoning; choosing it opens Settings → Connections. */
+  imageModelId?: string | null;
 };
 
 export function DesktopRunConfigMenu({
@@ -294,6 +291,7 @@ export function DesktopRunConfigMenu({
   onRecentRunConfigSelect,
   modelReasoningEfforts,
   onOpenConnections,
+  imageModelId,
 }: DesktopRunConfigMenuProps) {
   const { t } = useTranslation();
   const executorConfigs = useAtomValue(getAllAgentConfigAtom);
@@ -335,8 +333,7 @@ export function DesktopRunConfigMenu({
   const thinkingSelector = useMemo(
     () =>
       thoughtLevelSelectors.find((s) => s.type === 'select') as
-        | AcpSelectConfigOptionSelector
-        | undefined,
+        AcpSelectConfigOptionSelector | undefined,
     [thoughtLevelSelectors]
   );
   const thinkingValue = thinkingSelector
@@ -374,11 +371,7 @@ export function DesktopRunConfigMenu({
         onConfigOptionChange?.(modelConfigSelector.configId, next.modelId as AcpConfigOptionValue);
       }
     }
-    if (
-      next.mode === 'connections' &&
-      thinkingSelector &&
-      next.reasoning !== thinkingValue
-    ) {
+    if (next.mode === 'connections' && thinkingSelector && next.reasoning !== thinkingValue) {
       onConfigOptionChange?.(thinkingSelector.configId, next.reasoning as AcpConfigOptionValue);
     }
   };
@@ -418,11 +411,10 @@ export function DesktopRunConfigMenu({
   const reasoningLabel = t('chat.runConfig.reasoningLabel', 'Reasoning');
   const reasoningUnavailableLabel = t('chat.runConfig.reasoningUnavailable', 'Not available');
   const reasoningOffLabel = t('chat.runConfig.reasoningOff', 'Off');
+  const imageModelLabel = t('chat.runConfig.imageModelLabel', 'Image model');
   const reasoningLabelFor = (value: string) =>
     thinkingSelector?.options.find((option) => option.value === value)?.label ??
-    (value === 'off'
-      ? reasoningOffLabel
-      : value.charAt(0).toUpperCase() + value.slice(1));
+    (value === 'off' ? reasoningOffLabel : value.charAt(0).toUpperCase() + value.slice(1));
 
   const providerMenuLabel = (provider: { id: string; name: string }) =>
     provider.id === COMPOSER_UNGROUPED_PROVIDER_ID
@@ -446,9 +438,7 @@ export function DesktopRunConfigMenu({
         : (hierarchy.providerName ?? catalogProviderLabel);
   const displayedReasoning =
     hierarchy.mode === 'catalog' ? (thinkingValue ?? hierarchy.reasoning) : hierarchy.reasoning;
-  const displayedReasoningLabel = displayedReasoning
-    ? reasoningLabelFor(displayedReasoning)
-    : null;
+  const displayedReasoningLabel = displayedReasoning ? reasoningLabelFor(displayedReasoning) : null;
   const reasoningChoices =
     hierarchy.mode === 'catalog' && (thinkingSelector?.options.length ?? 0) > 0
       ? (thinkingSelector?.options ?? [])
@@ -614,6 +604,20 @@ export function DesktopRunConfigMenu({
             )}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        {imageModelId ? (
+          <DropdownMenuItem
+            onSelect={() => onOpenConnections?.()}
+            className="min-h-9 gap-2.5 rounded-lg pr-2"
+          >
+            <span className="min-w-0 flex-1 truncate">{imageModelLabel}</span>
+            <span
+              className="ml-4 min-w-0 max-w-40 truncate text-xs text-muted-foreground"
+              title={imageModelId}
+            >
+              {imageModelId}
+            </span>
+          </DropdownMenuItem>
+        ) : null}
 
         {showDeepSeekDelegationWarning ? (
           <DropdownMenuItem

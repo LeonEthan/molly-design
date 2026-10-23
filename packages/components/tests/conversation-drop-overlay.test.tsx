@@ -49,7 +49,7 @@ describe('ConversationDropOverlay', () => {
     const landing = container.querySelector('[data-testid="conversation-drop-overlay"]');
     expect(landing).not.toBeNull();
     expect(landing?.getAttribute('data-drop-kind')).toBe('session-mention');
-    expect(landing?.textContent).toContain('Drop to mention this conversation');
+    expect(landing?.textContent).toContain('Drop to mention this design');
 
     act(() => {
       root.render(

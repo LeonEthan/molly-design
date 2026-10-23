@@ -27,9 +27,7 @@ const state = vi.hoisted(() => ({
   docSessionId: '' as string,
   /** Captured IPC event listeners by channel, for firing canvas events in tests. */
   ipcListeners: {} as Record<string, (event: never) => void>,
-  onSendNotes: undefined as
-    | undefined
-    | ((notes: readonly unknown[]) => Promise<boolean>),
+  onSendNotes: undefined as undefined | ((notes: readonly unknown[]) => Promise<boolean>),
   notesSettled: [] as unknown[][],
 }));
 vi.mock('../src/atoms/runtime', () => ({ activeWorkspaceRuntimeAtom: 'runtime' }));
@@ -408,7 +406,8 @@ it('shows loading before an empty history and explains versions without claiming
   await act(async () => finish([]));
   expect(document.querySelector('[role="menu"]')?.textContent).toContain('No versions yet');
   expect(document.querySelector('[role="menu"]')?.textContent).toContain('Use Save version');
-  expect(container.textContent).toContain('No versions yet');
+  expect(container.textContent).not.toContain('No versions yet');
+  expect(container.querySelector('[role="status"]')).toBeNull();
   expect(container.textContent).not.toContain('Autosaved');
 });
 

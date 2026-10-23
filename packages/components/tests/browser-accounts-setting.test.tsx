@@ -262,8 +262,8 @@ it('keeps Website accounts to one short line, Import, Clear and a per-site statu
     zh['settings.browserImport.clear'],
   ]);
   expect([...host.querySelectorAll('li')].map((entry) => entry.textContent)).toEqual([
-    `Pinterest${zh['settings.browserImport.siteCookies'].replace('{{count}}', '14')}`,
-    `Amazon${zh['settings.browserImport.siteCookies'].replace('{{count}}', '3')}`,
+    `Pinterest${zh['settings.browserImport.siteCookies_other'].replace('{{count}}', '14')}`,
+    `Amazon${zh['settings.browserImport.siteCookies_other'].replace('{{count}}', '3')}`,
   ]);
   expect(host.textContent).not.toContain('17');
 });

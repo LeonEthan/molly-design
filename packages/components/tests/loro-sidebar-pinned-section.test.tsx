@@ -163,4 +163,26 @@ describe('LoroSidebar pinned section', () => {
     header?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(onTogglePinnedSection).toHaveBeenCalledOnce();
   });
+
+  it('drops the filter trigger when the list is empty and keeps it otherwise', () => {
+    renderSidebar({
+      pinnedItems: [],
+      organizeMode: 'updated',
+      updatedItems: [],
+      onOrganizeModeChange: vi.fn(),
+      hideDesktopFilter: true,
+    });
+    expect(container?.querySelector('button[aria-label="Filter sidebar"]')).toBeNull();
+
+    flushSync(() => root?.unmount());
+    container?.remove();
+
+    renderSidebar({
+      pinnedItems: [],
+      organizeMode: 'updated',
+      updatedItems: [{ ...pinnedItem, id: 'updated-session', isPinned: false }],
+      onOrganizeModeChange: vi.fn(),
+    });
+    expect(container?.querySelector('button[aria-label="Filter sidebar"]')).not.toBeNull();
+  });
 });

@@ -44,7 +44,9 @@ it('toggles the comment tool from the dock and C, V and Escape, and never while 
   const comment = dock.querySelector<HTMLButtonElement>('[aria-label="Comment (C)"]')!;
   const select = dock.querySelector<HTMLButtonElement>('[aria-label="Select"]')!;
   const key = (name: string, init: KeyboardEventInit = {}) =>
-    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, ...init }));
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: name, bubbles: true, ...init })
+    );
   const commenting = () => comment.classList.contains('on');
 
   expect(comment.disabled).toBe(true);
@@ -96,7 +98,9 @@ it('keeps Bento legacy comment mode off when C, repeated C, V or Escape reach th
   };
   document.addEventListener('keydown', bentoCommentToggle);
   const press = (key: string) =>
-    document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+    );
   press('c');
   expect(legacyOn).toBe(true);
   legacyOn = false;
@@ -175,7 +179,9 @@ it('toggles the brush from the dock and B, keeps Bento from seeing B, and never 
   const comment = dock.querySelector<HTMLButtonElement>('[aria-label="Comment (C)"]')!;
   const select = dock.querySelector<HTMLButtonElement>('[aria-label="Select"]')!;
   const press = (key: string) =>
-    document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+    );
   const brushing = () => brush.classList.contains('on');
 
   expect(brush.disabled).toBe(true);
@@ -314,6 +320,14 @@ it('disables dock mutations and closes an open shape menu while readonly, then r
   for (const button of mutationButtons) button.click();
   expect(content).toBe('initial');
   expect(popup.classList.contains('open')).toBe(false);
+
+  layersButton.click();
+  expect(layersButton.classList.contains('open')).toBe(true);
+  expect(layersButton.classList.contains('on')).toBe(false);
+  expect(layersButton.getAttribute('aria-pressed')).toBe('true');
+  layersButton.click();
+  expect(layersButton.classList.contains('open')).toBe(false);
+  expect(layersButton.getAttribute('aria-pressed')).toBe('false');
 
   api.setReadonly(false);
   expect(mutationButtons.every((button) => !button.disabled)).toBe(true);
@@ -730,5 +744,35 @@ it('forwards the notes instance guard through window.molly.settleNotes', async (
   expect(api.notes().notes).toHaveLength(1);
   expect(api.settleNotes(read.epoch, true, read.instance)).toBe(true);
   expect(api.notes().notes).toHaveLength(0);
+  window.dispatchEvent(new Event('pagehide'));
+});
+
+it('paints the status pill in the UI sans with theme variables and no fixed hues', () => {
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({ content: '' }),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => {},
+    pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
+  });
+  const css = [...document.head.querySelectorAll('style')].map((node) => node.textContent).join('');
+  const rules = css.split('\n').filter((line) => line.startsWith('#autosave-status'));
+  expect(rules.length).toBeGreaterThan(0);
+  const pill = rules.join('\n');
+  expect(pill).toContain('font:400 12px/1.2 system-ui');
+  expect(pill).not.toMatch(/monospace|uppercase|letter-spacing|#[0-9a-f]{3,6}/i);
+  expect(pill).toContain('var(--ring)');
+  expect(pill).toContain('var(--muted)');
+  expect(pill).toContain('var(--destructive)');
   window.dispatchEvent(new Event('pagehide'));
 });

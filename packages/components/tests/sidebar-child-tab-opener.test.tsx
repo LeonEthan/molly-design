@@ -416,7 +416,7 @@ describe('SessionList child-tab opener rendering', () => {
     );
   });
 
-  it('"Go to Opener Session" routes through the root and restores the exact child Tab', () => {
+  it('"Go to Opener Design" routes through the root and restores the exact child Tab', () => {
     const { onNavigateSessionTab, onSelectSession } = renderList();
     const row = container?.querySelector('[data-sidebar-session-id="opened-from-tab"]');
     expect(row).not.toBeNull();
@@ -426,7 +426,7 @@ describe('SessionList child-tab opener rendering', () => {
     });
 
     const openerItem = Array.from(document.querySelectorAll('[role="menuitem"]')).find((item) =>
-      item.textContent?.includes('Go to Opener Session')
+      item.textContent?.includes('Go to Opener Design')
     );
     expect(openerItem).toBeDefined();
 

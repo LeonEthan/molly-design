@@ -50,7 +50,6 @@ function AtelierInterface({ narrow = false }: { narrow?: boolean }) {
           ideas={
             <HomeIdeaChips
               label={t('home.ideasLabel')}
-              expandLabel={t('home.ideasExpand')}
               ideas={[1, 2, 3, 4].map((index) => ({
                 label: t(`home.idea${index}.label`),
                 prompt: t(`home.idea${index}.prompt`),

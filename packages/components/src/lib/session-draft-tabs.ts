@@ -168,7 +168,7 @@ export const createDraftSessionTab = (options: {
 
 export const getDraftTabLabel = (
   draft: Pick<DraftSessionTab, 'prompt'>,
-  fallback = 'New Tab'
+  fallback = 'Untitled design'
 ): string => {
   const firstLine = draft.prompt
     .split('\n')

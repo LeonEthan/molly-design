@@ -131,11 +131,11 @@ export function RenameSessionDialogView({
     <Dialog open={target != null} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-sm gap-0 overflow-hidden p-0 sm:p-0">
         <DialogHeader className="border-b border-border/70 px-4 py-4 pr-12 text-left sm:px-5 sm:pr-12">
-          <DialogTitle className="text-base">
-            {t('sidebar.renameChat.title', 'Rename conversation')}
+          <DialogTitle>
+            {t('sidebar.renameChat.title', 'Rename design')}
           </DialogTitle>
           <DialogDescription className="leading-5">
-            {t('sidebar.renameChat.description', 'Enter a new name for this chat.')}
+            {t('sidebar.renameChat.description', 'Enter a new name for this design.')}
           </DialogDescription>
         </DialogHeader>
 

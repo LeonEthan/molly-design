@@ -67,6 +67,7 @@ import {
 } from '@/components/chat/visual-annotation-reference-state';
 import { SESSION_IMAGE_MAX_COUNT } from '@molly/shared';
 import { useOpenSettings } from '@/hooks/use-open-settings';
+import { useImageModelId } from '@/hooks/use-image-model-id';
 import { cn } from '@/lib/utils';
 import { ConversationColumn } from '@/components/shared/conversation-column';
 
@@ -2046,6 +2047,9 @@ export const SessionChatInputArea = memo(
       [pendingFiles]
     );
 
+    const imageModelId = useImageModelId(
+      typeof window !== 'undefined' && window.__MOLLY_ELECTRON__ === true
+    );
     const desktopFooterSelectorNode = (
       <>
         <DesktopRunConfigMenu
@@ -2064,6 +2068,7 @@ export const SessionChatInputArea = memo(
           onConfigOptionChange={onConfigOptionChange}
           modelReasoningEfforts={modelReasoningEfforts}
           onOpenConnections={() => openSettings('agents')}
+          imageModelId={imageModelId}
         />
         <DesktopPermissionModeButton
           modeOptions={modeOptions}

@@ -115,7 +115,7 @@ function TwoLevelMentionMenu({
     {
       id: 'mention.toggleSessionProjectScope',
       titleKey: 'commands.mention.toggleSessionProjectScope',
-      title: 'Toggle Session Mention Project Scope',
+      title: 'Toggle Design Mention Project Scope',
       category: 'Editor',
       keybindings: getCommandKeybindings('mention.toggleSessionProjectScope'),
       allowInTextInput: true,

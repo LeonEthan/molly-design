@@ -127,3 +127,9 @@ renderer CSP blocks) that fail to load show a visible placeholder and log a warn
 instead of a blank bubble. Its resolver context reaches images through Streamdown's
 memoized blocks even when the Markdown text stays unchanged. An inline tool image
 does not establish a local file at a path later named by the Agent.
+
+Work-log rows show designer labels, never the raw tool id. `lib/tool-activity-title.ts`
+maps the known Molly MCP tools to i18n labels, humanizes unknown MCP tool names by
+dropping the `mcp__server__` prefix, and shortens absolute paths inside the work folder
+(`<data dir>/chats/<id>`) to relative ones. `ToolCallCard` keeps the unmodified title in
+the row's `title` attribute and the full command in the expanded terminal block.

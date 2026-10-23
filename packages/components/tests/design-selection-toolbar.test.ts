@@ -127,6 +127,36 @@ it('moves below the selection only when that covers less of the other artwork', 
     top: 148,
   });
 });
+it('leaves the artwork for the strip outside the artboard when both sides cover text', () => {
+  const viewport = { width: 800, height: 700 };
+  const anchor = { left: 150, right: 650, top: 40, bottom: 300 };
+  const footer = { left: 150, right: 650, top: 310, bottom: 540 };
+  const artboard = { left: 100, right: 700, top: 20, bottom: 560 };
+  expect(placeToolbar(anchor, 300, 40, viewport, [footer])).toEqual({ left: 250, top: 312 });
+  expect(placeToolbar(anchor, 300, 40, viewport, [footer], artboard)).toEqual({
+    left: 250,
+    top: 572,
+  });
+  expect(placeToolbar(anchor, 300, 40, viewport, [footer], { ...artboard, bottom: 690 })).toEqual({
+    left: 250,
+    top: 312,
+  });
+  expect(placeToolbar(anchor, 300, 40, viewport, [], artboard)).toEqual({ left: 250, top: 312 });
+  expect(
+    placeToolbar({ ...anchor, top: 58 }, 300, 40, viewport, [footer], { ...artboard, top: 70 })
+  ).toEqual({ left: 250, top: 18 });
+});
+it('never moves outside the artboard onto the dock', () => {
+  const viewport = { width: 800, height: 700 };
+  const anchor = { left: 150, right: 650, top: 40, bottom: 300 };
+  const footer = { left: 150, right: 650, top: 310, bottom: 540 };
+  const artboard = { left: 100, right: 700, top: 20, bottom: 560 };
+  const dock = { left: 260, right: 540, top: 600, bottom: 652 };
+  expect(placeToolbar(anchor, 300, 40, viewport, [footer], artboard, [dock])).toEqual({
+    left: 250,
+    top: 312,
+  });
+});
 it('shows the count only for multiple selected elements', () => {
   select('text');
   vi.advanceTimersByTime(20);
@@ -192,12 +222,8 @@ it('retires a pending request and popup when the selected identity changes', asy
   expect(getByRole(document.body, 'toolbar').getAttribute('aria-busy')).toBe('false');
   expect(getByRole(document.body, 'button', { name: 'Bold' }).hasAttribute('disabled')).toBe(false);
 });
-it('sends position, size, color, fit and arrow changes through the command port', async () => {
+it('sends size, color, fit and arrow changes through the command port', async () => {
   select('shape');
-  input('Position X', '44');
-  await Promise.resolve();
-  await Promise.resolve();
-  select('shape', {}, 2);
   input('Width', '144');
   await Promise.resolve();
   await Promise.resolve();
@@ -215,12 +241,16 @@ it('sends position, size, color, fit and arrow changes through the command port'
   click('Arrowheads');
   click('Both ends');
   expect(requests.map((r) => r.type === 'command' && r.command)).toEqual([
-    { verb: 'position', x: 44, y: 20 },
     { verb: 'size', width: 144, height: 80 },
     { verb: 'fill', fill: '#ef4444' },
     { verb: 'image-fit', fit: 'contain' },
     { verb: 'line-arrow', preset: 'both' },
   ]);
+});
+it('leaves position editing to the layers panel', () => {
+  select('shape');
+  expect(queryByRole(document.body, 'spinbutton', { name: 'Position X' })).toBeNull();
+  expect(queryByRole(document.body, 'spinbutton', { name: 'Position Y' })).toBeNull();
 });
 it('validates the crop draft before submitting a single edit', () => {
   select('image');
@@ -441,9 +471,7 @@ it('opens an inline ask at the selection and sends it on Enter', () => {
   expect(document.activeElement).toBe(field);
   expect(getByRole(document.body, 'button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
   typeAsk('Make the headline warmer');
-  expect(getByRole(document.body, 'button', { name: 'Send' }).hasAttribute('disabled')).toBe(
-    false
-  );
+  expect(getByRole(document.body, 'button', { name: 'Send' }).hasAttribute('disabled')).toBe(false);
   expect(pressEnter(field, { shiftKey: true }).defaultPrevented).toBe(false);
   const composing = pressEnter(field, { isComposing: true, keyCode: 229 });
   expect(composing.defaultPrevented).toBe(false);
@@ -557,4 +585,3 @@ it('sends a quick edit without text, but asks for detail when the edit needs it'
     { type: 'ask', selectionEpoch: 1, prompt: '', send: true, preset: 'remove-background' },
   ]);
 });
-

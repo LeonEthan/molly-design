@@ -2108,12 +2108,10 @@ const SessionDetail = ({
         const resolution = await resolveSessionFileProviderOpenPath(
           activeSessionFileProvider,
           target.filePath
-        ).catch(
-          (): SessionFileProviderOpenPathResolution => ({
-            path: target.filePath,
-            redirected: false,
-          })
-        );
+        ).catch((): SessionFileProviderOpenPathResolution => ({
+          path: target.filePath,
+          redirected: false,
+        }));
         const resolvedFilePath = resolution.path;
 
         const requestSeq = nextFocusRequestSeq();
@@ -2177,12 +2175,10 @@ const SessionDetail = ({
           const resolution = await resolveSessionFileProviderOpenPath(
             activeSessionFileProvider,
             tab.filePath
-          ).catch(
-            (): SessionFileProviderOpenPathResolution => ({
-              path: tab.filePath,
-              redirected: false,
-            })
-          );
+          ).catch((): SessionFileProviderOpenPathResolution => ({
+            path: tab.filePath,
+            redirected: false,
+          }));
           if (!resolution.redirected || resolution.path === tab.filePath) {
             return { tab, next: tab };
           }
@@ -2443,22 +2439,18 @@ const SessionDetail = ({
     });
     return [
       ...fixedTabs,
-      ...visibleSideSessions.map(
-        (sideSession): SessionSidePanelTabItem => ({
-          id: getSideSessionPanelTabId(sideSession.id),
-          label: sideSession.title?.trim() || t('sessions.detailTabs.sideSession', 'Side Chat'),
-          kind: 'session',
-          closeable: true,
-          pending: closingSideSessionIds.has(sideSession.id),
-        })
-      ),
-      ...viewerTabItems.map(
-        (tab): SessionSidePanelTabItem => ({
-          ...tab,
-          kind: tab.type,
-          closeable: true,
-        })
-      ),
+      ...visibleSideSessions.map((sideSession): SessionSidePanelTabItem => ({
+        id: getSideSessionPanelTabId(sideSession.id),
+        label: sideSession.title?.trim() || t('sessions.detailTabs.sideSession', 'Side Chat'),
+        kind: 'session',
+        closeable: true,
+        pending: closingSideSessionIds.has(sideSession.id),
+      })),
+      ...viewerTabItems.map((tab): SessionSidePanelTabItem => ({
+        ...tab,
+        kind: tab.type,
+        closeable: true,
+      })),
     ];
   }, [
     closingSideSessionIds,
@@ -2686,7 +2678,7 @@ const SessionDetail = ({
 
   useCommand({
     id: 'session.archiveCurrent',
-    title: t('commands.session.archiveCurrent', 'Archive Current Chat'),
+    title: t('commands.session.archiveCurrent', 'Archive current design'),
     category: 'Session',
     keybindings: getCommandKeybindings('session.archiveCurrent'),
     when: () => Boolean(activeSession) && activeSession?.isArchived !== true,
@@ -2697,7 +2689,7 @@ const SessionDetail = ({
 
   useCommand({
     id: 'session.toggleCurrentPinned',
-    title: t('commands.session.toggleCurrentPinned', 'Toggle Current Chat Pinned'),
+    title: t('commands.session.toggleCurrentPinned', 'Pin or unpin current design'),
     category: 'Session',
     keybindings: getCommandKeybindings('session.toggleCurrentPinned'),
     /* While the URL-named child is still pending, `activeTabSession` falls
@@ -2749,7 +2741,7 @@ const SessionDetail = ({
 
   useCommand({
     id: 'session.newTab',
-    title: t('commands.session.newTab', 'New Tab'),
+    title: t('commands.session.newTab', 'New design tab'),
     category: 'Session',
     keybindings: getCommandKeybindings('session.newTab'),
     when: () => Boolean(activeSession),
@@ -2767,7 +2759,7 @@ const SessionDetail = ({
 
   useCommand({
     id: 'session.renameCurrent',
-    title: t('commands.session.renameCurrent', 'Rename Current Chat'),
+    title: t('commands.session.renameCurrent', 'Rename current design'),
     category: 'Session',
     keybindings: getCommandKeybindings('session.renameCurrent'),
     /* Same pending-child rule as toggleCurrentPinned above. */
@@ -3140,7 +3132,7 @@ const SessionDetail = ({
                 )
               : t(
                   'archive.deleteConfirm.description.chatSession',
-                  'This will permanently delete the chat session.'
+                  'This will permanently delete the design.'
                 )}
           </DialogDescription>
         </DialogHeader>
@@ -3854,7 +3846,7 @@ const SessionDetail = ({
             title={t('sessions.sidebar.emptyTitle', 'Open a panel')}
             description={t(
               'sessions.sidebar.emptyDescription',
-              'Choose what you want to see in this sidebar.'
+              'Choose what to show beside this design.'
             )}
           />
         ) : null}

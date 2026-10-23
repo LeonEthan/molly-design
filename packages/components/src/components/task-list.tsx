@@ -892,7 +892,6 @@ const TaskGroupSection = memo(function TaskGroupSection({
               const desktopRow = showInfoCard ? (
                 <SessionInfoHoverCard
                   key={task.taskId}
-                  kind={isChatTask ? 'chat' : 'github'}
                   author={task.owner ?? undefined}
                   title={task.title}
                   isWorktree={task.isWorktree}
@@ -1030,17 +1029,17 @@ export const TaskList = memo(function TaskList({
   headerAction,
 }: TaskListProps) {
   const { t } = useTranslation();
-  const archiveTooltipLabel = t('sessions.archive', 'Archive session');
+  const archiveTooltipLabel = t('sessions.archive', 'Archive design');
 
   const archiveConfirmLabel = t('common.confirm', 'Confirm');
   const contextMenuLabels: ContextMenuLabels = useMemo(
     () => ({
       openPr: t('sessions.contextMenu.openPr', 'Open Pull Request'),
       rename: t('sessions.contextMenu.rename', 'Rename'),
-      pin: t('sessions.contextMenu.pin', 'Pin Session'),
-      unpin: t('sessions.contextMenu.unpin', 'Unpin Session'),
-      archive: t('sessions.contextMenu.archive', 'Archive Session'),
-      copyUrl: t('sessions.contextMenu.copyUrl', 'Copy Session URL'),
+      pin: t('sessions.contextMenu.pin', 'Pin Design'),
+      unpin: t('sessions.contextMenu.unpin', 'Unpin Design'),
+      archive: t('sessions.contextMenu.archive', 'Archive Design'),
+      copyUrl: t('sessions.contextMenu.copyUrl', 'Copy Design Link'),
       copyBranch: t('sessions.contextMenu.copyBranch', 'Copy Current Branch'),
     }),
     [t]

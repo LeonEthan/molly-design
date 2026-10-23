@@ -290,6 +290,24 @@ try {
       `Math.floor(this.scroller.client${dimension} / 2)`
     );
   }
+  const fitMargin = '    const availH = this.scroller.clientHeight - 64\n';
+  const fitObserver = '    new ResizeObserver(() => this.relayout()).observe(wrap)\n';
+  for (const pinned of [fitMargin, fitObserver])
+    if (interactions.split(pinned).length !== 2) throw Error('Pinned canvas fit changed');
+  interactions = interactions
+    .replace(
+      fitMargin,
+      `    const marginY = this.scroller.clientHeight >= 360 ? 66 : 32
+    const availH = this.scroller.clientHeight - 2 * marginY
+`
+    )
+    .replace(
+      fitObserver,
+      `    const fitObserver = new ResizeObserver(() => this.relayout())
+    fitObserver.observe(wrap)
+    fitObserver.observe(this.scroller)
+`
+    );
   interactions = interactions.replace(
     viewportAnchor,
     `

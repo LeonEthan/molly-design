@@ -182,4 +182,41 @@ describe('UnifiedProjectSelectorView options', () => {
     expect(projectItems[0]?.textContent).toContain(localProjects[29]!.name);
     expect(projectItems.some((item) => item.textContent?.startsWith('Project 20'))).toBe(false);
   });
+
+  it('opens below the trigger and drops the search box when there are no projects', async () => {
+    const onAddLocalProject = vi.fn();
+    await act(async () => {
+      root.render(
+        <TooltipProvider>
+          <UnifiedProjectSelectorView
+            value={{ kind: 'none' }}
+            onChange={vi.fn()}
+            localProjects={[]}
+            onAddLocalProject={onAddLocalProject}
+          />
+        </TooltipProvider>
+      );
+    });
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button')?.dispatchEvent(
+        new TestPointerEvent('pointerdown', {
+          bubbles: true,
+          button: 0,
+          pointerType: 'mouse',
+        })
+      );
+    });
+
+    const menu = document.querySelector<HTMLElement>('[role="menu"]');
+    expect(menu?.getAttribute('data-side')).toBe('bottom');
+    expect(document.querySelector('input[placeholder="Search projects"]')).toBeNull();
+    expect(menu?.textContent).toContain('No projects yet');
+    expect(menu?.textContent).not.toContain('No projects found');
+    const add = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+      (item) => item.textContent === 'Add a project folder'
+    );
+    await act(async () => add?.click());
+    expect(onAddLocalProject).toHaveBeenCalledOnce();
+  });
 });

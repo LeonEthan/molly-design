@@ -45,9 +45,7 @@ keep their existing save and check contracts. Model connection names and native
 catalog filters are under More options; required compatible model fields stay
 visible. The service destination is always visible, and changing it still requires
 renewed key entry. Image protocol and API-path details use the existing help tips;
-model suggestions never select a model automatically. The setup strip distinguishes
-saved configuration from a passed key check and labels image and website setup as
-optional. See the [Phase 3 record](../../../../.agents/notes/implemented/bug-fix/2026-10-05-connection-form-clarity.md).
+model suggestions never select a model automatically. See the [Phase 3 record](../../../../.agents/notes/implemented/bug-fix/2026-10-05-connection-form-clarity.md).
 
 Image settings reuse the shared image endpoint contract for field validation,
 save, free discovery and protected run metadata. It permits HTTPS, loopback HTTP

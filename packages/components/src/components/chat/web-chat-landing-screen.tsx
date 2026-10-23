@@ -144,7 +144,9 @@ export function WebChatLandingScreen({
             ) : null}
           </div>
           {gallery != null ? (
-            <div className="relative w-full max-w-[1240px] shrink-0 pb-12 pt-6">{gallery}</div>
+            <ConversationColumn className="relative shrink-0 pb-12 pt-6">
+              {gallery}
+            </ConversationColumn>
           ) : null}
           <div aria-hidden className="grow-[3]" />
         </div>

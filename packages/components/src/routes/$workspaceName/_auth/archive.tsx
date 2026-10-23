@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { lazy } from 'react';
-import { RouteSuspense } from '@/components/route-suspense';
+import { lazy, Suspense } from 'react';
+import { ArchiveLoadingScreen } from '@/components/archive/archive-loading-screen';
 
 const LazyArchiveView = lazy(async () => {
   const module = await import('@/components/archive/archive-view');
@@ -13,8 +13,8 @@ export const Route = createFileRoute('/$workspaceName/_auth/archive')({
 
 function ArchiveRoute() {
   return (
-    <RouteSuspense>
+    <Suspense fallback={<ArchiveLoadingScreen />}>
       <LazyArchiveView />
-    </RouteSuspense>
+    </Suspense>
   );
 }

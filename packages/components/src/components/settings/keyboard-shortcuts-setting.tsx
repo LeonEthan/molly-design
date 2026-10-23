@@ -50,6 +50,7 @@ const CODE_WORKFLOW_SHORTCUTS: ReadonlySet<string> = new Set<ShortcutCommandId>(
 // nothing to delete so the column doesn't shift when neighbors do.
 const SHORTCUT_SLOT_CLASS = 'flex w-36 justify-end';
 const TRASH_SLOT_CLASS = 'flex w-9 justify-center';
+const SHORTCUT_ROW_CLASS = 'group/shortcut';
 
 export function KeyboardShortcutsSetting() {
   const { t } = useTranslation();
@@ -99,6 +100,21 @@ export function KeyboardShortcutsSetting() {
 
   return (
     <div className={settingContainerClass}>
+      <div className="flex items-center justify-between gap-4 px-1">
+        <p className="text-xs text-muted-foreground">
+          {t('settings.keyboardShortcuts.description')}
+        </p>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!anyOverridden}
+          onClick={handleResetAll}
+          className="h-7 shrink-0 text-muted-foreground"
+        >
+          {t('settings.keyboardShortcuts.resetAll')}
+        </Button>
+      </div>
+
       <CompactSection
         title={t('settings.keyboardShortcuts.canvas')}
         description={t('settings.keyboardShortcuts.canvasScope')}
@@ -119,21 +135,6 @@ export function KeyboardShortcutsSetting() {
           </CompactRow>
         ))}
       </CompactSection>
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-xs text-muted-foreground">
-          {t('settings.keyboardShortcuts.description')}
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!anyOverridden}
-          onClick={handleResetAll}
-          className="h-7"
-        >
-          {t('settings.keyboardShortcuts.resetAll')}
-        </Button>
-      </div>
-
       {grouped.length === 0 && (
         <div className="rounded-md border border-dashed border-border/70 p-6 text-center text-xs text-muted-foreground">
           {t('settings.keyboardShortcuts.empty')}
@@ -238,7 +239,7 @@ function GlobalShortcutRow({
   }
 
   return (
-    <CompactRow label={label} helper={helper} alignTop>
+    <CompactRow label={label} helper={helper} alignTop className={SHORTCUT_ROW_CLASS}>
       <div className="flex items-center">
         <div className={SHORTCUT_SLOT_CLASS}>
           {recording ? (
@@ -255,18 +256,13 @@ function GlobalShortcutRow({
         </div>
         <div className={TRASH_SLOT_CLASS}>
           {!recording && binding && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive [&_svg]:size-3.5"
+            <UnbindButton
+              visible={isOverridden}
               onClick={() => {
                 setError(null);
                 void onSet(id, null);
               }}
-              title={t('settings.keyboardShortcuts.unbindTooltip')}
-            >
-              <Trash2 />
-            </Button>
+            />
           )}
         </div>
       </div>
@@ -372,6 +368,7 @@ function ShortcutRow({
       label={resolveTitle(command, command.title)}
       helper={helper}
       alignTop={Boolean(helper)}
+      className={SHORTCUT_ROW_CLASS}
     >
       <div className="flex items-center">
         <div className={SHORTCUT_SLOT_CLASS}>
@@ -382,20 +379,29 @@ function ShortcutRow({
           )}
         </div>
         <div className={TRASH_SLOT_CLASS}>
-          {!recording && primary && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive [&_svg]:size-3.5"
-              onClick={handleUnbind}
-              title={t('settings.keyboardShortcuts.unbindTooltip')}
-            >
-              <Trash2 />
-            </Button>
-          )}
+          {!recording && primary && <UnbindButton visible={isOverridden} onClick={handleUnbind} />}
         </div>
       </div>
     </CompactRow>
+  );
+}
+
+function UnbindButton({ visible, onClick }: { visible: boolean; onClick: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn(
+        'h-7 w-7 text-muted-foreground hover:text-destructive [&_svg]:size-3.5',
+        !visible &&
+          'opacity-0 focus-visible:opacity-100 group-focus-within/shortcut:opacity-100 group-hover/shortcut:opacity-100'
+      )}
+      onClick={onClick}
+      title={t('settings.keyboardShortcuts.unbindTooltip')}
+    >
+      <Trash2 />
+    </Button>
   );
 }
 

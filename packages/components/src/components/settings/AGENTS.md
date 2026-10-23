@@ -58,11 +58,9 @@ Preserve historical catalog fields when editing unrelated values.
   IDs sort first and keep the not-listed tag, never select. Choose pre-checks the full
   packaged catalog, not the key-check listing, so a one-model key cannot shrink the
   picker. Rows summarize a subset as "N of M".
-- AI models (`agents` tab) mounts the design setup strip (`design-readiness.tsx`), the
-  local encrypted model-connection form, the image connection, and the read-only legacy
-  inventory only when this machine has legacy rows. The strip derives each chip from what
-  the sections below report and the Pinterest cookie count; it stores and tests nothing,
-  ticks only saved model/image setups, never Pinterest, and leaves unread items empty. Preserve old config/setup rows without mounting login, installation,
+- AI models (`agents` tab) mounts the local encrypted model-connection form, the image
+  connection, and the read-only legacy inventory only when this machine has legacy rows; no
+  status strip (the cards report state; Pinterest is a website account). Preserve old config/setup rows without mounting login, installation,
   retry, refresh, editing or automatic migration. Device management retains monitoring
   independently.
 - Image forms validate the endpoint contract before Save or check.

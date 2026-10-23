@@ -6,6 +6,7 @@ import { createLayersPanel, type LayerElement } from '../../design-bento/src/lay
 afterEach(() => {
   document.head.replaceChildren();
   document.body.replaceChildren();
+  document.body.className = '';
 });
 
 const elements: LayerElement[] = [
@@ -45,6 +46,57 @@ it('lists layers top-most first and selects by id, adding with shift', () => {
   expect(updated.map((row) => row.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
   updated[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
   expect(selections).toEqual([['bg'], ['bg', 'title']]);
+});
+
+it('reserves canvas room only while the panel is open', () => {
+  const { panel } = setup();
+  expect(document.body.classList.contains('molly-layers-open')).toBe(true);
+  expect(document.head.textContent).toContain('body.molly-layers-open .ed-scroll{right:');
+  panel.toggle();
+  expect(document.body.classList.contains('molly-layers-open')).toBe(false);
+});
+
+it('lists the layers before the properties of the selection', () => {
+  const { panel } = setup();
+  panel.update(['title'], 1);
+  const root = document.querySelector('.molly-layers')!;
+  expect([...root.children].map((child) => child.tagName)).toEqual(['HEADER', 'OL', 'DIV']);
+  expect(root.querySelector<HTMLElement>('.props')!.hidden).toBe(false);
+  panel.update([], 2);
+  expect(root.querySelector<HTMLElement>('.props')!.hidden).toBe(true);
+});
+
+it('names shapes by geometry and falls back to Shape', () => {
+  const shapes: LayerElement[] = [
+    'rect',
+    'roundRect',
+    'ellipse',
+    'oval',
+    'triangle',
+    'arrow',
+    'custom',
+  ].map((shapeName) => ({ id: shapeName, kind: 'shape', shapeName, bounds: [0, 0, 10, 10] }));
+  const panel = createLayersPanel({
+    request: async () => ({ ok: true }),
+    elements: () => [...shapes, { id: 'plain', kind: 'shape', bounds: [0, 0, 1, 1] }],
+    select: () => {},
+    onToggle: () => {},
+  });
+  panel.toggle();
+  const names = () =>
+    [...document.querySelectorAll('.molly-layers li button')].map((row) => row.textContent);
+  expect(names()).toEqual([
+    'Shape',
+    'Shape',
+    'Arrow',
+    'Triangle',
+    'Ellipse',
+    'Ellipse',
+    'Rectangle',
+    'Rectangle',
+  ]);
+  panel.present({ shapeEllipse: '椭圆' });
+  expect(names()).toContain('椭圆');
 });
 
 it('sends property and arrange commands bound to the selection epoch', async () => {

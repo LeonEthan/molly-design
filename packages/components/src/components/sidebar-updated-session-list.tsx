@@ -363,7 +363,7 @@ export const SidebarUpdatedSessionList = memo(function SidebarUpdatedSessionList
 
   const archiveLabels = useMemo(
     () => ({
-      tooltip: t('sessions.archive', 'Archive session'),
+      tooltip: t('sessions.archive', 'Archive design'),
       action: t('archive.title', 'Archive'),
       confirm: t('common.confirm', 'Confirm'),
     }),
@@ -374,13 +374,13 @@ export const SidebarUpdatedSessionList = memo(function SidebarUpdatedSessionList
     () => ({
       moreActions: t('sessions.moreActions', 'More actions'),
       rename: t('sessions.contextMenu.rename', 'Rename'),
-      pin: t('sessions.contextMenu.pin', 'Pin Session'),
-      unpin: t('sessions.contextMenu.unpin', 'Unpin Session'),
-      archive: t('sessions.contextMenu.archive', 'Archive Session'),
-      markUnread: t('sessions.contextMenu.markUnread', 'Mark as unread'),
-      copyUrl: t('sessions.contextMenu.copyUrl', 'Copy Session URL'),
+      pin: t('sessions.contextMenu.pin', 'Pin Design'),
+      unpin: t('sessions.contextMenu.unpin', 'Unpin Design'),
+      archive: t('sessions.contextMenu.archive', 'Archive Design'),
+      markUnread: t('sessions.contextMenu.markUnread', 'Mark as Unread'),
+      copyUrl: t('sessions.contextMenu.copyUrl', 'Copy Design Link'),
       copyBranch: t('sessions.contextMenu.copyBranch', 'Copy Current Branch'),
-      goToOpenerSession: t('sessions.contextMenu.goToOpenerSession', 'Go to Opener Session'),
+      goToOpenerSession: t('sessions.contextMenu.goToOpenerSession', 'Go to Opener Design'),
     }),
     [t]
   );
@@ -708,13 +708,12 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
         // only. The bucket wrapper above also uses an (unnamed) `group` for its
         // header chevron — without naming, hovering any row would match the bucket's
         // group-hover and reveal every row's archive button at once.
-        'group/row relative flex min-h-9 w-full items-center rounded-lg px-2 py-[7px] text-left',
+        'group/row relative flex min-h-9 w-full items-center rounded-lg px-2 py-1.5 text-left',
         'border border-transparent bg-transparent',
         !showSelectedState &&
           onSelect &&
           'hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground data-[menu-open]:bg-sidebar-foreground/[0.04] data-[menu-open]:text-sidebar-hover-foreground',
-        showSelectedState &&
-          SIDEBAR_SESSION_ROW_SELECTED_CLASS,
+        showSelectedState && SIDEBAR_SESSION_ROW_SELECTED_CLASS,
         // Keyboard-only focus ring — see SessionList: plain :focus-within also
         // matches after mouse clicks via the overlay <a> and left a permanent
         // inset ring on the selected row.
@@ -916,7 +915,6 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
 
   return (
     <SessionInfoHoverCard
-      kind={item.kind}
       author={item.owner ?? undefined}
       title={item.title}
       isWorktree={item.isWorktree}

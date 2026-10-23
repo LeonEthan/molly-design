@@ -1,6 +1,7 @@
 # Molly 平面设计工作台
 
 Status: draft
+Previous approval: [2026-10-22 font sample rows](../.github/spec-approvals.md#2026-10-22-font-sample-rows-in-molly_view_image)
 Previous approval: [2026-10-11 whole-profile browser import](../.github/spec-approvals.md#2026-10-11-whole-profile-browser-import)
 Previous approval: [2026-10-08 sign-in-first website accounts](../.github/spec-approvals.md#2026-10-08-sign-in-first-website-accounts)
 Previous approval: [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
@@ -121,7 +122,7 @@ P1 支持宽高各 1–4096 像素的单画布。任何调整画布尺寸的实�
 
 Agent 可调用已有 `molly_render_preview` 渲染 YAML 画稿投影，再用实际可用的图片读取工具查看并继续修改。应用不要求通过结果卡取图，也不把渲染成功等同模型已读取图片；预览工具缺席时，仅说明该能力不可用，不替 Agent 判定全部视觉 review 失败。可选 finalize 脚本不构成必经写入顺序或文件发布事务。
 
-设计会话另提供只读 `molly_view_image`，无需桌面在线即可查看会话工作目录或渲染预览目录内的单张图片、原图像素区域或最多九张编号拼图，返回长边不超过 1280 px 的 JPEG 及原图尺寸、字节数与坐标换算信息；路径在 realpath 后校验，拒绝符号链接逃逸，解码失败即失败，不改变源文件。
+设计会话另提供只读 `molly_view_image`，无需桌面在线即可查看会话工作目录或渲染预览目录内的单张图片、原图像素区域或最多九张编号拼图，返回长边不超过 1280 px 的 JPEG 及原图尺寸、字节数与坐标换算信息；路径在 realpath 后校验，拒绝符号链接逃逸，解码失败即失败，不改变源文件。同一工具还可用 `fonts` 与 `text` 比较最多八个字体文件的同文样本，并可在上方附上 `path`/`region` 参考区域。字体仅接受会话工作目录或各平台系统字体目录内经 realpath 校验的常规 `.ttf`/`.otf`/`.ttc` 文件，预览目录不授予字体读取权。逐行裁至墨迹、白底并统一墨迹高度（参考高度限制在 48–120 px，无参考时 96 px），以 `R` 和数字标记；元数据给出墨迹尺寸、相对参考宽度比例及交付尺寸/字节数，超宽行等比缩小并明确报告。文字按字面渲染，字体渲染失败则整次调用失败。缺失字体检测结合回退位图比较与字体名称表校验；Pango 可能以指定文件本身回退，因此相同位图不能单独证明字体缺失，也不保证逐字形无回退。所有者已于 2026-10-22 批准此能力修订（[记录](../.github/spec-approvals.md#2026-10-22-font-sample-rows-in-molly_view_image)）。
 
 ## 内置图像工具
 

@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { z } from 'zod';
@@ -16,7 +17,28 @@ import { resolveDesignImageViewScope } from './design-tools';
 import { ViewImageInputSchema, type DesignImageViewScope } from './view-image';
 
 const DESCRIPTION =
-  'View one image, one region of an image, or up to nine images as a numbered contact sheet. Returns a bounded JPEG (long edge at most 1280 px) plus the original size and bytes, so viewing never puts a full-size file into context. Use region with original pixel coordinates to inspect detail at native resolution. Read-only; it never changes files. Paths must be inside this design session.';
+  'View one image, one region of an image, up to nine images as a numbered contact sheet, or up to eight installed font faces rendered with the same text under a reference region (fonts + text). Returns a bounded JPEG (long edge at most 1280 px) plus the original size and bytes, so viewing never puts a full-size file into context. Use region with original pixel coordinates to inspect detail at native resolution. Read-only; it never changes files. Image paths must be inside this design session; font files may also come from the system font directories.';
+
+const FONT_FIXTURE = fileURLToPath(
+  new URL('./fixtures/fonts/MollyTestSerif-Regular.ttf', import.meta.url)
+);
+const FACE = 'Molly Test Serif';
+const FontRowsMetadataSchema = z.object({
+  rows: z.array(
+    z.object({
+      row: z.union([z.string(), z.number()]),
+      path: z.string().optional(),
+      file: z.string().optional(),
+      face: z.string().optional(),
+      inkWidth: z.number(),
+      inkHeight: z.number(),
+      widthRatio: z.number().optional(),
+      downscaled: z.boolean().optional(),
+      deliveredInkWidth: z.number().optional(),
+      deliveredInkHeight: z.number().optional(),
+    })
+  ),
+});
 
 async function withViewer(
   scope: DesignImageViewScope | undefined,
@@ -39,7 +61,7 @@ const call = async (client: Client, input: Record<string, unknown>) =>
   CallToolResultSchema.parse(await client.callTool({ name: 'molly_view_image', arguments: input }));
 
 function imageResult(result: CallToolResult) {
-  expect(result.isError).not.toBe(true);
+  expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
   expect(result.content.filter((block) => block.type === 'image')).toHaveLength(1);
   const image = result.content.find((block) => block.type === 'image');
   const text = result.content.find((block) => block.type === 'text');
@@ -116,6 +138,258 @@ describe('molly_view_image', () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  async function fontFixture() {
+    const file = path.join(scope.workdir, 'fixture.ttf');
+    await copyFile(FONT_FIXTURE, file);
+    return { file, face: FACE };
+  }
+
+  it('accepts font mode with an optional reference and strictly validates all three modes', async () => {
+    const font = await fontFixture();
+    for (const input of [
+      { fonts: [font], text: 'Hello' },
+      { fonts: [font], text: 'Hello', path: 'ref.png' },
+      {
+        fonts: [font],
+        text: 'Hello',
+        path: 'ref.png',
+        region: { x: 0, y: 0, width: 10, height: 10 },
+      },
+    ])
+      expect(ViewImageInputSchema.safeParse(input).success).toBe(true);
+    for (const input of [
+      { fonts: [font] },
+      { fonts: [font], text: '' },
+      { fonts: [font], text: 'a'.repeat(61) },
+      { fonts: [], text: 'Hello' },
+      { fonts: Array.from({ length: 9 }, () => font), text: 'Hello' },
+      { fonts: [{ ...font, face: '' }], text: 'Hello' },
+      { fonts: [{ ...font, face: 'a'.repeat(121) }], text: 'Hello' },
+      { fonts: [{ ...font, index: 0 }], text: 'Hello' },
+      { fonts: [font], paths: ['a', 'b'], text: 'Hello' },
+      { fonts: [font], path: 'a', paths: ['a', 'b'], text: 'Hello' },
+      { fonts: [font], text: 'Hello', region: { x: 0, y: 0, width: 10, height: 10 } },
+      { path: 'a', text: 'Hello' },
+      { paths: ['a', 'b'], text: 'Hello' },
+      { text: 'Hello' },
+    ])
+      expect(ViewImageInputSchema.safeParse(input).success).toBe(false);
+  });
+
+  it('renders a reference crop and two font rows at equal ink height with width ratios and labels', async () => {
+    const font = await fontFixture();
+    const ink = await sharp({
+      text: { text: 'Hamburgefonts', fontfile: font.file, font: `${FACE} 96`, dpi: 72, rgba: true },
+    })
+      .trim()
+      .flatten({ background: '#ffffff' })
+      .png()
+      .toBuffer({ resolveWithObject: true });
+    const reference = path.join(scope.workdir, 'reference.png');
+    await writeFile(
+      reference,
+      await sharp({
+        create: {
+          width: ink.info.width + 40,
+          height: ink.info.height + 40,
+          channels: 3,
+          background: '#ffffff',
+        },
+      })
+        .composite([{ input: ink.data, left: 20, top: 20 }])
+        .png()
+        .toBuffer()
+    );
+    const region = { x: 10, y: 10, width: ink.info.width + 20, height: ink.info.height + 20 };
+    const originalFont = await readFile(font.file);
+    const originalReference = await readFile(reference);
+    await withViewer(scope, async (client) => {
+      const { bytes, metadata } = imageResult(
+        await call(client, { fonts: [font, font], text: 'Hamburgefonts', path: reference, region })
+      );
+      const { rows } = FontRowsMetadataSchema.parse(metadata);
+      const height = Math.max(48, Math.min(120, ink.info.height));
+      expect(rows).toHaveLength(3);
+      expect(rows.map((row) => row.row)).toEqual(['R', 1, 2]);
+      expect(rows.map((row) => row.inkHeight)).toEqual([height, height, height]);
+      expect(rows[0]).toMatchObject({ path: reference });
+      for (const row of rows.slice(1)) {
+        expect(row).toMatchObject({ file: font.file, face: FACE });
+        expect(row.widthRatio).toBe(row.inkWidth / (rows[0]?.inkWidth ?? 0));
+      }
+      expect(metadata).toMatchObject({
+        text: 'Hamburgefonts',
+        deliveredHeight: height * 3 + 16,
+        deliveredBytes: bytes.length,
+      });
+      expect(await sharp(bytes).metadata()).toMatchObject({
+        width: metadata.deliveredWidth,
+        height: metadata.deliveredHeight,
+      });
+      for (const index of [0, 1, 2]) {
+        const label = await sharp(bytes)
+          .extract({ left: 0, top: index * (height + 8), width: 32, height: 28 })
+          .raw()
+          .toBuffer();
+        expect([...label].some((value) => value < 50)).toBe(true);
+      }
+    });
+    expect(await readFile(font.file)).toEqual(originalFont);
+    expect(await readFile(reference)).toEqual(originalReference);
+  });
+
+  it('escapes Pango markup and renders literal <&> and quotes without a reference', async () => {
+    const font = await fontFixture();
+    const literal = '<&>"';
+    const expectedInk = await sharp({
+      text: {
+        text: '&lt;&amp;&gt;&quot;',
+        fontfile: font.file,
+        font: `${FACE} 96`,
+        dpi: 72,
+        rgba: true,
+      },
+    })
+      .trim()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    await withViewer(scope, async (client) => {
+      const { bytes, metadata } = imageResult(await call(client, { fonts: [font], text: literal }));
+      const { rows } = FontRowsMetadataSchema.parse(metadata);
+      expect(rows).toEqual([
+        {
+          row: 1,
+          file: font.file,
+          face: FACE,
+          inkWidth: Math.round((expectedInk.info.width * 96) / expectedInk.info.height),
+          inkHeight: 96,
+        },
+      ]);
+      expect(metadata).toMatchObject({
+        text: literal,
+        deliveredHeight: 96,
+        deliveredBytes: bytes.length,
+      });
+      const ink = await sharp(bytes)
+        .extract({ left: 32, top: 0, width: Number(metadata.deliveredWidth) - 32, height: 96 })
+        .raw()
+        .toBuffer();
+      expect([...ink].some((value) => value < 30)).toBe(true);
+    });
+  });
+
+  it('bounds wide rows uniformly and reports their delivered ink sizes', async () => {
+    const font = await fontFixture();
+    await withViewer(scope, async (client) => {
+      const { bytes, metadata } = imageResult(
+        await call(client, { fonts: [font], text: 'W'.repeat(60) })
+      );
+      const { rows } = FontRowsMetadataSchema.parse(metadata);
+      expect(metadata).toMatchObject({ deliveredWidth: 1280, deliveredHeight: 96 });
+      expect(rows[0]).toMatchObject({ downscaled: true, inkHeight: 96, deliveredInkWidth: 1248 });
+      expect(rows[0]?.deliveredInkHeight).toBeLessThan(96);
+      expect(await sharp(bytes).metadata()).toMatchObject({ width: 1280, height: 96 });
+    });
+  });
+
+  it('renders a face from a TTC collection using its absolute table offsets', async () => {
+    const sfnt = Buffer.from(await readFile(FONT_FIXTURE));
+    const header = Buffer.alloc(16);
+    header.write('ttcf');
+    header.writeUInt32BE(0x00010000, 4);
+    header.writeUInt32BE(1, 8);
+    header.writeUInt32BE(16, 12);
+    for (let index = 0; index < sfnt.readUInt16BE(4); index++) {
+      const entry = 12 + index * 16 + 8;
+      sfnt.writeUInt32BE(sfnt.readUInt32BE(entry) + 16, entry);
+    }
+    const file = path.join(scope.workdir, 'fixture.ttc');
+    await writeFile(file, Buffer.concat([header, sfnt]));
+    await withViewer(scope, async (client) => {
+      const { metadata } = imageResult(
+        await call(client, { fonts: [{ file, face: FACE }], text: 'Hello' })
+      );
+      expect(FontRowsMetadataSchema.parse(metadata).rows[0]).toMatchObject({
+        row: 1,
+        file,
+        face: FACE,
+        inkHeight: 96,
+      });
+    });
+  });
+
+  it('rejects fonts outside workdir and system roots, preview fonts and symlink escapes', async () => {
+    const font = await fontFixture();
+    const outside = path.join(root, 'outside.ttf');
+    const preview = path.join(scope.previewDirectory, 'fixture.ttf');
+    await copyFile(font.file, outside);
+    await copyFile(font.file, preview);
+    const escape = path.join(scope.workdir, 'escape.ttf');
+    await symlink(outside, escape);
+    await symlink(
+      root,
+      path.join(scope.workdir, 'escape-directory'),
+      process.platform === 'win32' ? 'junction' : 'dir'
+    );
+    await withViewer(scope, async (client) => {
+      for (const file of [
+        outside,
+        preview,
+        escape,
+        path.join(scope.workdir, 'escape-directory', 'outside.ttf'),
+      ])
+        expect(
+          errorText(await call(client, { fonts: [{ file, face: FACE }], text: 'Hello' }))
+        ).toBe('Font path is outside the system font directories and this design session.');
+      expect(
+        errorText(
+          await call(client, { fonts: [{ file: 'fixture.ttf', face: FACE }], text: 'Hello' })
+        )
+      ).toBe('Font file path must be absolute.');
+      const wrongExtension = path.join(scope.workdir, 'fixture.woff2');
+      await copyFile(font.file, wrongExtension);
+      expect(
+        errorText(
+          await call(client, { fonts: [{ file: wrongExtension, face: FACE }], text: 'Hello' })
+        )
+      ).toBe('Font file must be .ttf, .otf or .ttc.');
+      const directory = path.join(scope.workdir, 'directory.ttf');
+      await mkdir(directory);
+      expect(
+        errorText(await call(client, { fonts: [{ file: directory, face: FACE }], text: 'Hello' }))
+      ).toBe('Font path must be a regular file.');
+    });
+  });
+
+  it('fails the entire call for unknown faces, corrupt fonts or an invalid reference region', async () => {
+    const font = await fontFixture();
+    const invalid = path.join(scope.workdir, 'invalid.ttf');
+    await writeFile(invalid, 'not a font');
+    await solid(path.join(scope.workdir, 'ref.png'), 20, 20, '#ffffff');
+    await withViewer(scope, async (client) => {
+      expect(
+        errorText(
+          await call(client, {
+            fonts: [font, { ...font, face: 'Molly Unknown Face' }],
+            text: 'Hello',
+          })
+        )
+      ).toBe(`Face "Molly Unknown Face" is not in ${font.file}.`);
+      expect(
+        errorText(await call(client, { fonts: [{ file: invalid, face: FACE }], text: 'Hello' }))
+      ).toBe(`Cannot render ${invalid} as "${FACE}".`);
+      expect(
+        errorText(
+          await call(client, {
+            fonts: [font],
+            text: 'Hello',
+            path: 'ref.png',
+            region: { x: 10, y: 10, width: 20, height: 20 },
+          })
+        )
+      ).toBe('Region is outside the image.');
+    });
+  });
   it('delivers a 2160×2700 PNG as a 1024×1280 JPEG with exact byte metadata without changing the file', async () => {
     const file = path.join(scope.workdir, 'large.png');
     const original = await solid(file, 2160, 2700, '#123456');

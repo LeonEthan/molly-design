@@ -344,6 +344,67 @@ browsed an archive instead of searching, with no search extension. Two runs per
 case on one machine; the bundle changes several things together, so effects are
 not isolated, and no human visual review was performed.
 
+## Round 5 (#223 C, PR #231, 343b7476)
+
+Status: proposed
+Measured: `343b7476f7c3d7dd3e17d22b1046c4822fcc15c8` (PR #231 head), 2026-10-22
+Model: `deepseek-flash`, reasoning `high`; no image-model call
+Runs: case C twice, serially, built local Electron app, isolated data/profile per run, 20-minute hard cap. Both runs committed under the cap. Both failed the no-sweep criterion: run 1 swept candidate fonts/sizes in bespoke Python/Pillow measurements; run 2 continued font comparisons and made six renders.
+
+The prior Round 4 fixture file was not present in the checkout or retained artifact directories. I used the same prescribed copy and described Blue Hour composition as a fresh synthetic 1080 × 1350 SVG for both runs, with Avenir Next Condensed as its declared reference face. The fixture and output images are in ignored `e2e/artifacts/ab-223-r5/`; captured Pi transcripts and traces remain local and are not committed. Because the original Round 4 fixture was unavailable, visual and timing comparisons are approximate rather than a byte-identical fixture rerun.
+
+| Run | 20-minute rule | Completed / total | First preview | Tool calls / bash | Preview renders | `reference-pack.mjs measure` | `font-catalog.mjs match` | `molly_view_image` with `fonts` | Type fitting sweep |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Round 4 C1 | Pass | 10.5 min | 2.7 min | not recorded | not recorded | not recorded | not recorded | used | Yes |
+| Round 4 C2 | Pass | 5.2 min | 3.9 min | not recorded | not recorded | not recorded | not recorded | used | Yes |
+| Round 5 run 1 | Pass | 7m 40.6s | 5m 56.6s | 75 / 53 | 3 | 0 | 3 | 1 call | Yes |
+| Round 5 run 2 | Pass | 14m 26.6s | 6m 38.6s | 112 / 77 | 6 | 3 calls | 1 | 5 calls | Yes |
+
+Reference face: Avenir Next Condensed. Run 1 embedded the face under the custom family names `Poster Sans` (700) and `Poster Sans Demi` (600); run 2 used `Avenir Next Condensed Bold` and `Avenir Next Condensed Demi Bold` directly. Headline `fontSize` / `letterSpacing` were 243 / −5 (`BLUE`) and 243 / −6 (`HOUR`) in run 1, and 244.35 / −5.6 and 244.35 / −6.6 in run 2. The remaining pairs (run 1 → run 2) were `SESSIONS` 87.6 / 13 → 88.98 / 12.4, `LIVE JAZZ` 62.1 / 8.25 → 62.85 / 7.97, `EVERY THURSDAY 9PM` 38.1 / 5.41 → 40.96 / 4, and `THE LANTERN ROOM` 35.3 / 4.75 → 38.14 / 3.35.
+
+Both picked a visually close Avenir Next Condensed face and produced close side-by-side reconstructions. The no-sweep goal was not met. Run 1 never used `reference-pack.mjs measure`; instead it repeatedly probed candidate fonts and sizes with Python/Pillow. Its catalog shortlist favored Helvetica Neue Condensed Black and Avenir Next Condensed Heavy/Heavy Italic for `BLUE`, rather than the final Bold face. Run 2 used the measurement helper, but its first set of lower-text regions returned a 7-pixel partial line and a no-ink result; it corrected the crop and continued. Its catalog shortlist favored Futura Condensed ExtraBold for `HOUR` and did not identify the final Avenir Next Condensed Bold/Demi variants. The image viewer was used with font comparisons in both runs; no viewer failure was observed. These misses led to more manual inspection and fitting rather than a bounded measure→match→choose flow.
+
+Compared with Round 4 C, Round 5 run 1 was faster overall than C1 (7.7 vs 10.5 min) but had a later first preview (5.9 vs 2.7 min); run 2 was slower than C2 (14.4 vs 5.2 min) and had a later first preview (6.6 vs 3.9 min). Tool/bash and helper-use counts were not retained per Round 4 run, so no count comparison is available. Round 4 and Round 5 both completed both runs within 20 minutes, but all four C runs still swept type choices. Two samples per round, one machine, and a regenerated synthetic fixture limit the comparison; the side-by-side images allow the owner to judge visual quality.
+
+Artifacts: `e2e/artifacts/ab-223-r5/run-1/` and `e2e/artifacts/ab-223-r5/run-2/` (reference, final render, side-by-side, `design.yaml`, runtime/session metadata, screen capture, local trace, and captured transcript; run 2 also retains `receipt.json`). Run 1's committed receipt was confirmed before harness cleanup, but its temporary receipt file was not retained. The transcripts and traces are ignored local evidence and must not be committed.
+
+## Round 6 (#223 C, PR #231, f03dd539)
+
+Status: proposed
+Measured: `f03dd539ae845ab0244068b33a969e0b7f1ffa0e`, 2026-10-22
+Model: `deepseek-flash`, reasoning `high`, local OpenAI-compatible proxy at `127.0.0.1:8317/v1`; no image-model calls
+Runs: case C twice, serially, built OSS Electron app, fresh isolated data/profile per run, 20-minute hard cap. Both committed under the cap; both failed the preview limit and no-custom-scripts criterion.
+
+The earlier attempts were blocked by the runner sandbox before any prompt or model call.
+
+The backup runner installed dependencies and rebuilt the app; the checkout differed from `f03dd539` only in the blocked Round 6 note. It reused the existing Electron harness and retained Round 5 runner/connection setup, adapting only local orchestration to preserve the fixture and use the proxy. No product or harness source changed. App, daemon, proxy checks and model execution ran outside the runner sandbox, with inherited `LODY_*` and `ELECTRON_RUN_AS_NODE` excluded. Before either prompt, real bootstrap IPC confirmed `running` / `ready`, `runtimeOwnership: owned`, and an isolated local workspace. The harness owned ports 54541 and 56609; Lody retained 17790. Each run's owned process/endpoint teardown succeeded before the next launch or profile export.
+
+Both references are byte-identical to Round 5 run 1 (`SHA-256 71205b019267543a8bcdd6d8426b3858f67f6fbeb2f07bc81e85ebe8671dd1f7`). The prompt was extracted from Round 5's recorded user event, before application-injected tool/skill context: reconstruct the attached poster at 1080 × 1350, preserve composition/colors/copy, use native shapes/text, no external research/options or image-model call. Completion requires a `committed` receipt. Total time uses prompt-send to observed committed receipt, as in Round 5; first-preview time and tool counts use structured Pi JSONL timestamps/tool-call entries.
+
+Helper cells below show **bash calls containing the helper (actual helper invocations)**. This preserves Round 5's shell-call counting convention while exposing batched commands and loops: run 1 measured six regions, then seven; run 2 measured six. All requested invocations count, including no-ink results. The custom-script criterion concerns the product Agent's measuring/comparison code, not runner evidence collection.
+
+| Run | 20-minute rule | Completed / total | First preview | Tool calls / bash | Preview renders | `reference-pack.mjs measure` | `font-catalog.mjs match` | `molly_view_image` with `fonts` | Type fitting sweep |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Round 6 run 1 | Pass | Committed / 10m 37.3s | 6m 54.6s | 89 / 61 | 4 | 2 (13) | 4 (10) | 4 | Yes |
+| Round 6 run 2 | Pass | Committed / 12m 11.4s | 5m 48.5s | 93 / 61 | 5 | 1 (6) | 2 (5) | 5 | Yes |
+
+Both runs used `match --family`. Avenir Next Condensed appeared in both first match outputs: run 1 ranked Avenir Next Condensed Bold second for `BLUE`; run 2 ranked it fourth for `BLUE` in the first batched `BLUE`/`HOUR` output (its `HOUR` shortlist omitted it). Run 1 chose Futura Condensed ExtraBold for both headlines, embedded as `Poster Display`; smaller lines use Avenir Next Condensed Demi Bold (`Poster Sans`) and Bold (`Poster Sans Bold`). Run 2 embedded Avenir Next Condensed Bold as `Poster Headline` and Demi Bold as `Poster Caps`. These identities were checked against the embedded font metadata.
+
+| Text line | Round 6 run 1: face; `fontSize` / `letterSpacing` | Round 6 run 2: face; `fontSize` / `letterSpacing` |
+| --- | --- | --- |
+| BLUE | Futura Condensed ExtraBold; 227.4 / −5 | Avenir Next Condensed Bold; 242 / −4.4 |
+| HOUR | Futura Condensed ExtraBold; 227.4 / −4 | Avenir Next Condensed Bold; 242 / −4.4 |
+| SESSIONS | Avenir Next Condensed Demi Bold; 87.8 / 12.8 | Avenir Next Condensed Demi Bold; 83.6 / 15.2 |
+| LIVE JAZZ | Avenir Next Condensed Bold; 62.2 / 8.3 | Avenir Next Condensed Bold; 62.2 / 8.3 |
+| EVERY THURSDAY 9PM | Avenir Next Condensed Demi Bold; 38.3 / 5.25 | Avenir Next Condensed Demi Bold; 38.1 / 5.4 |
+| THE LANTERN ROOM | Avenir Next Condensed Demi Bold; 36.7 / 4.16 | Avenir Next Condensed Demi Bold; 36.7 / 4.13 |
+
+Custom measuring/font-comparison scripts: **yes in both runs**. Run 1 wrote `fitfont.py`, ran further inline Pillow font/size probes, scanned pixels for shape bounds, line bands, colors and glyph widths, used FontTools glyph-bound/metric probes, and generated reference/render comparison crops. Run 2 ran inline Pillow/NumPy masks, row/column scans and bounding-box measurements, FontTools glyph-width/cap/advance comparisons, and repeated reference/render measurements and comparison crops. Font conversion alone was not treated as a measuring script. Neither run followed a bounded helper-only fitting path.
+
+**Pass rule: run 1 Fail; run 2 Fail.** Both satisfy under 20 minutes, but 4/5 previews exceed three and both wrote custom measuring/comparison scripts. Compared with Round 5, run 1 was 2m 56.7s slower overall (10m 37.3s vs 7m 40.6s), first preview was 58.0s later, tool/bash calls rose from 75/53 to 89/61, and previews rose from 3 to 4. Run 2 was 2m 15.2s faster overall (12m 11.4s vs 14m 26.6s), first preview was 50.1s earlier, tool/bash calls fell from 112/77 to 93/61, and previews fell from 6 to 5. The changed shortlist includes Avenir Next Condensed in both first outputs, but these two runs do not establish removal of the custom fitting behavior. The owner judges visual match; no visual pass is claimed.
+
+Artifacts: `e2e/artifacts/ab-223-r6/run-1/` and `run-2/` each retain `reference.png`, `final-render.png`, `side-by-side.png` (reference left, render right), `design.yaml` with its media, `receipt.json`, `run.json`, `metrics.json`, and `validation.json`, plus local runtime/profile/trace/structured-session evidence. Both committed YAML copies pass `@molly/design-authoring` validation with no diagnostics; both renders are 1080 × 1350. Transcripts, traces and artifacts remain ignored and are not committed. Verification: `pnpm install`, `pnpm e2e:build`, `pnpm check`, `pnpm run docs check`, and `pnpm format`; unrelated formatter changes reverted.
+
 ## #223 A round 1 (PR #232, f6d8a3c5)
 
 Measured on the Mac mini on 2026-10-22 (local date), using the exact Case A

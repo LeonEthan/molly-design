@@ -6,7 +6,23 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  truncateSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -379,6 +395,583 @@ describe('reference-pack.mjs', () => {
     );
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('outside image');
+  });
+});
+
+describe('font-catalog.mjs', () => {
+  // The committed OFL fixture (scripts/fixtures/MollyTestSerif-Regular.ttf) is
+  // copied into an isolated dir per run; sibling faces are derived in-memory.
+  // The catalog cache is redirected per run so tests stay hermetic.
+  const fixtureDir = path.join(textSkillDir, 'scripts', 'fixtures');
+  const fixtureFont = path.join(fixtureDir, 'MollyTestSerif-Regular.ttf');
+  let catalogSeq = 0;
+
+  function setupFontDir(): { dir: string; cacheEnv: NodeJS.ProcessEnv } {
+    const dir = path.join(workdir(), `fonts-${catalogSeq++}`);
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const cache = path.join(dir, 'cache.json');
+    const env = { ...process.env, MOLLY_FONT_CACHE: cache };
+    return { dir, cacheEnv: env };
+  }
+
+  function copyFixture(dir: string, name = 'MollyTestSerif-Regular.ttf'): string {
+    const dest = path.join(dir, name);
+    writeFileSync(dest, readFileSync(fixtureFont));
+    // A pinned mtime keeps the directory fingerprint stable across the calls
+    // in one test, so the second call exercises the cache.
+    utimesSync(dest, new Date('2020-01-01'), new Date('2020-01-01'));
+    return dest;
+  }
+
+  function runCatalog(
+    args: string[],
+    env: NodeJS.ProcessEnv
+  ): { status: number | null; stdout: string; stderr: string } {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(textSkillDir, 'scripts', 'font-catalog.mjs'), ...args],
+      { encoding: 'utf8', env }
+    );
+    return {
+      status: result.status,
+      stdout: result.stdout as string,
+      stderr: result.stderr as string,
+    };
+  }
+
+  it('lists the fixture face with parsed metrics', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    const fontPath = copyFixture(dir);
+    const result = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(result.status, result.stderr).toBe(0);
+    const prefix = `Molly Test Serif | Regular | 400 | 5 | x/cap 0.71 | `;
+    const suffix = `#0 | face "Molly Test Serif"`;
+    expect(result.stdout.trim()).toBe(prefix + realpathSync(fontPath) + suffix);
+  });
+
+  it('keeps its default cache in a private per-user directory', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    const env: NodeJS.ProcessEnv = { ...cacheEnv, TMPDIR: dir, TMP: dir, TEMP: dir };
+    delete env.MOLLY_FONT_CACHE;
+    const result = runCatalog(['list', '--dirs', dir], env);
+    expect(result.status, result.stderr).toBe(0);
+    const uid = process.getuid?.();
+    const cacheDir = path.join(
+      dir,
+      readdirSync(dir).find((entry) => entry.startsWith('molly-font-catalog-')) ?? ''
+    );
+    const cache = path.join(cacheDir, 'molly-font-catalog-v4.json');
+    expect(existsSync(cache)).toBe(true);
+    if (process.platform !== 'win32') {
+      expect(statSync(cacheDir).mode & 0o777).toBe(0o700);
+      expect(statSync(cache).mode & 0o777).toBe(0o600);
+      expect(statSync(cache).uid).toBe(uid);
+    }
+  });
+
+  it.each(['symlink', 'hardlink', 'directory', 'public-directory'])(
+    'scans without touching an unsafe %s cache',
+    (kind) => {
+      const { dir, cacheEnv } = setupFontDir();
+      copyFixture(dir);
+      const cache = cacheEnv.MOLLY_FONT_CACHE ?? '';
+      const target = path.join(workdir(), 'untouched.json');
+      writeFileSync(target, 'keep these bytes');
+      if (kind === 'symlink') symlinkSync(target, cache);
+      if (kind === 'hardlink') linkSync(target, cache);
+      if (kind === 'directory') mkdirSync(cache);
+      if (kind === 'public-directory') chmodSync(dir, 0o777);
+      const result = runCatalog(['list', '--dirs', dir], cacheEnv);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain('Molly Test Serif');
+      expect(readFileSync(target, 'utf8')).toBe('keep these bytes');
+      if (kind === 'symlink') expect(lstatSync(cache).isSymbolicLink()).toBe(true);
+      if (kind === 'hardlink') expect(statSync(cache).nlink).toBe(2);
+      if (kind === 'directory') expect(statSync(cache).isDirectory()).toBe(true);
+      if (kind === 'public-directory') expect(existsSync(cache)).toBe(false);
+    }
+  );
+
+  it.each(['oversized', 'malformed'])('ignores a %s cache and rebuilds safely', (kind) => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    const cache = cacheEnv.MOLLY_FONT_CACHE ?? '';
+    expect(runCatalog(['list', '--dirs', dir], cacheEnv).status).toBe(0);
+    const invalid = JSON.parse(readFileSync(cache, 'utf8'));
+    invalid.faces = [null];
+    writeFileSync(cache, JSON.stringify(invalid), { mode: 0o600 });
+    if (kind === 'oversized') truncateSync(cache, 64 * 1024 * 1024 + 1);
+    const result = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('Molly Test Serif');
+    expect(JSON.parse(readFileSync(cache, 'utf8')).faces[0].family).toBe('Molly Test Serif');
+  });
+
+  it('skips a truncated TTC header and still lists and matches valid fonts', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    const broken = Buffer.alloc(16);
+    broken.write('ttcf');
+    broken.writeUInt32BE(2, 8);
+    broken.writeUInt32BE(100, 12);
+    writeFileSync(path.join(dir, 'broken.ttc'), broken);
+    const listed = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(listed.status, listed.stderr).toBe(0);
+    expect(listed.stdout).toContain('MollyTestSerif-Regular.ttf#0');
+    const matched = runCatalog(
+      ['match', '--text', 'MOLLY', '--width', '367', '--cap', '100', '--dirs', dir],
+      cacheEnv
+    );
+    expect(matched.status, matched.stderr).toBe(0);
+    expect(matched.stdout).toContain('1. Molly Test Serif');
+  });
+
+  it('ranks a Regular-exact match first and predicts fontSize and spacing', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    const fontPath = copyFixture(dir);
+    // MOLLY advances sum to 2328 upem; at cap 100 the font size is
+    // 100 / 0.72 = 138.9. The measured width runs ink to ink, so half of the
+    // outer M and Y side bearings come off the predicted 323.3 px width,
+    // leaving letterSpacing 4.5 for a measured width of 367.
+    const result = runCatalog(
+      ['match', '--text', 'MOLLY', '--width', '367', '--cap', '100', '--dirs', dir],
+      cacheEnv
+    );
+    expect(result.status, result.stderr).toBe(0);
+    const lines = result.stdout.trim().split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe(
+      `1. Molly Test Serif | fontSize 138.9 | letterSpacing 4.5 | score 0.052 | ` +
+        `${realpathSync(fontPath)}#0`
+    );
+    expect(lines[1]).toContain('Next: molly_view_image { fonts: [these rows], text');
+  });
+
+  it('scales x-height-only lowercase copy with the font x-height', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    for (const text of ['summer', 'minimum', 'iii']) {
+      const result = runCatalog(
+        ['match', '--text', text, '--width', '300', '--cap', '51', '--dirs', dir],
+        cacheEnv
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain('fontSize 100.0');
+    }
+  });
+
+  it.each(['中', 'あ', '한', '𠀀'])(
+    'matches covered CJK copy %s on cold and warm catalogs',
+    (text) => {
+      const { dir, cacheEnv } = setupFontDir();
+      const source = Buffer.from(readFileSync(fixtureFont));
+      const cmap = Buffer.alloc(40);
+      cmap.writeUInt16BE(1, 2);
+      cmap.writeUInt16BE(3, 4);
+      cmap.writeUInt16BE(10, 6);
+      cmap.writeUInt32BE(12, 8);
+      cmap.writeUInt16BE(12, 12);
+      cmap.writeUInt32BE(28, 16);
+      cmap.writeUInt32BE(1, 24);
+      const code = text.codePointAt(0) ?? 0;
+      cmap.writeUInt32BE(code, 28);
+      cmap.writeUInt32BE(code, 32);
+      cmap.writeUInt32BE(1, 36);
+      for (let i = 0; i < source.readUInt16BE(4); i++) {
+        const rec = 12 + i * 16;
+        if (source.toString('ascii', rec, rec + 4) === 'cmap') {
+          source.writeUInt32BE(source.length, rec + 8);
+          source.writeUInt32BE(cmap.length, rec + 12);
+        }
+      }
+      writeFileSync(path.join(dir, 'Cjk.ttf'), Buffer.concat([source, cmap]));
+      for (const phase of ['cold', 'warm']) {
+        const result = runCatalog(
+          ['match', '--text', text, '--width', '100', '--cap', '72', '--cjk', '--dirs', dir],
+          cacheEnv
+        );
+        expect(result.status, `${phase}: ${result.stderr}`).toBe(0);
+        expect(result.stdout).toContain('1. Molly Test Serif | fontSize 100.0');
+      }
+    }
+  );
+
+  it('skips faces without cap height and filters uncovered text', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    // NoCap: OS/2 version 1 drops sxHeight/sCapHeight; the H yMax fallback
+    // supplies cap height (720) so the face stays matchable.
+    const source = readFileSync(fixtureFont);
+    const noCap = Buffer.from(source);
+    const numTables = noCap.readUInt16BE(4);
+    for (let i = 0; i < numTables; i++) {
+      const rec = 12 + i * 16;
+      if (noCap.toString('ascii', rec, rec + 4) === 'OS/2') {
+        const offset = noCap.readUInt32BE(rec + 8);
+        noCap.writeUInt16BE(1, offset);
+      }
+    }
+    writeFileSync(path.join(dir, 'NoCap.ttf'), noCap);
+    utimesSync(path.join(dir, 'NoCap.ttf'), new Date('2020-01-01'), new Date('2020-01-01'));
+    const listed = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(listed.status).toBe(0);
+    // The fallback found the H glyph: cap height is known, x-height is not.
+    expect(listed.stdout).toContain('NoCap.ttf#0 | face "Molly Test Serif"');
+    expect(listed.stdout).toContain('x/cap ? |');
+    // A glyph the face does not cover excludes it from match.
+    const uncovered = runCatalog(
+      ['match', '--text', 'MOLLYé', '--width', '300', '--cap', '100', '--dirs', dir],
+      cacheEnv
+    );
+    expect(uncovered.status).toBe(0);
+    expect(uncovered.stdout.trim()).toMatch(/^Next: molly_view_image/);
+  });
+
+  it('parses TTC collections with per-face indexes', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    // Minimal TTC: header + two copies of the fixture, table offsets rebased.
+    const face = readFileSync(fixtureFont);
+    const header = Buffer.alloc(12 + 8);
+    header.write('ttcf', 0, 'ascii');
+    header.writeUInt32BE(0x00010000, 4);
+    header.writeUInt32BE(2, 8);
+    header.writeUInt32BE(20, 12);
+    header.writeUInt32BE(20 + face.length, 16);
+    const rebase = (buf: Buffer, delta: number): Buffer => {
+      const out = Buffer.from(buf);
+      const numTables = out.readUInt16BE(4);
+      for (let i = 0; i < numTables; i++) {
+        const rec = 12 + i * 16;
+        out.writeUInt32BE(out.readUInt32BE(rec + 8) + delta, rec + 8);
+      }
+      return out;
+    };
+    const ttc = Buffer.concat([header, rebase(face, 20), rebase(face, 20 + face.length)]);
+    writeFileSync(path.join(dir, 'Pair.ttc'), ttc);
+    utimesSync(path.join(dir, 'Pair.ttc'), new Date('2020-01-01'), new Date('2020-01-01'));
+    const result = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(result.status, result.stderr).toBe(0);
+    const lines = result.stdout.trim().split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('Pair.ttc#0');
+    expect(lines[1]).toContain('Pair.ttc#1');
+  });
+
+  it('lists each face once when a root nests another scanned directory', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    // macOS scans /System/Library/Fonts and its Supplemental subdirectory;
+    // the face must still appear exactly once.
+    const nested = path.join(dir, 'Supplemental');
+    mkdirSync(nested);
+    copyFixture(nested);
+    const result = runCatalog(['list', '--dirs', `${dir},${nested}`], cacheEnv);
+    expect(result.status, result.stderr).toBe(0);
+    const lines = result.stdout.trim().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('MollyTestSerif-Regular.ttf#0');
+  });
+
+  it('excludes hidden system faces whose family starts with a dot', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    // Same face with the family name rewritten to a hidden one (the record
+    // keeps the same length: 16 code units -> '.Molly Test Seri').
+    const source = readFileSync(fixtureFont);
+    const hidden = Buffer.from(source);
+    const oldName = Buffer.from('Molly Test Serif', 'utf16le').swap16();
+    const newName = Buffer.from('.Molly Test Seri', 'utf16le').swap16();
+    let replaced = 0;
+    for (let at = hidden.indexOf(oldName); at !== -1; at = hidden.indexOf(oldName, at + 2)) {
+      newName.copy(hidden, at);
+      replaced += 1;
+    }
+    expect(replaced).toBeGreaterThan(0);
+    const hiddenPath = path.join(dir, 'Hidden.ttf');
+    writeFileSync(hiddenPath, hidden);
+    utimesSync(hiddenPath, new Date('2020-01-01'), new Date('2020-01-01'));
+    const listed = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(listed.status, listed.stderr).toBe(0);
+    expect(listed.stdout).toContain('MollyTestSerif-Regular.ttf#0');
+    expect(listed.stdout).not.toContain('Hidden.ttf');
+    const matched = runCatalog(
+      ['match', '--text', 'MOLLY', '--width', '367', '--cap', '100', '--dirs', dir],
+      cacheEnv
+    );
+    expect(matched.status, matched.stderr).toBe(0);
+    expect(matched.stdout).not.toContain('Hidden.ttf');
+  });
+
+  function writeVariant(
+    dir: string,
+    name: string,
+    { family, weight }: { family?: string; weight?: number }
+  ): void {
+    const variant = Buffer.from(readFileSync(fixtureFont));
+    if (family !== undefined) {
+      // Same-length rewrite keeps every name record offset valid.
+      const oldName = Buffer.from('Molly Test Serif', 'utf16le').swap16();
+      const newName = Buffer.from(family, 'utf16le').swap16();
+      for (let at = variant.indexOf(oldName); at !== -1; at = variant.indexOf(oldName, at + 2)) {
+        newName.copy(variant, at);
+      }
+    }
+    if (weight !== undefined) {
+      const numTables = variant.readUInt16BE(4);
+      for (let i = 0; i < numTables; i++) {
+        const rec = 12 + i * 16;
+        if (variant.toString('ascii', rec, rec + 4) === 'OS/2') {
+          variant.writeUInt16BE(weight, variant.readUInt32BE(rec + 8) + 4);
+        }
+      }
+    }
+    writeFileSync(path.join(dir, name), variant);
+    utimesSync(path.join(dir, name), new Date('2020-01-01'), new Date('2020-01-01'));
+  }
+
+  const scoreOf = (line: string | undefined): string =>
+    /score ([\d.]+)/.exec(line ?? '')?.[1] ?? '';
+
+  it('ranks by summed glyph ink so added tracking does not change the score', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    const base = ['match', '--text', 'MOLLY', '--cap', '100', '--glyphs', '5'];
+    const tight = runCatalog(
+      [...base, '--width', '300', '--glyph-ink', '280', '--dirs', dir],
+      cacheEnv
+    );
+    const tracked = runCatalog(
+      [...base, '--width', '500', '--glyph-ink', '280', '--dirs', dir],
+      cacheEnv
+    );
+    expect(tight.status, tight.stderr).toBe(0);
+    expect(tracked.status, tracked.stderr).toBe(0);
+    const tightRow = tight.stdout.split('\n')[0];
+    const trackedRow = tracked.stdout.split('\n')[0];
+    expect(scoreOf(tightRow)).toBe(scoreOf(trackedRow));
+    expect(tightRow).not.toBe(trackedRow);
+    // A glyph count that disagrees with the copy falls back to line width.
+    const merged = runCatalog(
+      [...base.slice(0, -1), '4', '--width', '300', '--glyph-ink', '280', '--dirs', dir],
+      cacheEnv
+    );
+    expect(merged.status, merged.stderr).toBe(0);
+    expect(merged.stdout).toContain(
+      'note: measure found 4 glyphs for 5 letters; ranking by line width'
+    );
+  });
+
+  it('estimates weight from stroke and shows one row per family', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    writeVariant(dir, 'SerifBold.ttf', { weight: 700 });
+    writeVariant(dir, 'Sans.ttf', { family: 'Molly Test Sanz' });
+    const args = ['match', '--text', 'MOLLY', '--width', '367', '--cap', '100'];
+    // stroke/cap 0.21 maps to weight 700.
+    const families = runCatalog([...args, '--stroke', '21', '--dirs', dir], cacheEnv);
+    expect(families.status, families.stderr).toBe(0);
+    const rows = families.stdout.trim().split('\n');
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toContain('SerifBold.ttf#0');
+    expect(rows[1]).toContain('Molly Test Sanz');
+    expect(rows[2]).toContain('match --family');
+    const serif = runCatalog(
+      [...args, '--stroke', '21', '--family', 'molly test serif', '--dirs', dir],
+      cacheEnv
+    );
+    expect(serif.status, serif.stderr).toBe(0);
+    const serifRows = serif.stdout.trim().split('\n');
+    expect(serifRows).toHaveLength(3);
+    expect(serifRows[0]).toContain('SerifBold.ttf#0');
+    expect(serifRows[1]).toContain('MollyTestSerif-Regular.ttf#0');
+    expect(serifRows[2]).toContain("use the first row's fontSize");
+    // Light strokes favor the regular face instead.
+    const light = runCatalog(
+      [...args, '--stroke', '12', '--family', 'molly test serif', '--dirs', dir],
+      cacheEnv
+    );
+    expect(light.stdout.split('\n')[0]).toContain('MollyTestSerif-Regular.ttf#0');
+  });
+
+  it('rejects invalid arguments with a clear error', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    const missing = runCatalog(
+      ['match', '--text', 'MOLLY', '--cap', '100', '--dirs', dir],
+      cacheEnv
+    );
+    expect(missing.status).toBe(1);
+    expect(missing.stderr).toContain('match needs --width');
+    const badWeight = runCatalog(
+      [
+        'match',
+        '--text',
+        'MOLLY',
+        '--width',
+        '100',
+        '--cap',
+        '100',
+        '--weight',
+        '50',
+        '--dirs',
+        dir,
+      ],
+      cacheEnv
+    );
+    expect(badWeight.status).toBe(1);
+    expect(badWeight.stderr).toContain('--weight');
+    const usage = runCatalog(['bogus'], cacheEnv);
+    expect(usage.status).toBe(2);
+    expect(usage.stderr).toContain('usage:');
+  });
+});
+
+describe('reference-pack.mjs measure', () => {
+  // 120x90 cream. One mixed-case line: x-band rows 16..29 spanning the full
+  // ink width (x-height 14), caps and ascenders rows 4..15, descender band
+  // rows 30..34 (5). A second all-caps line at rows 55..74, stroke 3px.
+  const measurePng = (): Buffer =>
+    encodeTestPng(120, 90, 3, (x, y) => {
+      const stems = (t: number, b: number, w: number, gap: number, x0: number, x1: number) =>
+        y >= t && y <= b && x >= x0 && x <= x1 && (x - x0) % gap < w;
+      const ink =
+        stems(16, 29, 2, 4, 20, 79) ||
+        stems(10, 15, 2, 16, 20, 49) ||
+        stems(4, 9, 2, 16, 20, 49) ||
+        stems(30, 34, 2, 4, 20, 35) ||
+        stems(55, 74, 3, 6, 10, 109);
+      return ink ? [29, 29, 27, 255] : [244, 239, 230, 255];
+    });
+
+  it('reports ink box, baseline, heights, stroke and colors per line', () => {
+    const dir = workdir();
+    const ref = path.join(dir, 'ref.png');
+    writeFileSync(ref, measurePng());
+    const result = run('reference-pack.mjs', ['measure', ref, '0,0,120,90'], replicationSkillDir);
+    expect(result.status, result.stderr).toBe(0);
+    const lines = result.stdout.trim().split('\n');
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toBe(
+      'line 1: ink 20,4 58x31 | baseline 29 | xHeight 14 | capOrAscender 26 | ' +
+        'descender 5 | stroke 2 | glyphs 15 | glyphInk 30 | ink #1d1d1b on #f4efe6'
+    );
+    expect(lines[1]).toBe('  ratios: x/cap 0.54  stroke/cap 0.08');
+    expect(lines[2]).toContain('line 2: ink 10,55 99x20 | baseline 74 | xHeight ?');
+    expect(lines[2]).toContain(
+      'capOrAscender 20 | descender 0 | stroke 3 | glyphs 17 | glyphInk 51'
+    );
+    expect(lines[3]).toBe('  ratios: stroke/cap 0.15');
+  });
+
+  it.each([0, 2])('keeps detached dots or accents with their stems (offset %s)', (offset) => {
+    const ref = path.join(workdir(), 'marks.png');
+    writeFileSync(
+      ref,
+      encodeTestPng(80, 90, 3, (x, y) => {
+        const stem = x >= 10 && x < 55 && (x - 10) % 15 < 4;
+        const mark = x >= 10 + offset && x < 55 + offset && (x - 10 - offset) % 15 < 4;
+        const ink =
+          (mark && y >= 5 && y <= 8) ||
+          (stem && y >= 15 && y <= 34) ||
+          (stem && y >= 60 && y <= 79);
+        return ink ? [0, 0, 0, 255] : [255, 255, 255, 255];
+      })
+    );
+    const result = run('reference-pack.mjs', ['measure', ref, '0,0,80,90'], replicationSkillDir);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.match(/^line /gm)).toHaveLength(2);
+    expect(result.stdout).toContain('line 1: ink 10,5');
+    expect(result.stdout).toContain('baseline 34 | xHeight ? | capOrAscender 20 | descender 0');
+    expect(result.stdout).toContain('line 2: ink 10,60');
+    expect(result.stdout).toContain('glyphs 3');
+  });
+
+  it('measures a sub-region in original image coordinates', () => {
+    const dir = workdir();
+    const ref = path.join(dir, 'ref.png');
+    writeFileSync(ref, measurePng());
+    const result = run('reference-pack.mjs', ['measure', ref, '5,50,110,30'], replicationSkillDir);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('line 1: ink 10,55 99x20 | baseline 74');
+  });
+
+  it('warns when a line touches the region edge', () => {
+    const dir = workdir();
+    const ref = path.join(dir, 'ref.png');
+    writeFileSync(ref, measurePng());
+    const cut = run('reference-pack.mjs', ['measure', ref, '0,0,120,20'], replicationSkillDir);
+    expect(cut.status, cut.stderr).toBe(0);
+    expect(cut.stdout).toContain(
+      'warning: ink touches the region edge; widen the region to the whole line'
+    );
+    const whole = run('reference-pack.mjs', ['measure', ref, '0,0,120,45'], replicationSkillDir);
+    expect(whole.status, whole.stderr).toBe(0);
+    expect(whole.stdout).not.toContain('warning');
+  });
+
+  it('accepts mild background variation and antialiased text', () => {
+    const ref = path.join(workdir(), 'near-flat.png');
+    writeFileSync(
+      ref,
+      encodeTestPng(120, 60, 3, (x, y) => {
+        if (x >= 20 && x < 100 && y >= 20 && y < 40 && x % 10 < 5) {
+          return x % 10 === 0 ? [120, 120, 120, 255] : [30, 30, 30, 255];
+        }
+        const shade = 240 + (x % 10);
+        return [shade, shade, shade, 255];
+      })
+    );
+    const result = run('reference-pack.mjs', ['measure', ref, '0,0,120,60'], replicationSkillDir);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('baseline 39');
+  });
+
+  it.each(['gradient', 'photographic'])(
+    'refuses a %s background instead of returning metrics',
+    (kind) => {
+      const ref = path.join(workdir(), 'nonuniform.png');
+      writeFileSync(
+        ref,
+        encodeTestPng(120, 90, 3, (x, y) => {
+          if (x >= 30 && x < 90 && y >= 30 && y < 60 && x % 10 < 3) return [0, 0, 0, 255];
+          if (kind === 'gradient') {
+            const shade = 40 + Math.floor((x * 200) / 119);
+            return [shade, shade, shade, 255];
+          }
+          if (x < 5 || x > 114 || y < 5 || y > 84) return [255, 255, 255, 255];
+          return [(x * 31 + y * 7) % 256, (x * 17 + y * 23) % 256, (x * 3 + y * 13) % 256, 255];
+        })
+      );
+      const result = run('reference-pack.mjs', ['measure', ref, '0,0,120,90'], replicationSkillDir);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('nonuniform');
+      expect(result.stdout).not.toContain('baseline');
+    }
+  );
+
+  it('rejects malformed and out-of-bounds regions and non-PNG input', () => {
+    const dir = workdir();
+    const ref = path.join(dir, 'ref.png');
+    writeFileSync(ref, measurePng());
+    const bad = run('reference-pack.mjs', ['measure', ref, '9,9,120,90'], replicationSkillDir);
+    expect(bad.status).toBe(1);
+    expect(bad.stderr).toContain('outside image');
+    const malformed = run('reference-pack.mjs', ['measure', ref, 'bad'], replicationSkillDir);
+    expect(malformed.status).toBe(1);
+    expect(malformed.stderr).toContain('x,y,w,h');
+    const notPng = path.join(dir, 'ref.txt');
+    writeFileSync(notPng, 'not an image');
+    const wrong = run('reference-pack.mjs', ['measure', notPng, '0,0,4,4'], replicationSkillDir);
+    expect(wrong.status).toBe(1);
+    expect(wrong.stderr).toContain('needs a PNG');
+  });
+
+  it('fails when the region holds no ink', () => {
+    const dir = workdir();
+    const ref = path.join(dir, 'blank.png');
+    writeFileSync(ref, syntheticPng(32, 32, [200, 200, 200]));
+    const result = run('reference-pack.mjs', ['measure', ref, '0,0,32,32'], replicationSkillDir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('no ink pixels');
+    expect(result.stderr).toContain("reference's own pixels, 32x32");
   });
 });
 

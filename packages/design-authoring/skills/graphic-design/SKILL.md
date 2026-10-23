@@ -107,7 +107,9 @@ are optional methods, never gates.
    the step that caused a difference and render again. One read per render,
    and stop when the render matches or you can name what still differs:
    successive renders exist to confirm named fixes, not to look again for new
-   flaws. To compare the render with the chosen design, view both in one `molly_view_image` `paths` call instead of two separate reads. If `molly_render_preview` is
+   flaws. Never sweep fonts, sizes, tracking or positions in a loop to match
+   pixels; fit type with the `design-replication` skill's "Fit type" recipe.
+   To compare the render with the chosen design, view both in one `molly_view_image` `paths` call instead of two separate reads. If `molly_render_preview` is
    absent, only that tool is unavailable: use the rendering and image-reading
    tools you do have, and report that Molly's renderer was not checked.
 

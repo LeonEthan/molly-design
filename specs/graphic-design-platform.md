@@ -1,6 +1,7 @@
 # Molly Graphic Design Workbench
 
 Status: draft
+Previous approval: [2026-10-22 font sample rows](../.github/spec-approvals.md#2026-10-22-font-sample-rows-in-molly_view_image)
 Previous approval: [2026-10-11 whole-profile browser import](../.github/spec-approvals.md#2026-10-11-whole-profile-browser-import)
 Previous approval: [2026-10-08 sign-in-first website accounts](../.github/spec-approvals.md#2026-10-08-sign-in-first-website-accounts)
 Previous approval: [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
@@ -120,6 +121,25 @@ Design guidance and optional helper tools live in skills; the app only does stru
 The [generative layered design task](generative-layered-design-workflow.md) defines the approved nine-stage creative workflow and its supporting changes, with methods and creative choices owned by the Agent.
 
 An Agent may render the YAML artwork projection through the existing `molly_render_preview`, then view it with an actually available image-reading tool and keep editing. The app does not require fetching images through result cards, nor equate render success with the model having read the image; when the preview tool is absent, the app only states the capability is unavailable and does not declare all visual review failed on the Agent's behalf. An optional finalize script is not a mandatory write order or a file-publish transaction.
+
+Design sessions also expose read-only `molly_view_image`, independently of a connected
+desktop, for an image, an original-pixel region or up to nine numbered images in the
+Session workdir or render-preview directory. It returns a JPEG with a long edge at
+most 1280 px plus original dimensions, bytes and coordinate conversion metadata.
+Paths are checked after realpath, symlink escapes and decode failures are refused,
+and source files remain unchanged. The same tool accepts `fonts` with `text` to
+compare up to eight font files rendering identical literal copy, optionally under a
+`path`/`region` reference. Fonts must be regular `.ttf`/`.otf`/`.ttc` files resolving
+inside the Session workdir or platform system font directories; preview directories
+do not grant font access. Rows are trimmed to ink, flattened on white and normalized
+to the reference ink height clamped to 48–120 px (96 px without a reference), labeled
+`R` and numbers. Metadata includes ink dimensions, reference-relative width ratios
+and delivered dimensions/bytes; overwide rows are uniformly reduced and reported.
+A font render failure fails the whole call. Missing-face detection combines fallback
+bitmap comparison with font-name-table verification: Pango can fall back to the
+supplied file itself, so equal bitmaps alone cannot prove a missing face, and
+individual glyph fallback is not ruled out. The owner approved this capability revision on 2026-10-22
+([record](../.github/spec-approvals.md#2026-10-22-font-sample-rows-in-molly_view_image)).
 
 ## Built-in image tools
 

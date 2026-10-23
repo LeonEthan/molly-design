@@ -52,7 +52,10 @@ Parent instructions apply.
 - `molly_view_image` is registered only in design sessions, independently of desktop
   availability. It is read-only, scopes real paths to the session workdir and preview
   directory, returns JPEG at most 1280 px and contact sheets of at most nine images,
-  and fails the call on decode failure.
+  and fails the call on decode failure. Font rows accept at most eight absolute
+  `.ttf`/`.otf`/`.ttc` paths, scoped after realpath to the workdir or platform system
+  font directories (not the preview directory); require regular files and reject
+  symlink escapes. Font rendering failures fail the whole call.
 
 ## Session tool contracts
 

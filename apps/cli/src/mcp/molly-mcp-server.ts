@@ -3350,7 +3350,7 @@ export function buildMollyMcpServer(
       'molly_view_image',
       {
         description:
-          'View one image, one region of an image, or up to nine images as a numbered contact sheet. Returns a bounded JPEG (long edge at most 1280 px) plus the original size and bytes, so viewing never puts a full-size file into context. Use region with original pixel coordinates to inspect detail at native resolution. Read-only; it never changes files. Paths must be inside this design session.',
+          'View one image, one region of an image, up to nine images as a numbered contact sheet, or up to eight installed font faces rendered with the same text under a reference region (fonts + text). Returns a bounded JPEG (long edge at most 1280 px) plus the original size and bytes, so viewing never puts a full-size file into context. Use region with original pixel coordinates to inspect detail at native resolution. Read-only; it never changes files. Image paths must be inside this design session; font files may also come from the system font directories.',
         inputSchema: ViewImageInputSchema,
       },
       async (input) => {

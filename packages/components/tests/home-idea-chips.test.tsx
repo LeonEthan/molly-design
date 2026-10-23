@@ -26,24 +26,26 @@ describe('HomeIdeaChips', () => {
     root = null;
   });
 
-  it('hides suggestion chips until the expand control is clicked', async () => {
+  it('shows every suggestion at once and picks the prompt behind the clicked label', async () => {
+    const picked: string[] = [];
     await act(async () =>
       root?.render(
         <HomeIdeaChips
           label="Try"
-          expandLabel="Suggestions"
           ideas={ideas}
           disabled={false}
-          onPick={() => undefined}
+          onPick={(prompt) => picked.push(prompt)}
         />
       )
     );
-    const toggle = container.querySelector('button[aria-expanded]');
-    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
-    expect(container.textContent).not.toContain('Poster');
-    await act(async () => toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('button[aria-expanded]')).toBeNull();
+    expect(container.textContent).toContain('Try');
     expect(container.textContent).toContain('Poster');
     expect(container.textContent).toContain('Logo');
+    const logo = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Logo'
+    );
+    await act(async () => logo?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(picked).toEqual(['Design a logo']);
   });
 });

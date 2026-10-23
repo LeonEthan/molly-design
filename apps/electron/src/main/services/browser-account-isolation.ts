@@ -187,14 +187,12 @@ export async function isolateBrowserAccounts(
     for (const target of await getTargets()) {
       if (!['service_worker', 'shared_worker'].includes(target.type) || target.attached)
         throw new BrowserAccountError('isolation-failed')
-      const { sessionId } = z
-        .object({ sessionId: z.string() })
-        .parse(
-          await debuggerClient.sendCommand('Target.attachToTarget', {
-            targetId: target.targetId,
-            flatten: true
-          })
-        )
+      const { sessionId } = z.object({ sessionId: z.string() }).parse(
+        await debuggerClient.sendCommand('Target.attachToTarget', {
+          targetId: target.targetId,
+          flatten: true
+        })
+      )
       attachments.set(target.targetId, sessionId)
       await debuggerClient.sendCommand('Debugger.enable', {}, sessionId)
       await debuggerClient.sendCommand('Debugger.pause', {}, sessionId)

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Bot, SquareTerminal } from 'lucide-react';
+import { Sparkles, SquareTerminal } from 'lucide-react';
 import {
   REGISTRY_ACP_AGENTS,
   getBuiltinAgentByAgentType,
@@ -116,7 +116,7 @@ export function AgentIcon({
       />
     );
   }
-  return <Bot className={cls} />;
+  return <Sparkles className={cls} />;
 }
 
 export { DeepSeekIcon };

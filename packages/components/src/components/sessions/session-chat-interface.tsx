@@ -918,7 +918,7 @@ export function SessionHeaderMenu({
               }}
             >
               <Pencil className="h-3.5 w-3.5 shrink-0" />
-              {t('sidebar.renameChat.title', 'Rename conversation')}
+              {t('sidebar.renameChat.title', 'Rename design')}
             </DropdownMenuItem>
           )}
 
@@ -1014,7 +1014,7 @@ export function SessionHeaderMenu({
                       }}
                     >
                       <ArchiveRestore className="h-3.5 w-3.5 shrink-0" />
-                      {t('archive.restore', 'Restore session')}
+                      {t('archive.restore', 'Restore design')}
                     </DropdownMenuItem>
                   )}
                   {onDelete && (
@@ -1039,7 +1039,7 @@ export function SessionHeaderMenu({
                     }}
                   >
                     <Archive className="h-3.5 w-3.5 shrink-0" />
-                    {t('sessions.archive', 'Archive session')}
+                    {t('sessions.archive', 'Archive design')}
                   </DropdownMenuItem>
                 </>
               )}
@@ -3861,7 +3861,7 @@ export const SessionChatInterface = memo(
     const handleCopySessionLink = useCallback(async () => {
       try {
         await navigator.clipboard.writeText(getAppShareUrl());
-        toast.success(t('sessions.urlCopied', 'Session URL copied to clipboard'));
+        toast.success(t('sessions.urlCopied', 'Design link copied to clipboard'));
       } catch {
         toast.error(t('sessions.shareFailed', 'Unable to share link'));
       }

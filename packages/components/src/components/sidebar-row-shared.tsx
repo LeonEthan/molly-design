@@ -128,7 +128,7 @@ export function SessionRowArtworkThumbnail({
       aria-hidden="true"
       data-session-row-thumbnail=""
       className={cn(
-        'relative size-5 shrink-0 overflow-hidden rounded-[4px] bg-sidebar-foreground/[0.06]',
+        'relative size-6 shrink-0 overflow-hidden rounded-sm bg-sidebar-foreground/[0.06]',
         'after:absolute after:inset-0 after:rounded-[inherit] after:ring-1 after:ring-inset after:ring-sidebar-foreground/10',
         className
       )}
@@ -602,9 +602,9 @@ export function GitHubOwnerIcon({
   );
 }
 
-/** The selected Session row: the accent tint with a faint inset accent ring, in every list. */
+/** The selected Session row: the `selection` tint alone, in every list. */
 export const SIDEBAR_SESSION_ROW_SELECTED_CLASS =
-  'bg-sidebar-selection text-sidebar-selection-foreground ring-1 ring-inset ring-sidebar-primary/35 hover:bg-sidebar-selection';
+  'bg-sidebar-selection text-sidebar-selection-foreground hover:bg-sidebar-selection';
 
 // Shared section-header metrics. Every sidebar organize mode (Workspace local
 // project / GitHub Worktrees sections and the flat Updated list) uses these so

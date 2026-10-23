@@ -2,7 +2,7 @@
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CanvasSizeSelector } from '../src/components/chat/canvas-size-selector';
+import { CanvasFormatTiles, CanvasSizeSelector } from '../src/components/chat/canvas-size-selector';
 import { buildCanvasSubmission } from '../src/components/chat/canvas-submission';
 
 vi.mock('react-i18next', () => ({
@@ -30,8 +30,11 @@ function button(label: string) {
   return element;
 }
 const click = (label: string) => flush(() => button(label).click());
-const triggerLabel = () =>
-  `Canvas size: ${size.mode === 'auto' ? 'Auto size' : `${size.width} × ${size.height}`}`;
+const presetNames: Record<string, string> = { '1080 × 1350': 'Portrait', '1080 × 1080': 'Square' };
+const triggerLabel = () => {
+  const dimensions = `${size.width} × ${size.height}`;
+  return `Canvas size: ${size.mode === 'auto' ? 'Auto size' : (presetNames[dimensions] ?? dimensions)}`;
+};
 const openCustom = async () => {
   await click(triggerLabel());
   await click('Custom size');
@@ -93,6 +96,7 @@ describe('canvas size selection', () => {
       inputBlocks: [{ type: 'text', text: '1080 × 1350 px' }],
     });
     expect(document.activeElement?.matches('textarea')).toBe(true);
+    expect(button('Canvas size: Portrait').textContent).toBe('Portrait');
     await click(triggerLabel());
     expect(button('Portrait1080 × 1350').getAttribute('aria-pressed')).toBe('true');
     await click('Auto sizeNo fixed dimensions');
@@ -124,6 +128,23 @@ describe('canvas size selection', () => {
     await fill('Height', '628');
     await click('Apply size');
     expect(size).toEqual({ mode: 'custom', width: 1200, height: 628 });
+    expect(button('Canvas size: 1200 × 628').textContent).toBe('1200 × 628');
+  });
+
+  it('writes tile dimensions in the same spaced format as the chip and menu', async () => {
+    await flush(() =>
+      root.render(
+        <CanvasFormatTiles
+          mode="auto"
+          width={800}
+          height={600}
+          disabled={false}
+          onChange={() => {}}
+        />
+      )
+    );
+    expect(button('Square1080 × 1080')).toBeDefined();
+    expect(document.body.textContent).not.toMatch(/\d×\d/);
   });
 
   it.each(['', '0', '4097', '1.5'])(

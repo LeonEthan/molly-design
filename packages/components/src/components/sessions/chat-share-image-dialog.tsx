@@ -225,7 +225,7 @@ export function ChatShareImageDialog({
     >
       <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-0 overflow-hidden p-0 sm:p-0">
         <DialogHeader className="border-b border-border/70 px-4 py-3.5 pr-12 text-left sm:px-5 sm:pr-12">
-          <DialogTitle className="text-base">
+          <DialogTitle>
             {t('sessions.shareImage.dialogTitle', 'Share as image')}
           </DialogTitle>
           <DialogDescription className="leading-5">

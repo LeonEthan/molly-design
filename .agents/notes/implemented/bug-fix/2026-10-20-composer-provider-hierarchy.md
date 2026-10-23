@@ -97,6 +97,17 @@ in the restricted run. Changed-file formatting and `pnpm run docs check` passed;
 existing docs size warnings remain. No native desktop or real-model acceptance
 was run for this follow-up.
 
+## 2026-10-23 follow-up: image model row
+
+Owner decision 2026-10-23, from a UI audit of the Preview build: the home
+composer footer wrapped onto two rows because the image-model badge, the size
+chip and the model chip did not fit and the row allowed wrapping. The badge was
+not a control and used a third chip style. The footer is now one unwrapped row
+of same-style chips (size, then model). The configured image model is the
+model menu's last row in both composers, after Reasoning; choosing it opens
+Settings → AI models. Image model selection is unchanged and still happens in
+Settings. Every click still shows Provider, Model and Reasoning.
+
 ## Related
 
 - Supersedes the Agent row in [three-level picker](2026-10-19-model-picker-three-levels.md).

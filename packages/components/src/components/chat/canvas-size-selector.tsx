@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover';
 import { menuSurfaceStyle } from '@/ui/menu-styles';
 import { handleMenuCloseAutoFocus } from '@/lib/menu-focus';
 import { cn } from '@/lib/utils';
+import { CanvasDimensions, formatCanvasDimensions } from './canvas-dimensions';
 
 type CanvasSize = { mode: 'auto' | 'custom'; width: number; height: number };
 
@@ -109,7 +110,7 @@ export function CanvasFormatTiles({
             type="button"
             disabled={disabled}
             aria-pressed={selected}
-            title={auto ? label : `${label} · ${size.width} × ${size.height}`}
+            title={auto ? label : `${label} · ${formatCanvasDimensions(size.width, size.height)}`}
             onClick={() => onChange(size)}
             className={cn(
               'group flex w-[92px] flex-col items-center gap-2.5 rounded-lg px-1 pb-1.5 pt-2 transition-colors duration-200',
@@ -149,9 +150,17 @@ export function CanvasFormatTiles({
               >
                 {label}
               </span>
-              <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                {auto ? t('design.autoSizeTile', 'by brief') : `${size.width}×${size.height}`}
-              </span>
+              {auto ? (
+                <span className="text-xs text-muted-foreground">
+                  {t('design.autoSizeTile', 'by brief')}
+                </span>
+              ) : (
+                <CanvasDimensions
+                  width={size.width}
+                  height={size.height}
+                  className="text-xs text-muted-foreground"
+                />
+              )}
             </span>
           </button>
         );
@@ -183,12 +192,17 @@ export function CanvasSizeSelector({
   const invalidDraft = (draft.width !== '' && !validWidth) || (draft.height !== '' && !validHeight);
   const presets = useCanvasSizePresets();
   const printPresets = usePrintSizePresets();
-  const customSelected =
-    mode === 'custom' &&
-    ![...presets, ...printPresets].some(
-      (preset) => preset.width === width && preset.height === height
-    );
-  const label = mode === 'auto' ? t('design.autoSize', 'Auto size') : `${width} × ${height}`;
+  const namedPreset =
+    mode === 'custom'
+      ? [...presets, ...printPresets].find(
+          (preset) => preset.width === width && preset.height === height
+        )
+      : undefined;
+  const customSelected = mode === 'custom' && !namedPreset;
+  const label =
+    mode === 'auto'
+      ? t('design.autoSize', 'Auto size')
+      : (namedPreset?.label ?? formatCanvasDimensions(width, height));
   const TriggerIcon = mode === 'auto' ? Maximize : width === height ? Square : Rectangle;
   const select = (size: CanvasSize) => {
     onChange(size);
@@ -214,14 +228,19 @@ export function CanvasSizeSelector({
           variant="ghost"
           disabled={disabled}
           aria-label={`${t('design.size', 'Canvas size')}: ${label}`}
-          className="h-7 shrink-0 select-none gap-1.5 rounded-full bg-foreground/[0.04] px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground data-[state=open]:bg-hover data-[state=open]:text-foreground"
+          title={namedPreset ? formatCanvasDimensions(width, height) : undefined}
+          className="h-7 shrink-0 select-none gap-1.5 rounded-full bg-foreground/[0.04] px-3 text-xs font-normal text-foreground hover:bg-foreground/[0.07] data-[state=open]:bg-foreground/[0.07]"
         >
           <TriggerIcon
             aria-hidden
             className={cn('size-3.5', mode === 'custom' && height > width && 'rotate-90')}
           />
-          <span className="tabular-nums">{label}</span>
-          <ChevronDown aria-hidden className="size-3 opacity-60" />
+          {mode === 'custom' && !namedPreset ? (
+            <CanvasDimensions width={width} height={height} />
+          ) : (
+            <span className="max-w-[7rem] truncate">{label}</span>
+          )}
+          <ChevronDown aria-hidden className="size-3 shrink-0 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -230,7 +249,7 @@ export function CanvasSizeSelector({
         sideOffset={8}
         collisionPadding={12}
         aria-label={t('design.size', 'Canvas size')}
-        className="max-h-[min(70vh,var(--radix-popover-content-available-height))] w-80 max-w-[calc(100vw-24px)] select-none overflow-y-auto rounded-xl border-0 p-1.5"
+        className="max-h-[min(70vh,var(--radix-popover-content-available-height))] w-80 overscroll-contain max-w-[calc(100vw-24px)] select-none overflow-y-auto rounded-xl border-0 p-1.5"
         style={menuSurfaceStyle}
         onOpenAutoFocus={(event) => {
           if (!(event.target instanceof HTMLElement)) return;
@@ -291,10 +310,9 @@ export function CanvasSizeSelector({
                       <SizeOutline width={preset.width} height={preset.height} />
                       <span className="flex flex-1 flex-col gap-0.5">
                         <span>{preset.label}</span>
-                        <span className="text-xs tabular-nums text-muted-foreground">
-                          {'detail' in preset
-                            ? `${preset.detail} · ${preset.width} × ${preset.height}`
-                            : `${preset.width} × ${preset.height}`}
+                        <span className="text-xs text-muted-foreground">
+                          {'detail' in preset ? `${preset.detail} · ` : null}
+                          <CanvasDimensions width={preset.width} height={preset.height} />
                         </span>
                       </span>
                       {selected ? <Check aria-hidden className="size-4" /> : null}

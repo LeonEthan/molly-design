@@ -38,12 +38,12 @@ import { Button } from '@/ui/button';
 import { type AgentSelection } from '@/components/shared';
 import { cn } from '@/lib/utils';
 import { getIpcServices } from '@/lib/electron-ipc-client';
+import { useImageModelId } from '@/hooks/use-image-model-id';
 import {
   readLanguageModelOAuthSendBlock,
   readMissingDesignModelClasses,
 } from '@/lib/design-model-readiness';
 import { DesignModelReadinessReminder } from '@/components/chat/design-model-reminder';
-import { LandingDesignConfigChips } from '@/components/chat/landing-design-config-chips';
 import { flushDesignCanvasBeforeSend } from '@/lib/design-canvas-save-gate';
 import {
   chatLandingSessionStateAtomFamily,
@@ -754,11 +754,7 @@ function WorkspaceChatLanding({
     agentType: selectedConfig?.agentType,
   });
   const persistLandingSelection = useCallback(
-    (patch: {
-      modelId?: string | null;
-      configId?: string;
-      configValue?: AcpConfigOptionValue;
-    }) => {
+    (patch: { modelId?: string | null; configId?: string; configValue?: AcpConfigOptionValue }) => {
       if (!selectedAgent) return;
       const current = agentDefaultsCache.get(selectedAgent.agentId);
       const nextConfig = { ...(current?.configOptionValues ?? {}) };
@@ -1688,24 +1684,7 @@ function WorkspaceChatLanding({
     [desktopSelectedMachineId, projectRecency.byProject, visibleLocalProjects]
   );
 
-  const [landingImageModelId, setLandingImageModelId] = useState<string | null>(null);
-  useEffect(() => {
-    if (!isElectron) return undefined;
-    const ipc = getIpcServices();
-    if (!ipc) return undefined;
-    let live = true;
-    void ipc.modelConnections
-      .getImageSnapshot()
-      .then((snapshot) => {
-        if (!live) return;
-        const model = snapshot.connection?.enabled ? snapshot.connection.model.trim() : '';
-        setLandingImageModelId(model.length > 0 ? model : null);
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [isElectron]);
+  const landingImageModelId = useImageModelId(isElectron);
 
   const topSelectorNode = (
     <ErrorBoundary
@@ -1753,10 +1732,7 @@ function WorkspaceChatLanding({
       resetKeys={[workspaceId, selectedAgent?.agentId]}
       fallback={null}
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        {isElectron ? (
-          <LandingDesignConfigChips imageModelId={landingImageModelId} disabled={submitting} />
-        ) : null}
+      <div className="flex min-w-0 flex-nowrap items-center gap-2">
         {isElectron ? (
           <CanvasSizeSelector
             {...canvasDraft}
@@ -1785,6 +1761,7 @@ function WorkspaceChatLanding({
           onConfigOptionChange={selectLandingConfigOption}
           modelReasoningEfforts={modelReasoningEfforts}
           onOpenConnections={() => openSettings('agents')}
+          imageModelId={landingImageModelId}
           recentRunConfigs={recentRunConfigItems}
           onRecentRunConfigSelect={handleRecentRunConfigSelect}
         />
@@ -2038,7 +2015,6 @@ function WorkspaceChatLanding({
           isElectron ? (
             <HomeIdeaChips
               label={t('home.ideasLabel')}
-              expandLabel={t('home.ideasExpand')}
               ideas={homeIdeas}
               disabled={submitting}
               onPick={handlePickIdea}

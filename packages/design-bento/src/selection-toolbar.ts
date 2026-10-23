@@ -52,14 +52,19 @@ function overlapArea(a: Rect, b: Rect) {
 /**
  * Screen pixels: the toolbar never inherits the artwork's zoom transform.
  * Above the selection is preferred; below wins only when it covers less of the
- * selection and the `obstacles` (other artwork elements) than above would.
+ * selection and the `obstacles` (other artwork elements) than above would. When
+ * both still cover artwork, the strips just outside the `artboard` edges are
+ * tried, but only where the toolbar fits wholly inside the viewport and clears
+ * the canvas `chrome` (dock, zoom and status bars).
  */
 export function placeToolbar(
   anchor: Rect,
   width: number,
   height: number,
   viewport: { width: number; height: number },
-  obstacles: readonly Rect[] = []
+  obstacles: readonly Rect[] = [],
+  artboard?: Rect,
+  chrome: readonly Rect[] = []
 ) {
   if (
     anchor.right <= 0 ||
@@ -78,9 +83,23 @@ export function placeToolbar(
       0
     );
   const below = clamp(anchor.bottom + 12, viewport.height - height);
-  if (anchor.top < height + 20) return { left, top: below };
   const above = clamp(anchor.top - height - 12, viewport.height - height);
-  return { left, top: covered(below) < covered(above) ? below : above };
+  const candidates = [anchor.top < height + 20 ? below : above, below];
+  if (artboard) {
+    for (const top of [artboard.top - height - 12, artboard.bottom + 12]) {
+      const strip = { left, top, right: left + width, bottom: top + height };
+      if (
+        top >= 8 &&
+        top + height <= viewport.height - 8 &&
+        chrome.every((rect) => overlapArea(strip, rect) === 0)
+      )
+        candidates.push(top);
+    }
+  }
+  const [first = below, ...rest] = candidates;
+  let best = first;
+  for (const top of rest) if (covered(top) < covered(best)) best = top;
+  return { left, top: best };
 }
 
 const icons = {
@@ -286,7 +305,14 @@ export function createSelectionToolbar(options: {
       bar.offsetWidth,
       bar.offsetHeight,
       { width: innerWidth, height: innerHeight },
-      obstacles
+      obstacles,
+      document.querySelector<HTMLElement>('.ed-stage-scale')?.getBoundingClientRect(),
+      Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '.molly-dock, .ed-zoombar, #autosave-status, .molly-layers.open'
+        ),
+        (element) => element.getBoundingClientRect()
+      )
     );
     if (!place) {
       bar.hidden = true;
@@ -613,15 +639,6 @@ export function createSelectionToolbar(options: {
     }
     if (typed) {
       const c = current;
-      if (c.x !== undefined && c.y !== undefined) {
-        number(bar, label('positionX', 'Position X'), 'X', c.x, 0, 4096, (x) =>
-          command({ verb: 'position', x, y: c.y! })
-        );
-        number(bar, label('positionY', 'Position Y'), 'Y', c.y, 0, 4096, (y) =>
-          command({ verb: 'position', x: c.x!, y })
-        );
-        separator();
-      }
       if (kind === 'text') {
         color('textColor', 'Text color', c.color, false, (value) => {
           if (value) command({ verb: 'text-style', color: value });
@@ -754,9 +771,7 @@ export function createSelectionToolbar(options: {
                 if (!ready() || readonly) return;
                 askDraft = { epoch: -1, text: '' };
                 closePopup();
-                addNote(
-                  preset ? [presetLabel(preset), prompt].filter(Boolean).join(': ') : prompt
-                );
+                addNote(preset ? [presetLabel(preset), prompt].filter(Boolean).join(': ') : prompt);
               }
             )
           : undefined;

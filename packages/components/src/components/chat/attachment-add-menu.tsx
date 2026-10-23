@@ -19,6 +19,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
 import { MCP_TRANSPORT_LABELS } from '@/components/shared/mcp-transport';
 
 /** Per-turn MCP selection, surfaced as a second level of the "+" menu. */
@@ -42,6 +43,16 @@ export interface AttachmentAddMenuProps {
   mcp?: AttachmentAddMenuMcp;
 }
 
+const plusButtonClassName = cn(
+  'size-7',
+  // Light-stroke "+" with a circular hover/open fill. `bg-hover` (not
+  // `bg-accent`/`bg-muted`) because those equal the background in the
+  // dark theme and paint nothing.
+  'rounded-full text-foreground transition-colors',
+  'hover:bg-hover hover:text-foreground',
+  'data-[state=open]:bg-hover data-[state=open]:text-foreground'
+);
+
 export function AttachmentAddMenu({
   disabled,
   onAddAttachment,
@@ -56,6 +67,29 @@ export function AttachmentAddMenu({
   const hasMcp = mcpServers.length > 0;
   if (!onAddAttachment && !hasMcp) {
     return null;
+  }
+
+  if (onAddAttachment && !hasMcp) {
+    return (
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={disabled || attachmentDisabled}
+              aria-label={triggerLabel}
+              className={plusButtonClassName}
+              onClick={onAddAttachment}
+            >
+              <Plus strokeWidth={1.5} className="size-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">{triggerLabel}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   }
 
   const itemClass = cn('cursor-pointer');
@@ -77,15 +111,7 @@ export function AttachmentAddMenu({
           size="icon"
           disabled={disabled}
           aria-label={triggerLabel}
-          className={cn(
-            'size-7',
-            // Light-stroke "+" with a circular hover/open fill. `bg-hover` (not
-            // `bg-accent`/`bg-muted`) because those equal the background in the
-            // dark theme and paint nothing.
-            'rounded-full text-foreground transition-colors',
-            'hover:bg-hover hover:text-foreground',
-            'data-[state=open]:bg-hover data-[state=open]:text-foreground'
-          )}
+          className={plusButtonClassName}
         >
           <Plus strokeWidth={1.5} className={'size-5'} />
         </Button>

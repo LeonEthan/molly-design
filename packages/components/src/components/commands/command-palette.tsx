@@ -180,7 +180,7 @@ export function CommandPalette() {
   const labels = useMemo(
     () => ({
       placeholder: t('commands.palette.placeholder', {
-        defaultValue: 'Search commands and chats...',
+        defaultValue: 'Search commands and designs...',
       }),
       empty: t('commands.palette.empty', { defaultValue: 'No results found.' }),
       navigate: t('commands.palette.hintNavigate', { defaultValue: 'Navigate' }),

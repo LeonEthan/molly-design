@@ -13,7 +13,7 @@ Files: [README.md](README.md). Scopes:
 - Keep the surface ladder canvas → inactive → active in both themes and MEASURE
   it; never give inactive tabs more chrome than the active one, and never use
   `--tab-active`/`--tab-inactive` (both collapse onto `--background` in dark).
-- One leading status slot per tab, `waiting > working > unread > agent icon`;
+- One leading status slot per tab, `waiting > working > unread > design icon`;
   test `isWaiting` first, and never drop unread from a tab renderer.
 - `?tab` is the single source of truth for the active tab: derive it from route
   search, navigate instead of setting state, never reintroduce mirrored state or

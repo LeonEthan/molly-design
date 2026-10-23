@@ -81,7 +81,7 @@ export function CodexResetForecastDialog({
         className="gap-4 sm:max-w-md"
       >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
+          <DialogTitle className="flex items-center gap-2">
             <TimerReset className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             {t('codexReset.title', 'Codex reset forecast')}
           </DialogTitle>

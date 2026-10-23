@@ -8,6 +8,7 @@ Index and rationale: [README.md](README.md).
 - `attachment-add-menu.tsx` owns the single composer "+" menu and per-turn MCP
   selection (`ChatComposer mcp` → `AttachmentAddMenuMcp`), never the footer row.
   MCP uses a hover submenu. Toggling keeps it open; an empty catalog hides the entry.
+  With attachment as the only item the "+" runs it directly, tooltip and label alike.
 - Desktop project pickers use DropdownMenu with local projects by recency.
   Pin no-project/add-local actions; mount at most 20 rows (most
   recent if empty, first matches from all options if searching). Scope order:
@@ -20,12 +21,17 @@ Index and rationale: [README.md](README.md).
 - Desktop landing format tiles under the heading and the footer size chip share one
   canvas draft and screen preset list (`canvas-size-selector.tsx`); only the chip
   adds print sheets, converted to pixels at a DPI that keeps both sides within 4096 px.
+  Dimensions read `1080 × 1080` everywhere through `canvas-dimensions.tsx`; a preset
+  shows its name on the chip, a custom size its dimensions.
 - The home "Your work" gallery lists only designs with something on the canvas. Electron caches
   a canvas still in its starting state (no elements, default white fill) as an empty thumbnail (`''`, never a rendered white sheet), and
   the gallery skips those before applying its limit, reading thumbnails further down the list only as far as blanks require. It reads left to right, newest first
   (a grid, not CSS columns), and says "Latest N" when it is truncated; the sidebar keeps its neutral tile.
-- Desktop landing footer starts with canvas size beside the attachment entry;
-  the remaining footer order is run config → permission → usage. Provider interaction mode
+  It sits in the composer's `ConversationColumn`, so their left edges align.
+  The prompt starters under the composer are always visible (no toggle) so nothing shifts.
+- Desktop landing footer is one unwrapped row of same-style chips: canvas size beside
+  the attachment entry, then run config → permission → usage. The image model has no
+  chip; it is the run-config menu's last row (both composers) and opens Settings. Provider interaction mode
   belongs inside run config; the standalone button is explicit permission mode,
   falling back to legacy ACP modes. Usage reads the selected agent's Machine
   Flock subscription limits; hide it for custom or environment-overridden providers.
@@ -89,8 +95,8 @@ Index and rationale: [README.md](README.md).
   (`[data-keyboard-nav="composer"]`), never the trigger. Use `lib/menu-focus.ts`
   through `ui/dropdown-menu` and `OptionSelector`, including keep-open run-config
   selections (`event.preventDefault`).
-- Desktop landing's machine/project menus always open upward with collision
-  flipping disabled. Their top-row labels and glyphs, share the same neutral foreground level.
+- Desktop landing's machine and project menus open below their triggers with
+  collision handling; with no projects the project menu drops its search box. Their top-row labels and glyphs share one neutral foreground level.
 - `session.cycleProvider` cycles the visible connection providers in menu order,
   on the landing and in a session. It does not cycle agent config ids.
 - Keep raw local Git, Machine RPC, and Streams failures out of landing status copy;

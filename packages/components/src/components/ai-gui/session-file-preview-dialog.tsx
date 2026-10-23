@@ -73,7 +73,7 @@ export function SessionFilePreviewPanel({
     <div className="flex min-h-0 min-w-0 flex-col">
       <div className="flex items-center justify-between gap-3 border-b border-border/50 pb-3">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <DialogTitle className="truncate text-sm font-semibold leading-tight">
+          <DialogTitle className="truncate">
             {file.fileName}
           </DialogTitle>
           <span className="text-xs text-muted-foreground tabular-nums">

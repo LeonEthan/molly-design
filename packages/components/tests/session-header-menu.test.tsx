@@ -74,7 +74,7 @@ describe('SessionHeaderMenu fork action', () => {
     });
   }
 
-  it('forks from the action immediately above Rename conversation', async () => {
+  it('forks from the action immediately above Rename design', async () => {
     const onFork = vi.fn();
     await act(async () => {
       root?.render(
@@ -92,7 +92,7 @@ describe('SessionHeaderMenu fork action', () => {
 
     const menuItems = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
     const labels = menuItems.map((item) => item.textContent?.trim());
-    expect(labels.indexOf('Fork session')).toBe(labels.indexOf('Rename conversation') - 1);
+    expect(labels.indexOf('Fork session')).toBe(labels.indexOf('Rename design') - 1);
 
     const forkItem = menuItems.find((item) => item.textContent?.includes('Fork session'));
     await act(async () => forkItem?.click());

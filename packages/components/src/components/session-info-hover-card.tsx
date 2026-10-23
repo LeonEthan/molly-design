@@ -7,22 +7,13 @@ import {
   type ReactNode,
 } from 'react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
-import {
-  Check,
-  Copy,
-  FileDiff,
-  Folder,
-  GitBranch,
-  MessageSquare,
-  Monitor,
-  User,
-} from 'lucide-react';
+import { Check, Copy, FileDiff, Folder, GitBranch, Monitor, User } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { writeTextToClipboard } from '@/lib/clipboard';
 import { CachedAvatarImg } from '@/components/cached-avatar-img';
 import { menuSurfaceStyle } from '@/ui/menu-styles';
-import { GitHubOwnerIcon, type SidebarRowKind } from '@/components/sidebar-row-shared';
+import { GitHubOwnerIcon } from '@/components/sidebar-row-shared';
 import { WorktreeIcon } from '@/components/icons/worktree-icon';
 import { useStableNow } from '@/hooks/use-stable-now';
 import { formatCompactRelativeTime, type RelativeTimeValue } from '@/lib/format-relative-time';
@@ -133,8 +124,6 @@ function CopyableValue({
 }
 
 export type SessionInfoCardProps = {
-  /** Row kind — a `chat` with no repo/folder shows just a "Chat" indicator. */
-  kind?: SidebarRowKind;
   /**
    * Conversation creator, shown as the first "Author" row. Pass it only when it
    * should surface (e.g. team workspaces); omit for solo workspaces where the
@@ -163,7 +152,6 @@ export type SessionInfoCardProps = {
  * never a raw timestamp.
  */
 export function SessionInfoCard({
-  kind,
   author,
   title,
   isWorktree,
@@ -283,16 +271,6 @@ export function SessionInfoCard({
           <span className="text-code-removed">-{deletedLines}</span>
         </span>
       ),
-    });
-  }
-
-  // A chat has no repo / folder / branch, so it just says it's a chat.
-  if (kind === 'chat' && rows.length === 0) {
-    rows.push({
-      key: 'chat',
-      icon: <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />,
-      label: t('sessions.infoCard.chat', 'Chat'),
-      value: <span className="text-muted-foreground">{t('sessions.infoCard.chat', 'Chat')}</span>,
     });
   }
 

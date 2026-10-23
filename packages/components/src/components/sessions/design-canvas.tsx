@@ -170,11 +170,7 @@ export function DesignCanvas({
   active: boolean;
   workspaceSlug: string;
   name: string;
-  onReferenceSelection?: (
-    reference: DesignElementReference,
-    prompt?: string,
-    image?: File
-  ) => void;
+  onReferenceSelection?: (reference: DesignElementReference, prompt?: string, image?: File) => void;
   onSendSelection?: (
     reference: DesignElementReference,
     prompt: string,
@@ -842,7 +838,7 @@ export function DesignCanvas({
   const notesRegionIntro = () =>
     t(
       'design.notesRegionIntro',
-      "The attached image is a copy of one artwork image with numbered regions drawn on it. Each numbered region belongs to the note with the same number. Edit that image using its current asset as the source, changing only what those notes describe; the region outlines are guides and must not appear in the result. Replace only that image’s asset and preserve the rest of the artwork."
+      'The attached image is a copy of one artwork image with numbered regions drawn on it. Each numbered region belongs to the note with the same number. Edit that image using its current asset as the source, changing only what those notes describe; the region outlines are guides and must not appear in the result. Replace only that image’s asset and preserve the rest of the artwork.'
     );
   const sendNotes = (
     notes: readonly { reference: DesignElementReference; prompt: string }[],
@@ -875,7 +871,13 @@ export function DesignCanvas({
             t('design.notesNotSent', 'Molly can’t take a new message yet; your notes are kept')
           );
       } finally {
-        await getIpcServices()?.design.settleNotes(artworkId, hostId, notesEpoch, sent, notesInstance);
+        await getIpcServices()?.design.settleNotes(
+          artworkId,
+          hostId,
+          notesEpoch,
+          sent,
+          notesInstance
+        );
       }
     });
   };
@@ -913,7 +915,13 @@ export function DesignCanvas({
             t('design.notesNotSent', 'Molly can’t take a new message yet; your notes are kept')
           );
       } finally {
-        await getIpcServices()?.design.settleNotes(artworkId, hostId, notesEpoch, false, notesInstance);
+        await getIpcServices()?.design.settleNotes(
+          artworkId,
+          hostId,
+          notesEpoch,
+          false,
+          notesInstance
+        );
       }
     });
   };
@@ -1075,16 +1083,18 @@ export function DesignCanvas({
                 number: currentVersion.number,
               })
             : `V${currentVersion.number}`
-          : t('design.noSavedVersion', 'No versions yet');
+          : '';
   const toolbarItems = (
     <div className="@container/canvas-toolbar flex min-w-0 flex-1 flex-wrap items-center gap-2">
-      <span
-        className="inline-flex min-w-0 max-w-full truncate px-1 text-xs leading-5 text-muted-foreground"
-        role="status"
-        title={versionStatus}
-      >
-        {versionStatus}
-      </span>
+      {versionStatus ? (
+        <span
+          className="inline-flex min-w-0 max-w-full truncate px-1 text-xs leading-5 text-muted-foreground"
+          role="status"
+          title={versionStatus}
+        >
+          {versionStatus}
+        </span>
+      ) : null}
       <TooltipProvider>
         <div className={cn('ml-auto flex shrink-0 items-center gap-1', WINDOW_DRAG_EXEMPT_CLASS)}>
           {compareAvailable && !preview ? (
@@ -1197,7 +1207,7 @@ export function DesignCanvas({
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="ml-1 h-8 rounded-full bg-primary px-3.5 text-[13px] font-medium text-primary-foreground hover:bg-[hsl(var(--button-hover))] hover:text-primary-foreground"
+                    className="ml-1 h-8 rounded-full px-3.5 text-[13px] font-medium"
                     disabled={busy || readonlyView}
                     aria-label={t('design.export', 'Export')}
                   >

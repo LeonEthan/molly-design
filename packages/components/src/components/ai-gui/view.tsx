@@ -69,6 +69,7 @@ import {
   SESSION_FILE_MAX_COUNT,
   SESSION_IMAGE_ALLOWED_MIME_TYPES,
 } from '@molly/shared';
+import { CanvasDimensions } from '@/components/chat/canvas-dimensions';
 import { AskUserQuestionCard } from '@/components/sessions/ask-user-question-card';
 import { DesignFileReceipt, hasDesignFileReceipt } from '@/components/sessions/design-file-receipt';
 import { PermissionRequestCard } from '@/components/sessions/floating-permission-request';
@@ -178,6 +179,7 @@ import { formatConversationTimestamp } from '@/lib/format-conversation-timestamp
 import { toIntlLocale } from '@/lib/intl-locale';
 import { useStableCallback } from '@/hooks/use-stable-callback';
 import { normalizeWorktreePath, normalizeWorktreeTitle } from '@/lib/worktree-path';
+import { describeToolTitle } from '@/lib/tool-activity-title';
 import { Badge } from '@/ui/badge';
 import {
   AlertDialog,
@@ -216,7 +218,7 @@ import { MessageTextWithChips } from '@/components/mentions/message-text-chips';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover';
 import { UserAvatar } from '../user-avatar';
-import i18next from 'i18next';
+import i18next, { type TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { SessionPlanBar } from '@/components/sessions/session-plan-bar';
@@ -2252,8 +2254,7 @@ const SystemNoticeView = ({
       break;
     case 'session_fork_origin': {
       const meta = notice.meta as
-        | { sourceSessionId: SessionId; sourceTurnId: string; sourceTitle: string }
-        | undefined;
+        { sourceSessionId: SessionId; sourceTurnId: string; sourceTitle: string } | undefined;
       if (!meta) return null;
       return (
         <div className="flex items-center gap-3 py-4 text-xs text-muted-foreground/75">
@@ -3369,6 +3370,40 @@ const ACTIVITY_STEP_BODY_CLASS =
   '[&_:is(h1,h2,h3,h4,h5,h6):first-child]:!mt-0 ' +
   '[&_p]:!mb-2 [&_p:last-child]:!mb-0 [&_ul>li:not(:first-child)]:!mt-1 [&_ol>li:not(:first-child)]:!mt-1';
 
+/** A designer reads one step count; the per-kind breakdown stays in the expanded rows. */
+export function activityGroupSummaryParts(
+  summary: Pick<
+    AssistantActivitySummary,
+    | 'hasThought'
+    | 'commandCount'
+    | 'readFileCount'
+    | 'editFileCount'
+    | 'searchCount'
+    | 'fetchCount'
+    | 'otherCount'
+  >,
+  isThinking: boolean,
+  t: TFunction
+): string[] {
+  const parts: string[] = [];
+  if (summary.hasThought) {
+    parts.push(
+      isThinking
+        ? t('sessions.toolActivity.thinking', 'Thinking…')
+        : t('sessions.toolActivity.thought', 'Thought')
+    );
+  }
+  const steps =
+    summary.commandCount +
+    summary.readFileCount +
+    summary.editFileCount +
+    summary.searchCount +
+    summary.fetchCount +
+    summary.otherCount;
+  if (steps > 0) parts.push(t('sessions.toolActivity.steps', { count: steps }));
+  return parts;
+}
+
 const ActivityGroupHeader = ({
   summary,
   expanded,
@@ -3381,32 +3416,7 @@ const ActivityGroupHeader = ({
   onExpandedChange: (expanded: boolean) => void;
 }) => {
   const { t } = useTranslation();
-  const parts: string[] = [];
-  if (summary.hasThought) {
-    parts.push(
-      isThinking
-        ? t('sessions.toolActivity.thinking', 'Thinking…')
-        : t('sessions.toolActivity.thought', 'Thought')
-    );
-  }
-  if (summary.commandCount > 0) {
-    parts.push(t('sessions.toolActivity.commands', { count: summary.commandCount }));
-  }
-  if (summary.readFileCount > 0) {
-    parts.push(t('sessions.toolActivity.readFiles', { count: summary.readFileCount }));
-  }
-  if (summary.editFileCount > 0) {
-    parts.push(t('sessions.toolActivity.editedFiles', { count: summary.editFileCount }));
-  }
-  if (summary.searchCount > 0) {
-    parts.push(t('sessions.toolActivity.searches', { count: summary.searchCount }));
-  }
-  if (summary.fetchCount > 0) {
-    parts.push(t('sessions.toolActivity.fetches', { count: summary.fetchCount }));
-  }
-  if (summary.otherCount > 0) {
-    parts.push(t('sessions.toolActivity.tools', { count: summary.otherCount }));
-  }
+  const parts = activityGroupSummaryParts(summary, isThinking, t);
   return (
     <button
       type="button"
@@ -3798,7 +3808,11 @@ const AssistantTurnFooter = ({
 
   return (
     <div className="flex flex-col gap-1">
-      <DesignFileReceipt outcome={message.designOutcome} onOpenFile={onOpenFile} />
+      {hasDesignFileReceipt(message.designOutcome) ? (
+        <div className="pt-3">
+          <DesignFileReceipt outcome={message.designOutcome} onOpenFile={onOpenFile} />
+        </div>
+      ) : null}
       {showFinishedMetadata && fileDiffs.length > 0 ? (
         <AssistantEditedFiles
           files={fileDiffs}
@@ -5098,7 +5112,8 @@ const UserCanvasSizeChip = ({
         className="inline-flex items-center gap-1.5 rounded-full bg-foreground/[0.04] px-2.5 py-1 text-xs text-muted-foreground"
       >
         <Rectangle className="size-3.5" aria-hidden="true" />
-        {t('design.requestedSizeChip', 'Canvas {{width}} × {{height}} px', { width, height })}
+        {t('design.requestedSizeLabel', 'Canvas')}
+        <CanvasDimensions width={width} height={height} />
       </span>
     </div>
   );
@@ -5223,12 +5238,20 @@ const TOOL_ACTION_WORDS = ['Find', 'Search', 'Grep', 'Glob'];
  * Renders a tool title with the action word (e.g., "Find", "Search") slightly brighter.
  * If no action word is found at the start, renders the title as-is.
  */
-const ToolTitleWithHighlight = ({ title, className }: { title: string; className?: string }) => {
+const ToolTitleWithHighlight = ({
+  title,
+  fullTitle = title,
+  className,
+}: {
+  title: string;
+  fullTitle?: string;
+  className?: string;
+}) => {
   for (const action of TOOL_ACTION_WORDS) {
     if (title.startsWith(action + ' ')) {
       const rest = title.slice(action.length);
       return (
-        <span className={className} title={title}>
+        <span className={className} title={fullTitle}>
           <span className="text-foreground/90">{action}</span>
           {rest}
         </span>
@@ -5236,7 +5259,7 @@ const ToolTitleWithHighlight = ({ title, className }: { title: string; className
     }
   }
   return (
-    <span className={className} title={title}>
+    <span className={className} title={fullTitle}>
       {title}
     </span>
   );
@@ -5869,9 +5892,10 @@ const ToolCallCard = memo(function ToolCallCard({
     toolCall.permissionRequest?.outcome?.outcome !== 'cancelled';
   const hasDetails = hasOutput || hasContent || hasPermission;
 
-  const title = toolCall.title
+  const rawTitle = toolCall.title
     ? sanitizeToolTitle(toolCall.title)
     : (kindMeta?.label ?? 'Tool call');
+  const title = describeToolTitle(rawTitle, t);
 
   const isFailed = toolCall.status === 'failed';
   const isRunning = toolCall.status === 'in_progress';
@@ -6162,7 +6186,7 @@ const ToolCallCard = memo(function ToolCallCard({
             >
               {parentToolTitle
                 ? t('sessions.toolActivity.viaTool', 'via {{tool}}', {
-                    tool: sanitizeToolTitle(parentToolTitle),
+                    tool: describeToolTitle(sanitizeToolTitle(parentToolTitle), t),
                   })
                 : t('sessions.toolActivity.nestedCall', 'Nested call')}
             </span>

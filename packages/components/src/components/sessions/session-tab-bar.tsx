@@ -1,22 +1,16 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Loader2, X, History, Undo2, Pin, FileDiff, Hand } from 'lucide-react';
+import { Plus, Loader2, X, History, Undo2, Pin, FileDiff, Hand, Palette } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WINDOW_DRAG_EXEMPT_CLASS, useWindowDragRegionClass } from '@/ui/window-drag-region';
-import {
-  getSessionLaunchConfigLegacyFields,
-  type SessionId,
-  type SessionMeta,
-} from '@molly/shared';
+import type { SessionId, SessionMeta } from '@molly/shared';
 import { useTranslation } from 'react-i18next';
 import { useAtomValue } from 'jotai';
-import { getAgentMetaByIdAtomFamily } from '@/atoms/agents';
 import { WORKSPACE_FOCUS_SCOPES } from '@/atoms/focus-layer';
 import { sessionLiveStatusAtomFamily } from '@/atoms/presence';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 import { useListKeyboardNavigation } from '@/ui/focus-scope';
 import { ScrollArea } from '@/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover';
-import { AgentIcon } from '@/components/icons/agent-icon';
 import { FileIcon } from '@/components/icons/file-icons';
 import {
   closestCenter,
@@ -136,7 +130,7 @@ function getTabLabel(
 ): string {
   if (session.title?.trim()) return session.title.trim();
   if (isParent) return defaultTitle;
-  return t?.('sessions.tabs.newTab', 'New Tab') ?? 'New Tab';
+  return t?.('sessions.tabs.newTab', 'Untitled design') ?? 'Untitled design';
 }
 
 function formatRelativeTime(
@@ -209,8 +203,6 @@ function TabContent({
   const label = getTabLabel(session, isParent, defaultTitle, t);
   const showClose = !isParent && onTabClose && !isEditing;
   const tabId = `session-tab-${session.id}`;
-  const agentConfig = useAtomValue(getAgentMetaByIdAtomFamily(session.agentConfigId));
-  const iconEnv = agentConfig?.env ?? getSessionLaunchConfigLegacyFields(session)?.env;
 
   return (
     <div
@@ -275,12 +267,7 @@ function TabContent({
             aria-label={t('sessions.unreadMessages', 'Unread messages')}
           />
         ) : (
-          <AgentIcon
-            cliType={session.cliType}
-            agentType={session.agentType}
-            env={iconEnv}
-            className="h-3.5 w-3.5 opacity-70"
-          />
+          <Palette className="h-3.5 w-3.5 opacity-70" />
         )}
       </span>
       {isEditing ? (
@@ -332,18 +319,6 @@ function TabContent({
   );
 }
 
-function SessionAgentIcon({ session, className }: { session: SessionMeta; className?: string }) {
-  const agentConfig = useAtomValue(getAgentMetaByIdAtomFamily(session.agentConfigId));
-  return (
-    <AgentIcon
-      cliType={session.cliType}
-      agentType={session.agentType}
-      env={agentConfig?.env ?? getSessionLaunchConfigLegacyFields(session)?.env}
-      className={className}
-    />
-  );
-}
-
 function DraftTabContent({
   draft,
   isActive,
@@ -363,11 +338,8 @@ function DraftTabContent({
   const closeIconVisibility = isActive
     ? 'opacity-100'
     : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100';
-  const label = getDraftTabLabel(draft, t('sessions.tabs.newTab', 'New Tab'));
+  const label = getDraftTabLabel(draft, t('sessions.tabs.newTab', 'Untitled design'));
   const tabId = `draft-tab-${draft.id}`;
-  // Drafts carry no env snapshot of their own; resolve the chosen config so the
-  // brand icon matches what the created session will show.
-  const draftAgentConfig = useAtomValue(getAgentMetaByIdAtomFamily(draft.agentConfigId));
 
   return (
     <div
@@ -398,13 +370,7 @@ function DraftTabContent({
       }}
     >
       <span className="shrink-0">
-        <AgentIcon
-          cliType={draft.cliType}
-          agentType={draft.agentType}
-          brandId={draftAgentConfig?.brandId}
-          env={draftAgentConfig?.env}
-          className="h-3.5 w-3.5 opacity-70"
-        />
+        <Palette className="h-3.5 w-3.5 opacity-70" />
       </span>
       <span className={cn('truncate', solo && SOLO_TAB_TITLE_CLASS)}>{label}</span>
       {showClose && (
@@ -576,7 +542,7 @@ export const SessionTabBar = memo(function SessionTabBar({
   const { t } = useTranslation();
   const windowDragClass = useWindowDragRegionClass();
   useListKeyboardNavigation({ scopeId: WORKSPACE_FOCUS_SCOPES.sessionConversation });
-  const defaultTitle = t('sessions.untitled', 'Untitled session');
+  const defaultTitle = t('sessions.untitled', 'Untitled design');
   const showSessionTabs = variant !== 'viewer';
   const showViewerTabs = variant !== 'session';
   const showNewTabButton = variant !== 'viewer';
@@ -752,17 +718,23 @@ export const SessionTabBar = memo(function SessionTabBar({
         ? activeTabSessionId
         : null;
 
+  const newTabLabel = t('sessions.tabs.addTab', 'New design tab');
   const newTabButton = showNewTabButton ? (
-    <button
-      type="button"
-      className={TAB_BAR_ACTION_CLASS}
-      onClick={() => {
-        void onNewTab();
-      }}
-      aria-label={t('sessions.tabs.newTab', 'New tab')}
-    >
-      <Plus className="h-4 w-4" />
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={TAB_BAR_ACTION_CLASS}
+          onClick={() => {
+            void onNewTab();
+          }}
+          aria-label={newTabLabel}
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{newTabLabel}</TooltipContent>
+    </Tooltip>
   ) : null;
 
   return (
@@ -782,7 +754,7 @@ export const SessionTabBar = memo(function SessionTabBar({
         itemIds={visibleTabIds}
         activeItemId={activeTabId}
         role="tablist"
-        aria-label={t('sessions.tabs.label', 'Session tabs')}
+        aria-label={t('sessions.tabs.label', 'Design tabs')}
         className="h-11"
         paddingLeft={variant === 'session' ? 4 : 8}
         paddingRight={8}
@@ -899,7 +871,7 @@ function ArchivedTabsPopover({
         <ScrollArea className="max-h-60">
           <div className="p-1.5">
             {sorted.map((session) => {
-              const label = session.title?.trim() || t('sessions.tabs.newTab', 'New Tab');
+              const label = session.title?.trim() || t('sessions.tabs.newTab', 'Untitled design');
               const time = formatRelativeTime(session.lastMessageAt ?? session.createdAt, t);
               return (
                 <div
@@ -907,7 +879,7 @@ function ArchivedTabsPopover({
                   className="flex min-h-9 items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors hover:bg-foreground/[0.04]"
                 >
                   <span className="shrink-0 text-popover-foreground/65">
-                    <SessionAgentIcon session={session} className="h-3.5 w-3.5" />
+                    <Palette className="h-3.5 w-3.5" />
                   </span>
                   <span className="min-w-0 flex-1 truncate">{label}</span>
                   <span className="shrink-0 text-popover-foreground/65">{time}</span>

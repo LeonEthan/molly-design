@@ -13,7 +13,7 @@ tracked `.agents/docs/` directory.
 | `desktop-session-detail-layout.tsx`          | Desktop two-column layout and the side-panel expand/collapse animation                 |
 | `session-conversation-page.tsx`              | Shared full-page composition used by `SessionConversationPage.stories.tsx`             |
 | `session-tab-bar.tsx`                        | Desktop merged top row: session tab pills, status slot, drag sources                   |
-| `adaptive-tab-strip.tsx`                     | Width sharing for the tab pills                                                        |
+| `adaptive-tab-strip.tsx`                     | Width sharing for the tab pills; inactive tabs keep a readable minimum width           |
 | `session-side-panel-tab-bar.tsx`             | Right-panel tab strip (fixed panels, side chats, viewers)                              |
 | `session-tab-close-target.ts`                | Registration for the Cmd/Ctrl+W close target                                           |
 | `session-list-rows.ts`                       | Sidebar/tab row derivation, including child grouping by parent                         |
@@ -220,7 +220,8 @@ history directly switches the editable current draft, protecting unversioned wor
 the same Git repository first. The selected base survives restart; subsequent saves
 record that logical source without deleting later versions. An unchanged draft does
 not create a duplicate. Version operations use the execution/processing gate.
-The label distinguishes Vn, “Vn · Changes not versioned”, and “No versions yet”.
+The toolbar label distinguishes Vn and “Vn · Changes not versioned”; with no
+version it stays hidden, and only the history menu says “No versions yet”.
 It does not attest autosave; Bento separately reports actual saving, autosaved and
 failed-save states. History distinguishes loading, empty and failed reads, with
 an explicit retry after failure. Empty history explains how Save version differs

@@ -822,13 +822,12 @@ const SessionGroupSection = memo(function SessionGroupSection({
                   // Both chat and repo rows are a single line now; the repo row's
                   // low-signal metadata (time / repo / branch / PR) moves to the
                   // desktop hover info card so both organize modes read equally compact.
-                  'px-2 py-[7px]',
+                  'px-2 py-1.5',
                   'border border-transparent bg-transparent',
                   !showSelectedState &&
                     isSelectable &&
                     'hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground',
-                  showSelectedState &&
-                    SIDEBAR_SESSION_ROW_SELECTED_CLASS,
+                  showSelectedState && SIDEBAR_SESSION_ROW_SELECTED_CLASS,
                   // Keyboard-only focus ring. Plain :focus-within also matches
                   // after a mouse click (the overlay <a> keeps focus), which
                   // left a permanent inset ring on the selected row that read
@@ -1043,7 +1042,6 @@ const SessionGroupSection = memo(function SessionGroupSection({
             const desktopRow = showInfoCard ? (
               <SessionInfoHoverCard
                 key={session.sessionId}
-                kind={isChatSession ? 'chat' : 'github'}
                 author={session.owner ?? undefined}
                 title={session.title}
                 isWorktree={session.isWorktree}
@@ -1197,19 +1195,19 @@ export const SessionList = memo(function SessionList({
   headerAction,
 }: SessionListProps) {
   const { t } = useTranslation();
-  const archiveTooltipLabel = t('sessions.archive', 'Archive session');
+  const archiveTooltipLabel = t('sessions.archive', 'Archive design');
 
   const archiveConfirmLabel = t('common.confirm', 'Confirm');
   const contextMenuLabels: ContextMenuLabels = useMemo(
     () => ({
       rename: t('sessions.contextMenu.rename', 'Rename'),
-      pin: t('sessions.contextMenu.pin', 'Pin Session'),
-      unpin: t('sessions.contextMenu.unpin', 'Unpin Session'),
-      archive: t('sessions.contextMenu.archive', 'Archive Session'),
-      markUnread: t('sessions.contextMenu.markUnread', 'Mark as unread'),
-      copyUrl: t('sessions.contextMenu.copyUrl', 'Copy Session URL'),
+      pin: t('sessions.contextMenu.pin', 'Pin Design'),
+      unpin: t('sessions.contextMenu.unpin', 'Unpin Design'),
+      archive: t('sessions.contextMenu.archive', 'Archive Design'),
+      markUnread: t('sessions.contextMenu.markUnread', 'Mark as Unread'),
+      copyUrl: t('sessions.contextMenu.copyUrl', 'Copy Design Link'),
       copyBranch: t('sessions.contextMenu.copyBranch', 'Copy Current Branch'),
-      goToOpenerSession: t('sessions.contextMenu.goToOpenerSession', 'Go to Opener Session'),
+      goToOpenerSession: t('sessions.contextMenu.goToOpenerSession', 'Go to Opener Design'),
     }),
     [t]
   );

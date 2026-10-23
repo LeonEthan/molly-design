@@ -120,11 +120,11 @@ export function AboutSettingsComponent() {
       <CompactSection>
         {displayVersion && (
           <CompactRow label={t('settings.about.version')}>
-            <span className="text-sm text-muted-foreground font-mono">{displayVersion}</span>
+            <span className="text-xs tabular-nums text-muted-foreground">{displayVersion}</span>
           </CompactRow>
         )}
         <CompactRow label={t('settings.about.buildDate')}>
-          <span className="text-sm text-muted-foreground font-mono" title={GIT_COMMIT}>
+          <span className="text-xs tabular-nums text-muted-foreground" title={GIT_COMMIT}>
             {formatBuildDate(BUILD_DATE, intlLocale)}
           </span>
         </CompactRow>

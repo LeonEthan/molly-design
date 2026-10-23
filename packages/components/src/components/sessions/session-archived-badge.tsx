@@ -15,7 +15,7 @@ export function SessionArchivedBadge({ className }: { className?: string }) {
   const label = t('sessions.archived', 'Archived');
   const description = t(
     'sessions.archivedDescription',
-    'This conversation is archived. Restore it to continue chatting.'
+    'This design is archived. Restore it to continue.'
   );
   return (
     <Tooltip delayDuration={300}>

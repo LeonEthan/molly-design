@@ -54,7 +54,7 @@ describe('desktop sidebar mark-unread menus', () => {
     });
 
     const menuItem = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
-      (item) => item.textContent?.includes('Mark as unread')
+      (item) => item.textContent?.includes('Mark as Unread')
     );
     expect(menuItem).toBeInstanceOf(HTMLElement);
     flushSync(() => {
@@ -126,7 +126,7 @@ describe('desktop sidebar mark-unread menus', () => {
     });
     expect(
       Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).some((item) =>
-        item.textContent?.includes('Mark as unread')
+        item.textContent?.includes('Mark as Unread')
       )
     ).toBe(false);
   });

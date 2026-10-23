@@ -231,7 +231,7 @@ export function McpSetting() {
           )}
         >
           <header className="shrink-0 border-b border-border/40 px-5 py-5 pr-12">
-            <DialogTitle className="text-base font-medium">
+            <DialogTitle>
               {editor?.mode === 'edit' ? t('settings.mcp.editTitle') : t('settings.mcp.addTitle')}
             </DialogTitle>
             <DialogDescription className="mt-1 text-xs leading-relaxed text-muted-foreground">

@@ -1058,7 +1058,7 @@ export function ChatComposer({
               {previewPastedTextDraft ? (
                 <>
                   <div className="flex items-center justify-between gap-3 border-b border-border/60 px-5 py-3">
-                    <DialogTitle className="flex items-center gap-2 text-sm font-medium">
+                    <DialogTitle className="flex items-center gap-2">
                       <ClipboardPaste className="h-3.5 w-3.5 text-muted-foreground" />
                       {pastedTextDialogTitle}
                     </DialogTitle>

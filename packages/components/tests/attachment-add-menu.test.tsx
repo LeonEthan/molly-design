@@ -3,6 +3,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WorkspaceMcpServerMeta } from '@molly/shared';
 import { AttachmentAddMenu } from '../src/components/chat/attachment-add-menu';
 import { initI18n } from '../src/i18n';
 
@@ -37,7 +38,7 @@ describe('AttachmentAddMenu', () => {
     vi.unstubAllGlobals();
   });
 
-  it('offers one attachment action for the unified picker', async () => {
+  it('opens the file picker directly when attachment is the only action', async () => {
     const onAddAttachment = vi.fn();
     await act(async () => {
       root.render(<AttachmentAddMenu onAddAttachment={onAddAttachment} />);
@@ -47,6 +48,37 @@ describe('AttachmentAddMenu', () => {
       'button[aria-label="Add attachment"]'
     );
     expect(trigger).not.toBeNull();
+    await act(async () => trigger!.click());
+
+    expect(document.body.querySelector('[role="menu"]')).toBeNull();
+    expect(onAddAttachment).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the menu once MCP joins the attachment action', async () => {
+    const onAddAttachment = vi.fn();
+    await act(async () => {
+      root.render(
+        <AttachmentAddMenu
+          onAddAttachment={onAddAttachment}
+          mcp={{
+            servers: [
+              {
+                id: 'server-1',
+                name: 'Server 1',
+                transport: 'stdio',
+                connection: { transport: 'stdio', command: 'serve' },
+              } as unknown as WorkspaceMcpServerMeta,
+            ],
+            selectedIds: [],
+            onSelectedIdsChange: () => undefined,
+          }}
+        />
+      );
+    });
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Add attachment"]'
+    );
     await act(async () => {
       trigger!.dispatchEvent(
         new TestPointerEvent('pointerdown', {
@@ -58,11 +90,9 @@ describe('AttachmentAddMenu', () => {
     });
 
     const items = document.body.querySelectorAll<HTMLElement>('[role="menuitem"]');
-    expect(items).toHaveLength(1);
     expect(items[0]?.textContent).toContain('Add attachment');
-    expect(document.body.textContent).not.toContain('Upload image');
-    expect(document.body.textContent).not.toContain('Upload file');
-
+    expect(items.length).toBeGreaterThanOrEqual(2);
+    expect(onAddAttachment).not.toHaveBeenCalled();
     await act(async () => items[0]!.click());
     expect(onAddAttachment).toHaveBeenCalledOnce();
   });

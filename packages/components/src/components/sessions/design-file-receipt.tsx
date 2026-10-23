@@ -46,7 +46,7 @@ export function DesignFileReceipt({
   return (
     <div className="text-xs text-muted-foreground">
       {outcome.status === 'committed' ? (
-        <p title={outcome.revisionId}>{t('design.files.saved', 'Saved to the current artwork.')}</p>
+        <p>{t('design.files.saved', 'Saved to the current artwork.')}</p>
       ) : null}
       {candidateId ? (
         <p>

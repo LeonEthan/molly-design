@@ -128,21 +128,35 @@ the React shell through `@molly/shared/ui-icons`, including text, dropdown and
 zoom glyphs. The dock uses 20px outline icons with a 1.5 stroke and 38px circular
 targets inside a capsule. The selection toolbar uses 18px icons with the same
 stroke, 32px buttons, 16px container/menu corners and a matching soft shadow;
-numeric fields remain 51×28px. The toolbar sits above the selection unless
-below covers less of the other elements; backdrops containing the whole selection
-are ignored. The count appears only for multiple elements, and the reference
+numeric fields remain 51×28px. It carries no position fields: the Layers panel owns
+geometry. The toolbar sits above the selection unless
+below covers less of the other elements; when both cover artwork, the strips just
+above and below the artboard are tried where the toolbar fits wholly in the
+viewport and clears the dock, zoom, status bars and the open Layers panel; the
+least-covered position wins. The default fit keeps 66px (toolbar height, 12px gap
+and 8px inset) above and below the artboard once the canvas is 360px tall, so those
+strips exist at fitted zoom; at user zoom levels the least-covered fallback applies.
+Backdrops containing the whole selection are ignored. The count appears only for multiple elements, and the reference
 action shows its "Ask Molly" label. At canvas widths of 640px or less, the dock and its
 shape menu rise above the existing zoom
 and save row. Narrower docks scroll horizontally without shrinking targets.
-The save/status pill truncates within the space left by zoom and the dock, with
+The save/status pill uses 12px sentence-case UI text with a theme-coloured dot and
+truncates within the space left by zoom and the dock, with
 the complete message retained in its accessible name and hover title. Creation
 and undo/redo dock buttons use native disabled state while readonly; entering
 readonly also closes the shape menu. Unlocking restores those existing controls.
 These styles belong to the local adapters, independent of the shell's CSS.
 
-The dock's Layers button opens a native side panel (`src/layers-panel.ts`). It lists
-the current elements top-most first, using text content or the element kind as the
-name; clicking selects, and Shift/⌘ adds or removes. For the selection it edits
+The dock's Layers button opens a native side panel (`src/layers-panel.ts`); its open
+state uses the selection tint, not the active-tool fill. While open it reserves its
+width (270px, at most half the canvas) on the right of the scroller through
+`body.molly-layers-open`, and the canvas refits through its scroller observer: a
+fitted artboard shrinks into the remaining stage and grows back on close, while a
+manual zoom keeps its multiple of the fit rather than being reset. The list comes first and
+shows the current elements top-most first, using text content, the shape's geometry
+(Rectangle, Ellipse, Triangle, Arrow) or the element kind as the name; the selected
+row uses the selection tint. Clicking selects, and Shift/⌘ adds or removes. Below
+the list, for the selection, it edits
 position, size (single selection), rotation, opacity, and, for text, line height and
 letter spacing, plus bring to front/forward and send backward/to back. Every edit
 goes through the same host-bound toolbar endpoint and selection epoch as the

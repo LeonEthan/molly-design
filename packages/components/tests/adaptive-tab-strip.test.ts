@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ACTIVE_TAB_MIN_WIDTH,
+  INACTIVE_TAB_MIN_WIDTH,
   allocateAdaptiveTabStripLayout,
   type AdaptiveTabStripLayout,
 } from '../src/components/sessions/adaptive-tab-strip';
@@ -86,6 +87,22 @@ describe('allocateAdaptiveTabStripLayout', () => {
     expect(inactiveWidths.every((width) => active.width > width)).toBe(true);
     expect(inactiveWidths.every((width) => width > 0)).toBe(true);
     expect(Math.max(...inactiveWidths) - Math.min(...inactiveWidths)).toBeLessThanOrEqual(1);
+  });
+
+  it('keeps a readable inactive tab by letting the active tab give up width', () => {
+    const layout = allocateAdaptiveTabStripLayout({
+      ...DEFAULT_OPTIONS,
+      viewportWidth: 274,
+      itemIds: ['parent', 'one'],
+      activeItemId: 'one',
+    });
+
+    const inactive = layout.items.find((item) => item.id === 'parent')!;
+    const active = layout.items.find((item) => item.id === 'one')!;
+
+    expect(inactive.width).toBeGreaterThanOrEqual(INACTIVE_TAB_MIN_WIDTH);
+    expect(active.width).toBeGreaterThan(inactive.width);
+    expect(allocatedWidth(layout)).toBe(274);
   });
 
   it('uses equal widths when the active id is not visible', () => {

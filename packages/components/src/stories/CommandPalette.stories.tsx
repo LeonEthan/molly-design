@@ -9,7 +9,7 @@ import {
 } from '@/components/commands/command-palette-view';
 
 const LABELS: CommandPaletteLabels = {
-  placeholder: 'Search commands and chats...',
+  placeholder: 'Search commands and designs...',
   empty: 'No results found.',
   navigate: 'Navigate',
   select: 'Select',

@@ -65,7 +65,7 @@ function readonlyReasonCopy(reason: CanvasReadonlyReason): string {
   if (reason === 'processing')
     return translateUi('design.canvasProcessing', 'Molly is working · Read-only')
   if (reason === 'checking')
-    return translateUi('design.canvasCheckingState', 'Checking execution state · Read-only')
+    return translateUi('design.canvasCheckingState', "Checking Molly's status · Read-only")
   return translateUi('design.canvasReadonly', 'Read-only')
 }
 

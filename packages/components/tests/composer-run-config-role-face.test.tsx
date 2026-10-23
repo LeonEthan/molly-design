@@ -126,4 +126,29 @@ describe('Desktop model picker without Roles', () => {
     expect(menu.textContent).not.toMatch(/Role|New role|角色/);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
+
+  it('lists the configured image model after Reasoning and opens Settings from it', async () => {
+    let opened = false;
+    const view = await render({
+      imageModelId: 'gpt-image-2',
+      onOpenConnections: () => {
+        opened = true;
+      },
+    });
+    expect(view.textContent).not.toContain('gpt-image-2');
+    const menu = await openMenu(view);
+    const rows = [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
+    expect(rows.at(-1)).toBe('Image modelgpt-image-2');
+    expect(rows.findIndex((row) => row?.startsWith('Reasoning'))).toBe(rows.length - 2);
+    const imageRow = [...menu.querySelectorAll('[role="menuitem"]')].at(-1) as HTMLElement;
+    await act(async () => {
+      imageRow.click();
+    });
+    expect(opened).toBe(true);
+  });
+
+  it('omits the image row when no image model is configured', async () => {
+    const menu = await openMenu(await render({ imageModelId: null }));
+    expect(menu.textContent).not.toContain('Image model');
+  });
 });

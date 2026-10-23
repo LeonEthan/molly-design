@@ -54,3 +54,9 @@ strings on i18n rather than the registry's inline English.
   envelope = close). Never classify by time windows or raw coordinates alone.
 - `DiffViewer` uses the shared `@pierre/diffs` worker pools for syntax work regardless
   of file size. Do not create or terminate a worker pool per viewer.
+
+## Titles
+
+- `DialogTitle`, `AlertDialogTitle` and `SheetTitle` are regular-weight `font-editorial`
+  at 22px. Instrument Serif ships only weight 400, so never add `font-medium`/`font-semibold`
+  per call; override size only.

@@ -428,3 +428,71 @@ Validation: `pnpm check` passed, including type checks, tests and public-boundar
 checks. `pnpm run docs check` passed with existing warnings and no registered
 SHA-protected topics. `pnpm format` completed; its unrelated Electron formatter
 change was reverted. Only this note is included in the E2E commit.
+
+## #223 A round 2 (Pinterest, PR #232, 4e26013e)
+
+Setup attempted on the Mac mini on 2026-10-22 (local date). `pnpm install`
+and `pnpm build` completed at
+`4e26013e05fe1d68aa14bd4150a8e2420df51f27`, including the bundled CLI and
+Electron type checks. The existing Round 1 runner, Electron harness and Settings
+browser-import Page Object were reused. No product or harness code changed.
+The prepared runner uses the Case A prompt with only the site label changed to
+Pinterest, and retains DeepSeek Flash / High and the Round 4 image connection
+as the intended measured configuration.
+
+**Blocked before measurement:** Settings listed three Chrome profiles and
+required a profile selection. Only Pinterest was selected for import, but no
+profile was selected and no import was submitted. An asynchronous request asked
+the owner which profile contains the Pinterest session. Automatic approval
+review rejected proceeding with the first listed profile because it could
+import the wrong account's session. The profile choice remains required; this
+is not evidence that Chrome lacks a Pinterest session or that import fails.
+
+Two unmeasured preflights used fresh isolated profiles through
+`electron-harness.ts`, outside the sandbox, with owned host ports and no
+inherited `LODY_*` or `ELECTRON_RUN_AS_NODE`. Both daemons reached ready. The
+first stopped on a runner-only exact button-name mismatch before any import;
+the second reached the Chrome profile selector after selecting Pinterest only.
+No proxy readiness probe, model connection setup, prompt submission or model
+request was reached. No Pinterest home page was opened, so there is no signed-in
+feed screenshot. Local Settings screenshots and metadata establish only the
+setup state. No cookies were read by the runner, imported or exported, and no
+profile export was invoked. The owned harness processes were closed.
+
+| Metric | A1 | A2 |
+| --- | --- | --- |
+| Verdict | Blocked at setup; not measured | Not started; profile choice pending |
+| Committed receipt | No | No |
+| Total time / first preview | — / — | — / — |
+| Top-level tools / bash / codemode | 0 / 0 / 0 | 0 / 0 / 0 |
+| Searches and query/URL | 0; none | 0; none |
+| Search-results screenshots / scrolls | 0 / 0 | 0 / 0 |
+| One-script search survey | Not exercised | Not exercised |
+| Thread extension | Not exercised | Not exercised |
+| `save_image` picks / `molly_view_image` | 0 / 0 | 0 / 0 |
+| Image-model calls / preview calls | 0 / 0 | 0 / 0 |
+| Over-15-minute cause | No measured turn | No measured turn |
+| Final render / `design.yaml` | None | None |
+
+Counts concern the product Agent, not runner setup actions. The pair has
+**no acceptance pass**: neither run can be assessed against the 20-minute,
+two-screens-per-search, extension or maximum-count gates. Zero calls means the
+round's five-call image budget is unused; the run-1 three-call stop rule was not
+reached. There are no final renders, picks, YAML or committed receipts to retain.
+Evidence remains ignored under `e2e/artifacts/ab-223-a2/preflight-{1,2}/`;
+`run-1/` contains the prepared runner only, and `run-2/` was not created.
+
+Round 1 completed A1 in 11.55 minutes and capped A2 at 20 minutes; both extended
+no thread and surveyed archives rather than successful searches. Round 4 A1/A2
+completed in 13.6/11.2 minutes, with first previews at 10.0/7.9 minutes and no
+extension. This round adds no timing or research-behaviour sample and cannot
+show whether the `4e26013e` skill wording works on Pinterest. Resume from a fresh
+isolated profile after the owner identifies the Chrome profile, verify the
+signed-in Pinterest feed, and then perform the two serial measured runs.
+
+Validation: `pnpm check` initially failed in the sandbox on denied local socket
+binds (`EPERM`), then passed outside the sandbox, including tests and the public
+boundary check. `pnpm run docs check` passed with 18 existing warnings and no
+registered SHA-protected topics. `pnpm format` completed; its unrelated Electron
+formatter change was reverted. Only this note is included in the record commit;
+no transcripts, cookies, traces, profiles or artifacts are included.

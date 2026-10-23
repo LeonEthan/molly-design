@@ -7,16 +7,16 @@ Thank you for your interest in contributing to Molly! Bug reports, documentation
 By submitting a pull request, patch, or other contribution to Molly, you agree to the following terms:
 
 - You have the right to submit the contribution. It is your original work, or you have the necessary permission to contribute it.
-- Unless you explicitly state otherwise in writing, your contribution is submitted under the Apache License, Version 2.0.
-- You retain copyright in your contribution. You grant Molly and all recipients the rights provided by the Apache License, including the right to use, modify, distribute, and sublicense the contribution.
-- Molly may use contributions in open-source and commercial products and services, subject to the Apache License.
+- Unless you explicitly state otherwise in writing, your contribution is submitted under the Functional Source License, Version 1.1, Apache 2.0 Future License (FSL-1.1-ALv2).
+- You retain copyright in your contribution. You grant Molly and all recipients the rights provided by FSL-1.1-ALv2, including the right to use, modify, distribute, and sublicense the contribution for a Permitted Purpose, and the additional Apache License 2.0 grant that becomes effective two years after the version containing the contribution is made available.
+- Molly may use contributions in source-available and commercial products and services, subject to FSL-1.1-ALv2.
 - If you cannot agree to these terms, please do not submit the contribution. A separate written agreement with Molly takes precedence over these terms.
 
 ## What we can review
 
 Molly inherits a substantial desktop codebase with invariants that are easy to break in a large diff and expensive to rediscover (the local/cloud boundary, catalog contracts, protocol capabilities). A large unsolicited patch often cannot be reviewed safely, even when the intent is generous.
 
-This is ordinary open-source practice: maintainers own the architecture. The most useful first contribution is often a clear Issue with reproduction or analysis, not a rewrite. Small, focused pull requests that change one thing are welcome. Closing a large PR is a statement about review capacity and risk, not about your effort.
+This is ordinary source-available practice: maintainers own the architecture. The most useful first contribution is often a clear Issue with reproduction or analysis, not a rewrite. Small, focused pull requests that change one thing are welcome. Closing a large PR is a statement about review capacity and risk, not about your effort.
 
 **Community contributors** (anyone who is not a Molly maintainer, and who has not been assigned the corresponding Issue by a maintainer):
 
@@ -79,13 +79,13 @@ corepack pnpm install
 corepack pnpm start:local
 ```
 
-This builds the local CLI and open-source desktop renderer, then launches Electron. The first run may take a while. Fully quit any existing Molly desktop process first because the app allows only one running instance.
+This builds the local CLI and source-available desktop renderer, then launches Electron. The first run may take a while. Fully quit any existing Molly desktop process first because the app allows only one running instance.
 
-The open-source build is local-only: it needs no `.env` file, Molly account, or cloud environment variables. Cloud endpoints and telemetry variables are not used.
+The source-available build is local-only: it needs no `.env` file, Molly account, or cloud environment variables. Cloud endpoints and telemetry variables are not used.
 
 ## Isolate Local Data While Developing
 
-By default, the open-source desktop app stores data in `~/.molly`. To avoid using existing data during development, set `MOLLY_DATA_DIR`:
+By default, the source-available desktop app stores data in `~/.molly`. To avoid using existing data during development, set `MOLLY_DATA_DIR`:
 
 ```bash
 MOLLY_DATA_DIR="$(pwd)/.molly-dev-data" pnpm start:local

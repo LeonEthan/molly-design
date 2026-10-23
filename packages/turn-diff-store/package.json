@@ -39,5 +39,5 @@
     "typescript": "catalog:",
     "vitest": "^3.2.4"
   },
-  "license": "Apache-2.0"
+  "license": "FSL-1.1-ALv2"
 }

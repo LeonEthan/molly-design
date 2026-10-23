@@ -2,7 +2,7 @@
   "name": "molly-design-website",
   "private": true,
   "description": "QA tooling for the Molly Design website. Not a member of the root pnpm workspace.",
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "scripts": {
     "build": "python3 build.py",
     "qa": "bash scripts/qa/run-all.sh"

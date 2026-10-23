@@ -9,7 +9,7 @@ Describe a poster, a social post or a product page. Molly's agent builds it on a
 
 [![Latest release](https://img.shields.io/github/v/release/LeonEthan/molly-design)](https://github.com/LeonEthan/molly-design/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-black)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue)](LICENSE)
 
 [Website](https://molly-design.pages.dev) · [Download](https://github.com/LeonEthan/molly-design/releases/latest) · [User guide](USER_GUIDE.md) · [Report a bug](https://github.com/LeonEthan/molly-design/issues/new?template=01-bug-report.yml) · [简体中文](README.zh-CN.md)
 
@@ -156,7 +156,7 @@ No. There is no Molly cloud account. You only sign in to the model providers you
 On your computer. Artwork, versions and conversations are local files; keys are kept in encrypted local storage. The [user guide](USER_GUIDE.md#back-up-uninstall-and-recover-data) lists the exact folders and how to back them up.
 
 **Does it cost anything?**
-Molly is free and open source. Model and image usage is billed by the providers you connect.
+Molly is free and source-available. Model and image usage is billed by the providers you connect.
 
 **Which models should I use?**
 Any language model and image model from the lists above. Molly does not pick for you; each session uses the connection and model you select, and fails clearly instead of silently switching.
@@ -195,7 +195,7 @@ corepack pnpm install
 corepack pnpm start:local
 ```
 
-The first build also assembles the Bento editor in a temporary checkout and may need network access. Quit any running Molly first; only one instance can run. To keep development data separate, set `MOLLY_DATA_DIR="$(pwd)/.molly-dev-data"`. The open-source build needs no `.env` file, account or cloud variables.
+The first build also assembles the Bento editor in a temporary checkout and may need network access. Quit any running Molly first; only one instance can run. To keep development data separate, set `MOLLY_DATA_DIR="$(pwd)/.molly-dev-data"`. The source-available build needs no `.env` file, account or cloud variables.
 
 For daily testing on Apple Silicon macOS, run `pnpm preview:install`. It builds through
 the release packaging pipeline and installs **Molly Preview.app** in `~/Applications`,
@@ -230,7 +230,7 @@ Bug reports, docs fixes, tests and focused pull requests are welcome, in English
 - Community pull requests should stay under 1,000 changed lines; for anything larger, open an issue with your analysis first.
 - Use [Conventional Commits](https://www.conventionalcommits.org/) and the pull request template.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full terms and process. Contributions are accepted under Apache-2.0.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full terms and process. Contributions are accepted under FSL-1.1-ALv2.
 
 ## Help and community
 
@@ -246,7 +246,7 @@ Please do not report vulnerabilities in a public issue. Use [private vulnerabili
 
 ## License and credits
 
-Molly is released under the [Apache License 2.0](LICENSE).
+Molly Design is source-available under the [Functional Source License, Version 1.1, ALv2 Future License](LICENSE) (FSL-1.1-ALv2). Each version converts to the Apache License 2.0 two years after its release. Versions released up to and including v0.1.2 remain available under the Apache License 2.0.
 
 Molly is an independent project based on [Lody](https://github.com/LodyAI/Lody); Lody's original authorship and Apache-2.0 license are retained. The [Bento](https://github.com/nyblnet/bento) editor is vendored under the MIT License. Other components keep their own licenses. See [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

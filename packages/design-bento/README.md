@@ -21,6 +21,9 @@ Runtime Manager are not migrated. The source repository
 `7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12`; the pinned original source has no root license file. Its rights holder LeonEthan
 authorized the migrated, self-owned adapter code under Apache-2.0 on 2026-09-20;
 see [NOTICE](../../NOTICE) and `adapterLicense` in the source manifest.
+This package is distributed with Molly Design under FSL-1.1-ALv2 (see the
+repository [LICENSE](../../LICENSE)). Versions released up to and including
+v0.1.2 remain available under Apache-2.0.
 Bento and other third-party components retain their individual licenses.
 
 Bento is vendored at `813c71fff72491e6898f5e55a20da44a562be586` (MIT, see
@@ -232,7 +235,7 @@ A hash match does not establish visual compatibility. Keep
 Molly overlays under this package; the vendored tree carries only the recorded
 adaptations. The existing builder remains the single assembly path.
 
-Resources include Apache-2.0 `MOLLY-LICENSE` and `MOLLY-NOTICE` for Molly and the
+Resources include FSL-1.1-ALv2 `MOLLY-LICENSE` and `MOLLY-NOTICE` for Molly Design and the
 rights-holder-owned migrated adapters, alongside Bento and font/icon notices.
 
 ## Transparent-margin image sampling

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Local-first desktop workspace for graphic design with an Agent",
   "private": true,
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "repository": {
     "type": "git",
     "url": "https://github.com/LeonEthan/molly-design.git"

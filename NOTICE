@@ -1,12 +1,18 @@
 Molly — Source and attribution
 ================================
 
+Molly Design is source-available under the Functional Source License, Version 1.1,
+Apache 2.0 Future License (FSL-1.1-ALv2), copyright 2026 LeonEthan. See LICENSE.
+Each version converts to the Apache License, Version 2.0 two years after its
+release. Versions released up to and including v0.1.2 remain available under
+the Apache License, Version 2.0.
+
 Molly is an independent project based on the Lody codebase:
 https://github.com/LodyAI/Lody
 
 Lody's interface, Agent execution architecture and related source materials are
 retained under the Apache License, Version 2.0. The original Lody attribution and
-license notices remain in this repository; see LICENSE.
+license notices remain in this repository. Lody's license is not the root LICENSE.
 
 Additional source components retain their own provenance and licenses:
 
@@ -16,10 +22,11 @@ Additional source components retain their own provenance and licenses:
 * Authoring and editor adapters derived from agentic-listing-design include
   code owned by LeonEthan. On 2026-09-20, the rights holder confirmed ownership
   and authorized distribution of that self-owned code migrated into Molly
-  under Apache License 2.0 (see LICENSE). This grant does not relicense Bento,
+  under Apache License 2.0. That historical grant does not relicense Bento,
   third-party skills, fonts, icons, or other independently licensed material.
-  Adapter source commits, derivation, and the grant scope are recorded in
-  packages/design-authoring/source-manifest.json and
+  Current distribution of Molly Design, including these adapters, is under
+  FSL-1.1-ALv2 (see LICENSE). Adapter source commits, derivation, and the grant
+  scope are recorded in packages/design-authoring/source-manifest.json and
   packages/design-bento/source-manifest.json.
 * ACP extension submodules retain their upstream repositories and licenses in
   their respective checkouts: packages/acp-extension-core and

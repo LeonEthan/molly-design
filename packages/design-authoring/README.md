@@ -91,7 +91,10 @@ bundled example, and optional helpers describe the YAML snapshot entry:
   known system font directories (`list`: family/style/weight/width/x-over-cap
   per face; `match`: ranks faces for one measured line of copy and returns a
   font size and letter spacing). Parses sfnt/TTC tables directly, caches under
-  `$TMPDIR`, and never scans arbitrary paths. Matching scales x-height-only Latin
+  a private per-user directory under `$TMPDIR`, and never scans arbitrary paths.
+  Cache reads are bounded to 64 MiB, owned/private regular files only; unsafe
+  cache locations disable caching, and writes replace private files atomically.
+  Malformed TTC headers are skipped without interrupting other fonts. Matching scales x-height-only Latin
   copy against x-height and retains advances across covered Unicode ranges,
   including CJK; `--cjk` selects faces with CJK coverage.
 - `design-replication/scripts/reference-pack.mjs` — dependency-free Node port of the upstream Pillow
@@ -99,7 +102,9 @@ bundled example, and optional helpers describe the YAML snapshot entry:
   (alpha/trim/compare/measure; measure reports text line metrics — ink box,
   baseline, x/cap heights, stroke — for the replication "Fit type" recipe).
   Nearby detached dots and accents aligned with a taller body band stay in that
-  line; its body band supplies the baseline and height.
+  line; its body band supplies the baseline and height. Measurement requires
+  single-color text on a near-flat background; excessive border or foreground
+  color variation fails explicitly instead of yielding text metrics.
   Supported non-interlaced
   8-bit gray/RGB/RGBA/palette PNG is decoded via `node:zlib`; JPEG/GIF/BMP/WEBP report dimensions but raster artifacts require
   PNG. Ported because neither Molly nor the migrated intake covers reference-image

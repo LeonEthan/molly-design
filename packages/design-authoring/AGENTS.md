@@ -27,6 +27,9 @@
   Optional font conversion may explicitly prepare pinned FontTools in an isolated
   Python environment outside the collected artwork. No global install, automatic
   intake conversion or current-copy subsetting; preserve source files and glyphs.
+- Font catalog caching is advisory: use private per-user directories and owned,
+  bounded regular files; reject links and unsafe cache locations without failing
+  font scanning. Cache writes replace private files atomically.
 - `src/generated/` and each skill's `scripts/lib/` are build outputs; never
   edit them by hand.
 

@@ -7,12 +7,19 @@
 
 import { spawnSync } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
+  linkSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
+  statSync,
+  symlinkSync,
+  truncateSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -401,7 +408,7 @@ describe('font-catalog.mjs', () => {
 
   function setupFontDir(): { dir: string; cacheEnv: NodeJS.ProcessEnv } {
     const dir = path.join(workdir(), `fonts-${catalogSeq++}`);
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
     const cache = path.join(dir, 'cache.json');
     const env = { ...process.env, MOLLY_FONT_CACHE: cache };
     return { dir, cacheEnv: env };
@@ -440,6 +447,84 @@ describe('font-catalog.mjs', () => {
     const prefix = `Molly Test Serif | Regular | 400 | 5 | x/cap 0.71 | `;
     const suffix = `#0 | face "Molly Test Serif"`;
     expect(result.stdout.trim()).toBe(prefix + realpathSync(fontPath) + suffix);
+  });
+
+  it('keeps its default cache in a private per-user directory', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    const env: NodeJS.ProcessEnv = { ...cacheEnv, TMPDIR: dir, TMP: dir, TEMP: dir };
+    delete env.MOLLY_FONT_CACHE;
+    const result = runCatalog(['list', '--dirs', dir], env);
+    expect(result.status, result.stderr).toBe(0);
+    const uid = process.getuid?.();
+    const cacheDir = path.join(
+      dir,
+      readdirSync(dir).find((entry) => entry.startsWith('molly-font-catalog-')) ?? ''
+    );
+    const cache = path.join(cacheDir, 'molly-font-catalog-v4.json');
+    expect(existsSync(cache)).toBe(true);
+    if (process.platform !== 'win32') {
+      expect(statSync(cacheDir).mode & 0o777).toBe(0o700);
+      expect(statSync(cache).mode & 0o777).toBe(0o600);
+      expect(statSync(cache).uid).toBe(uid);
+    }
+  });
+
+  it.each(['symlink', 'hardlink', 'directory', 'public-directory'])(
+    'scans without touching an unsafe %s cache',
+    (kind) => {
+      const { dir, cacheEnv } = setupFontDir();
+      copyFixture(dir);
+      const cache = cacheEnv.MOLLY_FONT_CACHE ?? '';
+      const target = path.join(workdir(), 'untouched.json');
+      writeFileSync(target, 'keep these bytes');
+      if (kind === 'symlink') symlinkSync(target, cache);
+      if (kind === 'hardlink') linkSync(target, cache);
+      if (kind === 'directory') mkdirSync(cache);
+      if (kind === 'public-directory') chmodSync(dir, 0o777);
+      const result = runCatalog(['list', '--dirs', dir], cacheEnv);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain('Molly Test Serif');
+      expect(readFileSync(target, 'utf8')).toBe('keep these bytes');
+      if (kind === 'symlink') expect(lstatSync(cache).isSymbolicLink()).toBe(true);
+      if (kind === 'hardlink') expect(statSync(cache).nlink).toBe(2);
+      if (kind === 'directory') expect(statSync(cache).isDirectory()).toBe(true);
+      if (kind === 'public-directory') expect(existsSync(cache)).toBe(false);
+    }
+  );
+
+  it.each(['oversized', 'malformed'])('ignores a %s cache and rebuilds safely', (kind) => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    const cache = cacheEnv.MOLLY_FONT_CACHE ?? '';
+    expect(runCatalog(['list', '--dirs', dir], cacheEnv).status).toBe(0);
+    const invalid = JSON.parse(readFileSync(cache, 'utf8'));
+    invalid.faces = [null];
+    writeFileSync(cache, JSON.stringify(invalid), { mode: 0o600 });
+    if (kind === 'oversized') truncateSync(cache, 64 * 1024 * 1024 + 1);
+    const result = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('Molly Test Serif');
+    expect(JSON.parse(readFileSync(cache, 'utf8')).faces[0].family).toBe('Molly Test Serif');
+  });
+
+  it('skips a truncated TTC header and still lists and matches valid fonts', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    const broken = Buffer.alloc(16);
+    broken.write('ttcf');
+    broken.writeUInt32BE(2, 8);
+    broken.writeUInt32BE(100, 12);
+    writeFileSync(path.join(dir, 'broken.ttc'), broken);
+    const listed = runCatalog(['list', '--dirs', dir], cacheEnv);
+    expect(listed.status, listed.stderr).toBe(0);
+    expect(listed.stdout).toContain('MollyTestSerif-Regular.ttf#0');
+    const matched = runCatalog(
+      ['match', '--text', 'MOLLY', '--width', '367', '--cap', '100', '--dirs', dir],
+      cacheEnv
+    );
+    expect(matched.status, matched.stderr).toBe(0);
+    expect(matched.stdout).toContain('1. Molly Test Serif');
   });
 
   it('ranks a Regular-exact match first and predicts fontSize and spacing', () => {
@@ -821,6 +906,46 @@ describe('reference-pack.mjs measure', () => {
     expect(whole.status, whole.stderr).toBe(0);
     expect(whole.stdout).not.toContain('warning');
   });
+
+  it('accepts mild background variation and antialiased text', () => {
+    const ref = path.join(workdir(), 'near-flat.png');
+    writeFileSync(
+      ref,
+      encodeTestPng(120, 60, 3, (x, y) => {
+        if (x >= 20 && x < 100 && y >= 20 && y < 40 && x % 10 < 5) {
+          return x % 10 === 0 ? [120, 120, 120, 255] : [30, 30, 30, 255];
+        }
+        const shade = 240 + (x % 10);
+        return [shade, shade, shade, 255];
+      })
+    );
+    const result = run('reference-pack.mjs', ['measure', ref, '0,0,120,60'], replicationSkillDir);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('baseline 39');
+  });
+
+  it.each(['gradient', 'photographic'])(
+    'refuses a %s background instead of returning metrics',
+    (kind) => {
+      const ref = path.join(workdir(), 'nonuniform.png');
+      writeFileSync(
+        ref,
+        encodeTestPng(120, 90, 3, (x, y) => {
+          if (x >= 30 && x < 90 && y >= 30 && y < 60 && x % 10 < 3) return [0, 0, 0, 255];
+          if (kind === 'gradient') {
+            const shade = 40 + Math.floor((x * 200) / 119);
+            return [shade, shade, shade, 255];
+          }
+          if (x < 5 || x > 114 || y < 5 || y > 84) return [255, 255, 255, 255];
+          return [(x * 31 + y * 7) % 256, (x * 17 + y * 23) % 256, (x * 3 + y * 13) % 256, 255];
+        })
+      );
+      const result = run('reference-pack.mjs', ['measure', ref, '0,0,120,90'], replicationSkillDir);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('nonuniform');
+      expect(result.stdout).not.toContain('baseline');
+    }
+  );
 
   it('rejects malformed and out-of-bounds regions and non-PNG input', () => {
     const dir = workdir();

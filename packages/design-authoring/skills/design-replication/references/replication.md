@@ -40,7 +40,9 @@ Fit each distinct text style with the same four steps, never a loop:
    on one whole line of that style, with a few pixels of margin. It reports
    the ink box, cap/ascender height, x-height, stroke, `glyphs` and
    `glyphInk`. If it warns that ink touches the edge, widen the region and
-   measure again; that is the only repeat.
+   measure again; that is the only repeat. Measurement needs single-color text
+   on a near-flat background. If background or foreground variation is too high,
+   it refuses metrics; use another image-analysis tool or estimate visually.
 2. **Shortlist.** From the `design-text` skill's directory, run
    `node scripts/font-catalog.mjs match --text "<the line as shown>" --width <ink width> --cap <cap height> --stroke <stroke> --glyphs <glyphs> --glyph-ink <glyphInk> [--x <x-height>]`.
    For x-height-only Latin copy such as `summer` or `minimum`, pass the measured

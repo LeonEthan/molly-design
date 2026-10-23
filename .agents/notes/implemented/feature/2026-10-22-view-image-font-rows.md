@@ -106,3 +106,46 @@ A real local system-font scan took 8.4 seconds cold; cached Chinese matching
 returned candidates in 0.27 seconds. The binary-search lookup produced the same
 catalog bytes as the linear lookup. These timings are observations on one Mac,
 not deterministic performance assertions or cross-platform acceptance.
+
+## Second review: cache safety and unsupported inputs
+
+The next review of PR #231 identified a predictable shared temporary cache path,
+unbounded cache reads, truncated TTC headers escaping the per-face error boundary,
+and meaningless text metrics on nonuniform backgrounds. Regressions reproduced
+unsafe cache writes, scan failure and false metrics before the fixes.
+
+The catalog keeps its existing advisory cache, now under a private per-user
+0700 directory. POSIX reads and replacement require the current user's private,
+single-link regular file; symlinks, hardlinks and nonregular files are rejected.
+Reads bind the opened file identity, allocate at most the 64 MiB cache limit plus
+an overflow byte, and validate cached face shapes. Atomic writes use exclusive
+0600 temporary files, check the destination again and clean up temporary files.
+Unsafe or unavailable caches fall back to an uncached scan. Windows retains type
+and bounded-read checks but does not claim POSIX ownership/mode enforcement.
+The explicit cache override likewise requires a private directory.
+
+Reuse alternatives checked: `collect-authoring` already demonstrates no-follow,
+identity-checked and bounded reads. Its code cannot be imported by a self-contained
+skill, so the helper borrows that pattern with Node builtins. `font-prepare` owns
+an explicit Python environment rather than a general cache seam. Removing caching
+would make every match repeat the measured cold scan, so caching remains advisory.
+No new service or shared persistence abstraction is introduced.
+
+TTC offset arrays must fit in the file and all advertised face headers must be
+in bounds; an invalid collection is skipped while valid neighboring fonts remain
+usable. Measurement reuses the existing quantized color samples: substantial
+variation on the crop border or among foreground pixels causes a clear unsupported
+measurement error before any line metrics. This is a conservative flat-background,
+single-color-text helper, not general photographic text segmentation. Mild background
+variation and antialiasing remain covered by a passing fixture.
+
+Regression coverage includes private default-cache modes, symlink/hardlink/directory
+and publicly writable cache paths, oversized/malformed caches, a truncated TTC next
+to a valid face, gradient/texture refusal, and acceptance of a near-flat antialiased
+line. No live model calls or changes to artwork intake/creative stages are involved.
+
+Second-review validation: all 189 design-authoring tests and the complete
+`pnpm check` passed (including 3,014 CLI and 3,367 component tests; existing skips
+retained). `pnpm format`, targeted type-aware lint/typecheck,
+`pnpm run docs check --base origin/main` and `git diff --check` passed. Validation
+uses synthetic local fixtures and local IPC permissions; no external model calls.

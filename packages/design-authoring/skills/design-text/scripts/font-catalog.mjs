@@ -19,15 +19,23 @@
 //
 // Only the known system font directories are scanned (macOS, Windows, Linux),
 // never arbitrary paths; --dirs exists for fixtures and tests. Results cache
-// in $TMPDIR/molly-font-catalog-v4.json (MOLLY_FONT_CACHE overrides the
-// location), invalidated by directory mtimes.
+// in a private per-user directory under $TMPDIR (MOLLY_FONT_CACHE overrides
+// the file in a private directory), invalidated by directory mtimes.
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
   readdirSync,
   realpathSync,
+  readSync,
+  renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
@@ -36,6 +44,7 @@ import path from 'node:path';
 
 const SCAN_DEPTH = 3;
 const CACHE_NAME = 'molly-font-catalog-v4.json';
+const MAX_CACHE_BYTES = 64 * 1024 * 1024;
 const INK_RANGE_END = 0x24f;
 const CFF_INK_PER_ADVANCE = 0.88;
 const STROKE_WEIGHTS = [
@@ -85,8 +94,111 @@ function knownFontDirs() {
 }
 
 function cachePath() {
-  // Tests and fixtures isolate the cache with MOLLY_FONT_CACHE.
-  return process.env.MOLLY_FONT_CACHE ?? path.join(tmpdir(), CACHE_NAME);
+  const user =
+    process.getuid?.() ?? createHash('sha256').update(homedir()).digest('hex').slice(0, 16);
+  const cache = path.resolve(
+    process.env.MOLLY_FONT_CACHE ?? path.join(tmpdir(), `molly-font-catalog-${user}`, CACHE_NAME)
+  );
+  const dir = path.dirname(cache);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const st = lstatSync(dir);
+  if (!st.isDirectory() || !privatelyOwned(st)) throw new Error('unsafe cache directory');
+  return path.join(realpathSync(dir), path.basename(cache));
+}
+
+function privatelyOwned(st) {
+  return process.platform === 'win32' || (st.uid === process.getuid?.() && (st.mode & 0o077) === 0);
+}
+
+function cacheFileStat(cache) {
+  let st;
+  try {
+    st = lstatSync(cache);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  if (!st.isFile() || st.nlink !== 1 || !privatelyOwned(st)) throw new Error('unsafe cache file');
+  return st;
+}
+
+function readCache(cache) {
+  const st = cacheFileStat(cache);
+  if (st === null || st.size > MAX_CACHE_BYTES) return null;
+  const fd = openSync(
+    cache,
+    constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0)
+  );
+  try {
+    const opened = fstatSync(fd);
+    if (
+      !opened.isFile() ||
+      opened.nlink !== 1 ||
+      !privatelyOwned(opened) ||
+      opened.dev !== st.dev ||
+      opened.ino !== st.ino ||
+      opened.size !== st.size
+    )
+      return null;
+    const bytes = Buffer.alloc(st.size + 1);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = readSync(fd, bytes, offset, bytes.length - offset, offset);
+      if (count === 0) break;
+      offset += count;
+    }
+    const after = fstatSync(fd);
+    if (
+      offset !== st.size ||
+      after.size !== st.size ||
+      after.mtimeMs !== st.mtimeMs ||
+      after.ctimeMs !== st.ctimeMs
+    )
+      return null;
+    return JSON.parse(bytes.subarray(0, offset).toString('utf8'));
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function writeCache(cache, catalog) {
+  cacheFileStat(cache);
+  const bytes = JSON.stringify(catalog);
+  if (Buffer.byteLength(bytes) > MAX_CACHE_BYTES) return;
+  const temporary = path.join(path.dirname(cache), `.${CACHE_NAME}-${randomUUID()}`);
+  const fd = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
+  try {
+    try {
+      writeFileSync(fd, bytes);
+    } finally {
+      closeSync(fd);
+    }
+    cacheFileStat(cache);
+    renameSync(temporary, cache);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
+
+function validCachedFace(face) {
+  if (face === null || typeof face !== 'object') return false;
+  const pairs = (rows) =>
+    Array.isArray(rows) &&
+    rows.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === 2 &&
+        row.every((value) => Number.isFinite(value) && value >= 0)
+    );
+  return (
+    ['file', 'family', 'style', 'face'].every((key) => typeof face[key] === 'string') &&
+    ['index', 'weight', 'widthClass', 'unitsPerEm'].every((key) => Number.isFinite(face[key])) &&
+    face.unitsPerEm > 0 &&
+    ['sxHeight', 'sCapHeight'].every((key) => face[key] === null || Number.isFinite(face[key])) &&
+    pairs(face.coverage) &&
+    pairs(face.advances) &&
+    pairs(face.inks)
+  );
 }
 
 function knownDirsLabel() {
@@ -159,10 +271,12 @@ function sfntOffsets(buf) {
   if (buf.length < 12) return [];
   if (buf.toString('ascii', 0, 4) === 'ttcf') {
     const count = u32(buf, 8);
+    if (count > Math.floor((buf.length - 12) / 4)) return [];
     const offsets = [];
     for (let i = 0; i < count; i++) {
       const off = u32(buf, 12 + i * 4);
-      if (off + 12 <= buf.length) offsets.push(off);
+      if (off + 12 > buf.length) return [];
+      offsets.push(off);
     }
     return offsets;
   }
@@ -515,13 +629,14 @@ function loadCatalog(rootDirs) {
   const fingerprint = dirFingerprint(rootDirs);
   let catalog = null;
   try {
-    const cached = JSON.parse(readFileSync(cachePath(), 'utf8'));
+    const cached = readCache(cachePath());
     if (
       cached !== null &&
       typeof cached === 'object' &&
       cached.version === 4 &&
       cached.fingerprint === fingerprint &&
-      Array.isArray(cached.faces)
+      Array.isArray(cached.faces) &&
+      cached.faces.every(validCachedFace)
     ) {
       catalog = cached;
     }
@@ -531,9 +646,7 @@ function loadCatalog(rootDirs) {
   if (catalog === null) {
     catalog = buildCatalog(rootDirs);
     try {
-      const cache = cachePath();
-      mkdirSync(path.dirname(cache), { recursive: true });
-      writeFileSync(cache, JSON.stringify(catalog));
+      writeCache(cachePath(), catalog);
     } catch {
       // Caching is advisory; output still works without a writable $TMPDIR.
     }

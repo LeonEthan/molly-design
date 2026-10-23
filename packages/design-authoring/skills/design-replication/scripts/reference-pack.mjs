@@ -799,20 +799,46 @@ function colorDistance(a, b) {
   return Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2);
 }
 
-/** Most frequent 16-level-quantized color on the region's one-pixel border. */
+function recordMeasuredColor(counts, color) {
+  const key = `${color[0] >> 4},${color[1] >> 4},${color[2] >> 4}`;
+  const entry = counts.get(key);
+  if (entry === undefined) counts.set(key, { count: 1, sum: [...color] });
+  else {
+    entry.count += 1;
+    for (let i = 0; i < 3; i++) entry.sum[i] += color[i];
+  }
+}
+
+function dominantMeasuredColor(counts) {
+  let best = null;
+  for (const entry of counts.values()) {
+    if (best === null || entry.count > best.count) best = entry;
+  }
+  return best === null ? null : best.sum.map((v) => Math.round(v / best.count));
+}
+
+function nonuniformMeasuredColors(counts, color, tolerance) {
+  let total = 0;
+  let outliers = 0;
+  for (const entry of counts.values()) {
+    total += entry.count;
+    if (
+      colorDistance(
+        entry.sum.map((v) => v / entry.count),
+        color
+      ) > MEASURE_INK_DISTANCE
+    ) {
+      outliers += entry.count;
+    }
+  }
+  return outliers > total * tolerance;
+}
+
 function borderBackground(rgb, imageWidth, x, y, w, h) {
   const counts = new Map();
   const sample = (px, py) => {
     const d = (py * imageWidth + px) * 3;
-    const key = `${rgb[d] >> 4},${rgb[d + 1] >> 4},${rgb[d + 2] >> 4}`;
-    const entry = counts.get(key);
-    if (entry === undefined) counts.set(key, { count: 1, sum: [rgb[d], rgb[d + 1], rgb[d + 2]] });
-    else {
-      entry.count += 1;
-      entry.sum[0] += rgb[d];
-      entry.sum[1] += rgb[d + 1];
-      entry.sum[2] += rgb[d + 2];
-    }
+    recordMeasuredColor(counts, [rgb[d], rgb[d + 1], rgb[d + 2]]);
   };
   for (let px = x; px < x + w; px++) {
     sample(px, y);
@@ -822,11 +848,13 @@ function borderBackground(rgb, imageWidth, x, y, w, h) {
     sample(x, py);
     if (w > 1) sample(x + w - 1, py);
   }
-  let best = null;
-  for (const entry of counts.values()) {
-    if (best === null || entry.count > best.count) best = entry;
+  const background = dominantMeasuredColor(counts);
+  if (background !== null && nonuniformMeasuredColors(counts, background, 0.15)) {
+    fail(
+      'measure: nonuniform background; use a whole line on a near-flat background or measure with other image tools'
+    );
   }
-  return best === null ? null : best.sum.map((v) => Math.round(v / best.count));
+  return background;
 }
 
 function hexTriple(color) {
@@ -886,6 +914,7 @@ function measure(imagePath, boxArg) {
   const mask = new Uint8Array(w * h);
   let inkPixels = 0;
   let inkSum = [0, 0, 0];
+  const inkColors = new Map();
   for (let row = 0; row < h; row++) {
     for (let col = 0; col < w; col++) {
       const d = ((y + row) * decoded.width + (x + col)) * 3;
@@ -893,6 +922,7 @@ function measure(imagePath, boxArg) {
       if (colorDistance(color, background) > MEASURE_INK_DISTANCE) {
         mask[row * w + col] = 1;
         inkPixels += 1;
+        recordMeasuredColor(inkColors, color);
         inkSum[0] += color[0];
         inkSum[1] += color[1];
         inkSum[2] += color[2];
@@ -903,6 +933,12 @@ function measure(imagePath, boxArg) {
     fail(
       'measure: no ink pixels (region is all background); region uses the ' +
         `reference's own pixels, ${decoded.width}x${decoded.height}`
+    );
+  }
+  const dominantInk = dominantMeasuredColor(inkColors);
+  if (nonuniformMeasuredColors(inkColors, dominantInk, 0.35)) {
+    fail(
+      'measure: nonuniform foreground or background; use single-color text on a near-flat background or measure with other image tools'
     );
   }
   const ink = inkSum.map((v) => Math.round(v / inkPixels));

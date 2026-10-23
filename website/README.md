@@ -102,5 +102,5 @@ Imported assets are only those the exact current deploy needs. Every file in `as
 
 ## Licences
 
-- Site source and assets: Apache-2.0, the repository licence.
+- Site source and Molly-owned assets: FSL-1.1-ALv2, the repository licence. Each version converts to Apache-2.0 two years after its release. Versions released up to and including v0.1.2 remain available under Apache-2.0.
 - Inter, Instrument Serif, Geist, and JetBrains Mono: SIL Open Font License 1.1. Full licence texts sit next to the fonts in `assets/fonts/` and are listed in the repository `THIRD_PARTY_NOTICES.md`. Subsetting is allowed because none of these files declares a Reserved Font Name.

@@ -36,7 +36,7 @@
     "local-execution"
   ],
   "author": "Molly contributors",
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "engines": {
     "node": ">=22.19.0 <23 || >=23.6.0"
   },

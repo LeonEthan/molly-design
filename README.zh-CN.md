@@ -9,7 +9,7 @@
 
 [![Latest release](https://img.shields.io/github/v/release/LeonEthan/molly-design)](https://github.com/LeonEthan/molly-design/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-black)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue)](LICENSE)
 
 [网站](https://molly-design.pages.dev) · [下载](https://github.com/LeonEthan/molly-design/releases/latest) · [用户指南](USER_GUIDE.zh-CN.md) · [报告问题](https://github.com/LeonEthan/molly-design/issues/new?template=01-bug-report.yml) · [English](README.md)
 
@@ -156,7 +156,7 @@ flowchart LR
 在你的电脑上。作品、版本与会话是本地文件；密钥保存在加密本地存储中。[用户指南](USER_GUIDE.zh-CN.md#备份卸载与数据恢复)列出具体目录与备份方法。
 
 **要花钱吗？**
-Molly 免费且开源。模型与图像使用费由你连接的服务商收取。
+Molly 免费且源代码可用（source-available）。模型与图像使用费由你连接的服务商收取。
 
 **该用哪些模型？**
 可使用上文列表中的任意语言模型与图像模型。Molly 不会替你选择；每个会话使用你选定的连接与模型，出错时会明确提示，不会静默切换。
@@ -195,7 +195,7 @@ corepack pnpm install
 corepack pnpm start:local
 ```
 
-首次构建还会在临时 checkout 中组装 Bento 编辑器，可能需要网络。请先退出正在运行的 Molly；只能运行一个实例。若要与开发数据隔离，可设置 `MOLLY_DATA_DIR="$(pwd)/.molly-dev-data"`。开源构建无需 `.env`、账户或云环境变量。
+首次构建还会在临时 checkout 中组装 Bento 编辑器，可能需要网络。请先退出正在运行的 Molly；只能运行一个实例。若要与开发数据隔离，可设置 `MOLLY_DATA_DIR="$(pwd)/.molly-dev-data"`。源代码可用（source-available）构建无需 `.env`、账户或云环境变量。
 
 Apple Silicon macOS 日常真机测试可运行 `pnpm preview:install`。命令复用正式打包流程，
 将 **Molly Preview.app** 安装到 `~/Applications`，可直接从 Finder 启动。
@@ -229,7 +229,7 @@ Preview 的配置、数据和后台服务独立，可与 Molly 同时运行，�
 - 社区拉取请求请控制在 1,000 行变更以内；更大改动请先开 Issue 说明分析。
 - 使用 [Conventional Commits](https://www.conventionalcommits.org/) 与拉取请求模板。
 
-完整条款与流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。贡献按 Apache-2.0 接受。
+完整条款与流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。贡献按 FSL-1.1-ALv2 接受。
 
 ## 帮助与社区
 
@@ -245,7 +245,7 @@ Preview 的配置、数据和后台服务独立，可与 Molly 同时运行，�
 
 ## 许可证与致谢
 
-Molly 以 [Apache License 2.0](LICENSE) 发布。
+Molly Design 以源代码可用方式在 [Functional Source License, Version 1.1, ALv2 Future License](LICENSE)（FSL-1.1-ALv2）下发布。每个版本在发布两年后转为 Apache License 2.0。截至 v0.1.2（含）的已发布版本仍可在 Apache License 2.0 下使用。
 
 Molly 是基于 [Lody](https://github.com/LodyAI/Lody) 的独立项目；保留 Lody 原作者与 Apache-2.0 许可证。[Bento](https://github.com/nyblnet/bento) 编辑器按 MIT 许可证 vendored。其他组件保留各自许可证。见 [NOTICE](NOTICE) 与 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 

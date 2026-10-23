@@ -2,7 +2,7 @@
   "name": "@molly/electron",
   "productName": "Molly",
   "private": true,
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "version": "0.1.2",
   "description": "Molly — local desktop canvas for Agent-assisted graphic design",
   "main": "./out/main/index.js",

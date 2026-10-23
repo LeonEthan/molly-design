@@ -21,6 +21,25 @@ API endpoints — to map what exists; the gate needs inspected images, not a map
 of the site. A search that returned nothing useful is evidence to widen or stop,
 not to dig into the site's machinery. Write no scripts that fetch or crawl pages; read the site through the browser tools only.
 
+## Survey a search in one script
+
+Run each search as one `codemode` script that looks at several screens, so
+scrolling is part of the search, not a later step:
+
+    await tools.mcp__molly_browser__navigate({ url: '<the site search URL for this query>' });
+    for (let screen = 0; screen < 3; screen++) {
+      const shot = await tools.mcp__molly_browser__screenshot({});
+      for (const block of shot.content) if (block.type === 'image') image(block);
+      await tools.mcp__molly_browser__scroll({ deltaY: 900 });
+    }
+
+If the site has no search URL, type the query into its search box first in the
+same script. Judge the screens together; if the last one still shows new
+results and none has two clear candidates, run one more screen. Then scroll back
+to the screen you pick from and take one `snapshot` for image refs. Choose the
+next search from what these screens show: a strong thumbnail's designer, style
+or term.
+
 ## Inspect and keep sources
 
 Judge results from the grid screenshot first and look at picks through their saved files; the gate says what counts as inspection. Open a detail page only when a thumbnail leaves a real doubt. A directly opened

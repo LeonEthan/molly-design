@@ -34,8 +34,11 @@ scrolling is part of the search, not a later step:
     }
 
 If the site has no search URL, type the query into its search box first in the
-same script. Judge the screens together; if the last one still shows new
-results and none has two clear candidates, run one more screen. Then scroll back
+same script. If it has no working search, open one tag, mood, category or
+designer page that fits the direction words instead; that page is the search.
+Viewing one such page is not crawling the site. Judge the screens together; if
+the last one still shows new results and none has two clear candidates, run one
+more screen. Then scroll back
 to the screen you pick from and take one `snapshot` for image refs. Choose the
 next search from what these screens show: a strong thumbnail's designer, style
 or term.

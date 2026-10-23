@@ -924,7 +924,33 @@ function measure(imagePath, boxArg) {
       if (rowInk[row] > 0) lastInkRow = row;
       row += 1;
     }
-    lines.push({ top, bottom: lastInkRow });
+    const columns = new Uint8Array(w);
+    for (let r = top; r <= lastInkRow; r++) {
+      for (let col = 0; col < w; col++) {
+        if (mask[r * w + col]) columns[col] = 1;
+      }
+    }
+    lines.push({ top, bottom: lastInkRow, columns });
+  }
+
+  for (let i = lines.length - 2; i >= 0; i--) {
+    const mark = lines[i];
+    const body = lines[i + 1];
+    const bodyHeight = body.bottom - body.top + 1;
+    const gap = body.top - mark.bottom - 1;
+    const tolerance = Math.max(1, Math.floor(bodyHeight * 0.15));
+    const aligned = mark.columns.every((occupied, col) => {
+      if (!occupied) return true;
+      for (let delta = -tolerance; delta <= tolerance; delta++) {
+        if (body.columns[col + delta]) return true;
+      }
+      return false;
+    });
+    if (mark.bottom - mark.top + 1 <= bodyHeight * 0.5 && gap <= bodyHeight * 0.75 && aligned) {
+      body.top = mark.top;
+      for (let col = 0; col < w; col++) body.columns[col] ||= mark.columns[col];
+      lines.splice(i, 1);
+    }
   }
 
   const out = [];
@@ -940,26 +966,22 @@ function measure(imagePath, boxArg) {
       }
       return col1 - col0 + 1;
     };
-    // Rows whose span covers most of the line's ink form the core band;
-    // isolated ascenders and diacritics stay outside it. Scan from the top so
-    // sparse descender rows below the baseline are never merged in.
     const spans = [];
     for (let r = line.top; r <= line.bottom; r++) spans.push(rowSpan(r));
     const spanThreshold = Math.max(...spans) * 0.5;
-    let core = null;
+    const cores = [];
     for (let i = 0; i < spans.length; i++) {
       const r = line.top + i;
-      if (spans[i] < spanThreshold) continue;
-      if (core === null) {
-        core = { top: r, bottom: r };
-      } else if (r <= core.bottom + 1) {
-        core.bottom = r;
+      if (rowInk[r] === 0 || spans[i] < spanThreshold) continue;
+      const last = cores.at(-1);
+      if (last !== undefined && r === last.bottom + 1) {
+        last.bottom = r;
+        last.ink += rowInk[r];
       } else {
-        break;
+        cores.push({ top: r, bottom: r, ink: rowInk[r] });
       }
     }
-    // Ascenders and capitals rise from the core without an empty gap;
-    // descenders hang below it.
+    const core = cores.reduce((best, band) => (band.ink > best.ink ? band : best));
     while (core.top > line.top && rowInk[core.top - 1] > 0) core.top -= 1;
     const capHeight = core.bottom - core.top + 1;
     const baseline = core.bottom;
@@ -991,7 +1013,6 @@ function measure(imagePath, boxArg) {
         }
       }
     }
-    const ascender = core.top > line.top ? core.top - line.top : null;
     let left = w;
     let right = -1;
     for (let r = line.top; r <= line.bottom; r++) {
@@ -1022,7 +1043,7 @@ function measure(imagePath, boxArg) {
       `baseline ${y + baseline} | ` +
       (xHeight === null ? 'xHeight ?' : `xHeight ${xHeight}`) +
       ' | ' +
-      (ascender === null ? `capOrAscender ${capHeight}` : `capOrAscender ${ascender}`) +
+      `capOrAscender ${capHeight}` +
       ` | descender ${descender} | stroke ${stroke} | glyphs ${glyphs} | glyphInk ${glyphInk} | ` +
       `ink ${hexTriple(ink)} on ${hexTriple(background)}`;
     const ratios = [];

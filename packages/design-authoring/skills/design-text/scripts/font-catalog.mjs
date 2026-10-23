@@ -19,7 +19,7 @@
 //
 // Only the known system font directories are scanned (macOS, Windows, Linux),
 // never arbitrary paths; --dirs exists for fixtures and tests. Results cache
-// in $TMPDIR/molly-font-catalog-v3.json (MOLLY_FONT_CACHE overrides the
+// in $TMPDIR/molly-font-catalog-v4.json (MOLLY_FONT_CACHE overrides the
 // location), invalidated by directory mtimes.
 
 import { createHash } from 'node:crypto';
@@ -35,7 +35,7 @@ import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 
 const SCAN_DEPTH = 3;
-const CACHE_NAME = 'molly-font-catalog-v3.json';
+const CACHE_NAME = 'molly-font-catalog-v4.json';
 const INK_RANGE_END = 0x24f;
 const CFF_INK_PER_ADVANCE = 0.88;
 const STROKE_WEIGHTS = [
@@ -49,6 +49,7 @@ const STROKE_WEIGHTS = [
 ];
 const CJK_RANGES = [
   [0x2e80, 0x9fff],
+  [0xac00, 0xd7af],
   [0xf900, 0xfaff],
   [0x20000, 0x2a6df],
 ];
@@ -212,14 +213,16 @@ function subtableLookup(buf, offset, codepoint) {
   if (offset + 2 > buf.length) return 0;
   const format = u16(buf, offset);
   if (format === 12) {
-    const numGroups = u32(buf, offset + 12);
-    for (let i = 0; i < numGroups; i++) {
-      const rec = offset + 16 + i * 12;
-      if (rec + 12 > buf.length) break;
+    let lo = 0;
+    let hi = Math.min(u32(buf, offset + 12), Math.floor((buf.length - offset - 16) / 12)) - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      const rec = offset + 16 + mid * 12;
       const startChar = u32(buf, rec);
       const endChar = u32(buf, rec + 4);
-      if (codepoint < startChar || codepoint > endChar) continue;
-      return u32(buf, rec + 8) + (codepoint - startChar);
+      if (codepoint < startChar) hi = mid - 1;
+      else if (codepoint > endChar) lo = mid + 1;
+      else return u32(buf, rec + 8) + (codepoint - startChar);
     }
     return 0;
   }
@@ -375,17 +378,17 @@ function parseFace(buf, sfntOffset, file, index) {
       if (box !== null) inks.push([code, box.xMax - box.xMin]);
     }
   }
-  // Keep advances only for BMP letters and digits; match looks them up.
   const advances = [];
   const hmtx = tables.get('hmtx');
   if (hmtx !== undefined && cmap !== undefined) {
-    for (let code = 0x20; code <= 0x2fff; code++) {
-      if (!inRanges(coverage, code)) continue;
-      const glyph = cmapLookup(buf, cmap, code);
-      const metric = Math.min(glyph, numHMetrics - 1);
-      const off = hmtx.offset + 4 * metric;
-      if (off + 2 > buf.length) break;
-      advances.push([code, u16(buf, off)]);
+    for (const [start, end] of coverage) {
+      for (let code = Math.max(0x20, start); code <= Math.min(0x10ffff, end); code++) {
+        const glyph = cmapLookup(buf, cmap, code);
+        const metric = Math.min(glyph, numHMetrics - 1);
+        const off = hmtx.offset + 4 * metric;
+        if (off + 2 > buf.length) break;
+        advances.push([code, u16(buf, off)]);
+      }
     }
   }
   const names = nameStrings(buf, tables.get('name'));
@@ -505,7 +508,7 @@ function buildCatalog(rootDirs) {
       a.file.localeCompare(b.file) ||
       a.index - b.index
   );
-  return { fingerprint: dirFingerprint(rootDirs), faces };
+  return { version: 4, fingerprint: dirFingerprint(rootDirs), faces };
 }
 
 function loadCatalog(rootDirs) {
@@ -516,6 +519,7 @@ function loadCatalog(rootDirs) {
     if (
       cached !== null &&
       typeof cached === 'object' &&
+      cached.version === 4 &&
       cached.fingerprint === fingerprint &&
       Array.isArray(cached.faces)
     ) {
@@ -553,7 +557,9 @@ function coversText(face, text) {
 }
 
 function coversCjk(face) {
-  return CJK_RANGES.some(([lo, hi]) => inRanges(face.coverage, lo) && inRanges(face.coverage, hi));
+  return CJK_RANGES.some(([lo, hi]) =>
+    face.coverage.some(([start, end]) => start <= hi && end >= lo)
+  );
 }
 
 function listLine(face) {
@@ -651,7 +657,9 @@ function runMatch(argv) {
   const needCjk = args.cjk !== undefined;
   const letters = [...args.text].filter((ch) => !/\s/u.test(ch));
   const chars = letters.length;
+  const xHeightOnly = /^[aceimnorsuvwxz]+$/.test(letters.join(''));
   const notes = [];
+  if (xHeightOnly) notes.push('note: --cap interpreted as x-height for x-height-only Latin copy');
   let useGlyphs = false;
   if (glyphs !== undefined && glyphInk !== undefined) {
     if (glyphs === chars) {
@@ -667,7 +675,8 @@ function runMatch(argv) {
 
   const rows = [];
   for (const face of catalog.faces) {
-    if (face.sCapHeight === null || face.sCapHeight === 0) continue;
+    const height = xHeightOnly ? face.sxHeight : face.sCapHeight;
+    if (height === null || height <= 0) continue;
     if (familyFilter !== undefined && !face.family.toLowerCase().includes(familyFilter)) continue;
     if (!coversText(face, args.text)) continue;
     if (needCjk && !coversCjk(face)) continue;
@@ -700,7 +709,7 @@ function runMatch(argv) {
     const outerBearings =
       (letterAdvances[0] - letterInks[0]) / 2 +
       (letterAdvances[chars - 1] - letterInks[chars - 1]) / 2;
-    const scale = cap / face.sCapHeight;
+    const scale = cap / height;
     const fontSize = face.unitsPerEm * scale;
     const predicted = (advanceSum - outerBearings) * scale;
     const gaps = [...args.text].length - 1;

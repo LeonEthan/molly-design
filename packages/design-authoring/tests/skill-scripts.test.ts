@@ -463,6 +463,55 @@ describe('font-catalog.mjs', () => {
     expect(lines[1]).toContain('Next: molly_view_image { fonts: [these rows], text');
   });
 
+  it('scales x-height-only lowercase copy with the font x-height', () => {
+    const { dir, cacheEnv } = setupFontDir();
+    copyFixture(dir);
+    for (const text of ['summer', 'minimum', 'iii']) {
+      const result = runCatalog(
+        ['match', '--text', text, '--width', '300', '--cap', '51', '--dirs', dir],
+        cacheEnv
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain('fontSize 100.0');
+    }
+  });
+
+  it.each(['中', 'あ', '한', '𠀀'])(
+    'matches covered CJK copy %s on cold and warm catalogs',
+    (text) => {
+      const { dir, cacheEnv } = setupFontDir();
+      const source = Buffer.from(readFileSync(fixtureFont));
+      const cmap = Buffer.alloc(40);
+      cmap.writeUInt16BE(1, 2);
+      cmap.writeUInt16BE(3, 4);
+      cmap.writeUInt16BE(10, 6);
+      cmap.writeUInt32BE(12, 8);
+      cmap.writeUInt16BE(12, 12);
+      cmap.writeUInt32BE(28, 16);
+      cmap.writeUInt32BE(1, 24);
+      const code = text.codePointAt(0) ?? 0;
+      cmap.writeUInt32BE(code, 28);
+      cmap.writeUInt32BE(code, 32);
+      cmap.writeUInt32BE(1, 36);
+      for (let i = 0; i < source.readUInt16BE(4); i++) {
+        const rec = 12 + i * 16;
+        if (source.toString('ascii', rec, rec + 4) === 'cmap') {
+          source.writeUInt32BE(source.length, rec + 8);
+          source.writeUInt32BE(cmap.length, rec + 12);
+        }
+      }
+      writeFileSync(path.join(dir, 'Cjk.ttf'), Buffer.concat([source, cmap]));
+      for (const phase of ['cold', 'warm']) {
+        const result = runCatalog(
+          ['match', '--text', text, '--width', '100', '--cap', '72', '--cjk', '--dirs', dir],
+          cacheEnv
+        );
+        expect(result.status, `${phase}: ${result.stderr}`).toBe(0);
+        expect(result.stdout).toContain('1. Molly Test Serif | fontSize 100.0');
+      }
+    }
+  );
+
   it('skips faces without cap height and filters uncovered text', () => {
     const { dir, cacheEnv } = setupFontDir();
     // NoCap: OS/2 version 1 drops sxHeight/sCapHeight; the H yMax fallback
@@ -725,6 +774,29 @@ describe('reference-pack.mjs measure', () => {
       'capOrAscender 20 | descender 0 | stroke 3 | glyphs 17 | glyphInk 51'
     );
     expect(lines[3]).toBe('  ratios: stroke/cap 0.15');
+  });
+
+  it.each([0, 2])('keeps detached dots or accents with their stems (offset %s)', (offset) => {
+    const ref = path.join(workdir(), 'marks.png');
+    writeFileSync(
+      ref,
+      encodeTestPng(80, 90, 3, (x, y) => {
+        const stem = x >= 10 && x < 55 && (x - 10) % 15 < 4;
+        const mark = x >= 10 + offset && x < 55 + offset && (x - 10 - offset) % 15 < 4;
+        const ink =
+          (mark && y >= 5 && y <= 8) ||
+          (stem && y >= 15 && y <= 34) ||
+          (stem && y >= 60 && y <= 79);
+        return ink ? [0, 0, 0, 255] : [255, 255, 255, 255];
+      })
+    );
+    const result = run('reference-pack.mjs', ['measure', ref, '0,0,80,90'], replicationSkillDir);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.match(/^line /gm)).toHaveLength(2);
+    expect(result.stdout).toContain('line 1: ink 10,5');
+    expect(result.stdout).toContain('baseline 34 | xHeight ? | capOrAscender 20 | descender 0');
+    expect(result.stdout).toContain('line 2: ink 10,60');
+    expect(result.stdout).toContain('glyphs 3');
   });
 
   it('measures a sub-region in original image coordinates', () => {

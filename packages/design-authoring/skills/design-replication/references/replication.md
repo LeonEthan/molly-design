@@ -43,7 +43,9 @@ Fit each distinct text style with the same four steps, never a loop:
    measure again; that is the only repeat.
 2. **Shortlist.** From the `design-text` skill's directory, run
    `node scripts/font-catalog.mjs match --text "<the line as shown>" --width <ink width> --cap <cap height> --stroke <stroke> --glyphs <glyphs> --glyph-ink <glyphInk> [--x <x-height>]`.
-   It lists one face per family with a font size and letter spacing.
+   For x-height-only Latin copy such as `summer` or `minimum`, pass the measured
+   body height as `--cap`; the matcher recognizes the copy and scales it against
+   the font’s x-height. It lists one face per family with a font size and letter spacing.
 3. **Look once.** Pass every listed row to `molly_view_image` with `fonts`,
    the same `text`, and the reference `path` with `region` set to that line.
    Choose the family by letter shapes (terminals, `R`/`G`/`a` forms, round

@@ -63,3 +63,46 @@ from the committed SFNT fixture. `pnpm check` passed (CLI: 3,014 passed and thre
 existing skips), as did `pnpm format` with the concurrently owned skill tree
 explicitly ignored, `pnpm run docs check` and `git diff --check`. Existing docs
 size/translation warnings remain; there are no registered protected topics.
+
+## PR #231 review corrections
+
+The review exposed three defects in the shipped fitting helpers. X-height-only
+Latin copy (`summer`, `minimum`, `iii`) supplied its body height through `--cap`
+but was scaled against cap height. The matcher now recognizes that copy and uses
+`sxHeight`, reporting that interpretation. Other copy keeps cap-height scaling;
+faces without the required height remain excluded. This is a Latin heuristic,
+not general script or optical-height recognition.
+
+The catalog now retains advances for every covered Unicode range, including
+supplementary-plane characters. The CJK filter accepts overlap with CJK ranges,
+including Hangul, rather than requiring both endpoints of an entire block.
+Actual copy must still pass coverage and advance checks. Cache version 4 forces
+old truncated advance maps to rebuild, including at an overridden cache path.
+
+Measurement joins small detached bands to a nearby taller body when their columns
+align, with the gap bounded relative to the body's height. The body with the most
+ink supplies the core baseline and height; dots and accents remain in the ink box
+and glyph measurement. Multi-line segmentation remains approximate for tightly
+spaced lines or mixed type sizes.
+
+Reuse: adapt the existing sfnt/cmap/advance parser, row bands and synthetic-fixture
+tests. External font tooling or a separate image-analysis dependency would add
+setup without resolving an uncovered responsibility. The merge with `main`
+preserves both the Round 5/6 Part C and Part A test records; no historical result
+is changed. These repairs do not change creative-stage policy or approve the Spec.
+
+Deterministic regression cases cover lowercase sizes, CJK ideographs/kana/Hangul
+and supplementary characters on cold and warm caches, and detached/offset marks
+above stems alongside a separate second line. Full validation is recorded in the
+[PR](https://github.com/LeonEthan/molly-design/pull/231); no paid model calls or
+visual acceptance reruns are required for these helper corrections.
+
+Review-fix validation: `pnpm check` passed after initializing the required ACP
+core/DSH contract submodules and granting local IPC test sockets access outside
+the runner sandbox. This includes 178 authoring, 3,014 CLI and 3,367 component
+tests, with the existing suite skips retained. `pnpm format`,
+`pnpm run docs check --base origin/main` and `git diff --check` passed.
+A real local system-font scan took 8.4 seconds cold; cached Chinese matching
+returned candidates in 0.27 seconds. The binary-search lookup produced the same
+catalog bytes as the linear lookup. These timings are observations on one Mac,
+not deterministic performance assertions or cross-platform acceptance.

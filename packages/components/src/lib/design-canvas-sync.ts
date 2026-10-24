@@ -59,13 +59,30 @@ function latestCommittedDesignOutcome(
   history: readonly { designOutcome?: unknown }[] | undefined,
   artworkId: string
 ) {
-  let latest: { turnId: string; revisionId: string } | undefined;
+  let latest: { turnId: string; revisionId: string; timestamp?: string } | undefined;
   for (const entry of history ?? []) {
     const outcome = sanitizeDesignTurnOutcome(entry.designOutcome);
     if (outcome?.status === 'committed' && outcome.artworkId === artworkId && outcome.revisionId)
-      latest = { turnId: outcome.turnId, revisionId: outcome.revisionId };
+      latest = {
+        turnId: outcome.turnId,
+        revisionId: outcome.revisionId,
+        timestamp: outcome.timestamp,
+      };
   }
   return latest;
+}
+
+export function latestCommittedDesignReceiptDetails(
+  history: readonly { designOutcome?: unknown }[] | undefined,
+  artworkId: string
+): { id: string; timestamp?: string } | undefined {
+  const latest = latestCommittedDesignOutcome(history, artworkId);
+  return (
+    latest && {
+      id: `${latest.turnId}:${latest.revisionId}`,
+      timestamp: latest.timestamp,
+    }
+  );
 }
 
 /** A receipt identity distinguishes a new successful turn even at the same revision. */
@@ -73,8 +90,7 @@ export function latestCommittedDesignReceipt(
   history: readonly { designOutcome?: unknown }[] | undefined,
   artworkId: string
 ): string | undefined {
-  const latest = latestCommittedDesignOutcome(history, artworkId);
-  return latest && `${latest.turnId}:${latest.revisionId}`;
+  return latestCommittedDesignReceiptDetails(history, artworkId)?.id;
 }
 
 export function latestCommittedDesignTurnId(

@@ -23,7 +23,7 @@ import { userAtom, currentWorkspaceIdAtom, getAllAgentConfigAtom } from '@/atoms
 import { getIpcServices, onIpcEvent, type IpcServices } from '@/lib/electron-ipc-client';
 import { isDesignCanvasRetired, registerDesignCanvas } from '@/lib/design-canvas-close';
 import {
-  latestCommittedDesignReceipt,
+  latestCommittedDesignReceiptDetails,
   latestCommittedDesignTurnId,
   syncOpenDesignCanvas,
 } from '@/lib/design-canvas-sync';
@@ -149,6 +149,8 @@ export function DesignCanvas({
   sessionId,
   artworkId: artworkIdProp,
   active,
+  followExecution = false,
+  receiptSessionId,
   workspaceSlug,
   name,
   onReferenceSelection,
@@ -168,6 +170,8 @@ export function DesignCanvas({
    */
   artworkId?: string;
   active: boolean;
+  followExecution?: boolean;
+  receiptSessionId?: string;
   workspaceSlug: string;
   name: string;
   onReferenceSelection?: (reference: DesignElementReference, prompt?: string, image?: File) => void;
@@ -247,6 +251,8 @@ export function DesignCanvas({
   const [versionsLoad, setVersionsLoad] = useState<VersionHistoryLoad>({ phase: 'loading' });
   const versionsGeneration = useRef(0);
   const preview = !!canvasState?.turnId;
+  const observeCurrentSession = active || followExecution;
+  const previewSubscriptionActive = active || (preview && followExecution);
   const readonlyView = canvasState?.readonly ?? true;
   const currentVersion = versions.find((v) => v.commitId === canvasState?.baseVersionId);
   const visiblePreview = preview && previewReady;
@@ -276,11 +282,11 @@ export function DesignCanvas({
   );
   useEffect(() => {
     let cancelled = false;
-    if (active) void refreshVersions(() => !cancelled).catch(() => {});
+    if (observeCurrentSession) void refreshVersions(() => !cancelled).catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [active, refreshVersions]);
+  }, [observeCurrentSession, refreshVersions]);
   const [previewError, setPreviewError] = useState('');
   const [automaticError, setAutomaticError] = useState('');
   const previewGeneration = useRef(0);
@@ -313,12 +319,19 @@ export function DesignCanvas({
     const generationRef = previewGeneration;
     setPreviewReady(false);
     setPreviewError('');
-    if (preview && active && !canvasState?.preparing) void refreshPreview();
-    else if (!active) void getIpcServices()?.design.closePreview(hostId);
+    if (preview && previewSubscriptionActive && !canvasState?.preparing) void refreshPreview();
+    else if (!previewSubscriptionActive) void getIpcServices()?.design.closePreview(hostId);
     return () => {
       ++generationRef.current;
     };
-  }, [preview, active, canvasState?.turnId, canvasState?.preparing, hostId, refreshPreview]);
+  }, [
+    preview,
+    previewSubscriptionActive,
+    canvasState?.turnId,
+    canvasState?.preparing,
+    hostId,
+    refreshPreview,
+  ]);
   useEffect(
     () => () => {
       void getIpcServices()?.design.closePreview(hostId);
@@ -326,7 +339,7 @@ export function DesignCanvas({
     [hostId]
   );
   useEffect(() => {
-    if (!active) return undefined;
+    if (!observeCurrentSession) return undefined;
     const refresh = () => {
       void refreshVersions().catch(() => {});
     };
@@ -340,11 +353,16 @@ export function DesignCanvas({
       reconnect();
       window.removeEventListener('focus', refresh);
     };
-  }, [active, artworkId, refreshVersions]);
+  }, [observeCurrentSession, artworkId, refreshVersions]);
   const { history: conversationView, synced } = useSessionDoc(sessionId as SessionId, {
     enabled: sessionId.length > 0,
   });
+  const { history: additionalConversationView, synced: additionalSynced } = useSessionDoc(
+    (receiptSessionId ?? sessionId) as SessionId,
+    { enabled: Boolean(receiptSessionId && receiptSessionId !== sessionId) }
+  );
   const designHistory = useConversationIndexRows(conversationView);
+  const additionalDesignHistory = useConversationIndexRows(additionalConversationView);
   const finalized = designHistory
     ?.filter(
       (entry) => entry.role === 'assistant' && (entry.finished || typeof entry.endedAt === 'number')
@@ -352,7 +370,7 @@ export function DesignCanvas({
     .map((entry) => `${entry.id}:${entry.endedAt}:${JSON.stringify(entry.designOutcome)}`)
     .join('|');
   useEffect(() => {
-    if (!preview || !active) return undefined;
+    if (!preview || !previewSubscriptionActive) return undefined;
     const reconcile = () => {
       void refreshPreview();
     };
@@ -371,15 +389,24 @@ export function DesignCanvas({
       reconnect();
       window.removeEventListener('focus', reconcile);
     };
-  }, [preview, active, hostId, refreshPreview]);
+  }, [preview, previewSubscriptionActive, hostId, refreshPreview]);
   useEffect(() => {
-    if (preview && active && finalized) void refreshPreview();
-  }, [finalized, preview, active, refreshPreview]);
-  const committedReceipt = latestCommittedDesignReceipt(designHistory, artworkId);
+    if (preview && previewSubscriptionActive && finalized) void refreshPreview();
+  }, [finalized, preview, previewSubscriptionActive, refreshPreview]);
+  const rootReceipt = latestCommittedDesignReceiptDetails(designHistory, artworkId);
+  const additionalReceipt = latestCommittedDesignReceiptDetails(additionalDesignHistory, artworkId);
+  const useAdditionalReceipt = Boolean(
+    additionalReceipt &&
+    (!rootReceipt ||
+      Date.parse(additionalReceipt.timestamp ?? '') > Date.parse(rootReceipt.timestamp ?? ''))
+  );
+  const committedReceipt = (useAdditionalReceipt ? additionalReceipt : rootReceipt)?.id;
+  const committedSynced = useAdditionalReceipt ? additionalSynced : synced;
+  const committedDesignHistory = useAdditionalReceipt ? additionalDesignHistory : designHistory;
   const turnElements = useRef({ view: conversationView, committedTurnId: '' });
   turnElements.current = {
-    view: conversationView,
-    committedTurnId: latestCommittedDesignTurnId(designHistory, artworkId) ?? '',
+    view: useAdditionalReceipt ? additionalConversationView : conversationView,
+    committedTurnId: latestCommittedDesignTurnId(committedDesignHistory, artworkId) ?? '',
   };
   const [outsideChanges, setOutsideChanges] = useState<{ ids: string[]; removed: number } | null>(
     null
@@ -643,7 +670,7 @@ export function DesignCanvas({
     settle,
   ]);
   useEffect(() => {
-    if (!synced || !committedReceipt) return undefined;
+    if (!committedSynced || !committedReceipt) return undefined;
     let cancelled = false;
     void syncOpenDesignCanvas(artworkId, hostId)
       .then(async (changes) => {
@@ -683,7 +710,7 @@ export function DesignCanvas({
     return () => {
       cancelled = true;
     };
-  }, [artworkId, hostId, committedReceipt, synced, refreshVersions, settle]);
+  }, [artworkId, hostId, committedReceipt, committedSynced, refreshVersions, settle]);
   const run = (action: () => Promise<unknown>) => {
     setBusy(true);
     setError('');

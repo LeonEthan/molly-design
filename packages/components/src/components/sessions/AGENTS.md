@@ -21,12 +21,12 @@ Files: [README.md](README.md). Scopes:
 
 ## Shell, side panel, side chats
 
-- File, historical diff and browser surfaces use closeable right-panel tabs.
-  `sidePanelTabs` owns order and close fallback; retired Changes entries show Files.
+- File/diff/browser tabs are closeable; `sidePanelTabs` owns order/fallback; retired
+  Changes shows Files.
 - New design tabs inherit parent artwork metadata; human forks share the workspace.
   No Git probe/new-worktree menu; recover accepted worktree forks.
-- Keep one canvas, Save version and direct history switching. Only valid Agent
-  drafts replace its display; execution/processing owns readonly.
+- Keep one canvas, Save version and direct history switching. Only valid Agent drafts
+  replace its display; execution/processing owns readonly.
 - Portal a sole canvas toolbar only when it fits (`soloPanelMinWidth`);
   `DesignCanvas` owns state.
 - Attachment recovery clears only attachment errors from the current view generation;
@@ -36,10 +36,8 @@ Files: [README.md](README.md). Scopes:
 - `SessionMeta.openedBySessionId` is presentation-only provenance: never
   `parentSessionId`, never rolled into the opener, never filtered out of the
   list. Navigation carries root + exact tab ids.
-- The collapsed side panel stays mounted: anything polling or connected in it
-  must take an on-screen prop and pause itself.
-- Panel mount is not preview ownership — never release an endpoint or revoke a
-  tunnel from component cleanup.
+- Collapsed panels stay mounted and pause, except the viewed running canvas's non-Zen
+  follow subscription. Mount is not ownership: cleanup releases no endpoints/tunnels.
 
 ## Browser and Managed Preview
 
@@ -49,13 +47,14 @@ Files: [README.md](README.md). Scopes:
 - INVARIANT: a managed preview is never a pivot; approval cannot make a LAN
   target safe. Agent-authored navigation (`fromPageContent`) never opens a
   private-LAN destination — only the address bar may.
-- Static HTML runs `allow-scripts`-only from a policy-owned `srcdoc`; truncated
-  documents are never executable and static frames die with their tab.
-- Preview comment writes use `runtime.writer.mutatePreviewVisualComments`, never store `setState`.
-- Reattach hidden Agent pages without navigation; use takeover state. Agent control
-  reveals Browser once per Turn, never in Zen. Keep the native surface bridge
-  stable across renders; same-page state must preserve address drafts.
-  Agent navigation stays native, including loopback, without site/public-IP scopes.
+- Static HTML uses policy-owned `allow-scripts` `srcdoc`; truncated documents never
+  execute; static frames die with their tab.
+- Preview comments use `runtime.writer.mutatePreviewVisualComments`; never store `setState`.
+- Reattach hidden Agent pages without navigation; use takeover state. Keep native
+  bridge/address drafts stable on same-page renders. Agent navigation stays native,
+  even loopback, without site/IP scopes. Current-tab follow never navigates/focuses/exits
+  Zen: browser segments/previews yield to manual actions; receipts reveal Design once
+  anyway (stored state only in Zen).
 
 - Keep Stop reachable during permissions/questions. User Stop sends `stop`
   (`sessionStopControl: 2`), never `interrupt`; unknown steer has no resend.

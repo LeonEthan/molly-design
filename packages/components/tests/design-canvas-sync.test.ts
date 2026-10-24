@@ -5,7 +5,11 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
   getIpcServices: getIpcServicesMock,
 }));
 
-import { latestCommittedDesignRevision, syncOpenDesignCanvas } from '../src/lib/design-canvas-sync';
+import {
+  latestCommittedDesignReceiptDetails,
+  latestCommittedDesignRevision,
+  syncOpenDesignCanvas,
+} from '../src/lib/design-canvas-sync';
 
 const sha = (seed: string) => seed.repeat(64).slice(0, 64);
 const ARTWORK = 'artwork-1';
@@ -114,6 +118,15 @@ describe('latestCommittedDesignRevision', () => {
     };
     expect(latestCommittedDesignRevision([committed(FIRST)], ARTWORK)).toBe(FIRST);
     expect(latestCommittedDesignRevision([withThumbnail], ARTWORK)).toBe(FIRST);
+  });
+});
+
+describe('latestCommittedDesignReceiptDetails', () => {
+  it('keeps the committed timestamp beside the existing receipt identity', () => {
+    expect(latestCommittedDesignReceiptDetails([committed(FIRST)], ARTWORK)).toEqual({
+      id: `turn-1:${FIRST}`,
+      timestamp: '2026-09-10T00:00:00.000Z',
+    });
   });
 });
 

@@ -3551,11 +3551,7 @@ const SessionDetail = ({
             sessionId={activeSession.id}
             artworkId={activeSession.design?.artworkId ?? activeSession.id}
             workspaceSlug={workspaceSlug ?? ''}
-            followTurnId={
-              isZenLayoutMode || !sidebarFollowSession?.processingUserMsgId
-                ? null
-                : `assistant:${sidebarFollowSession.processingUserMsgId}`
-            }
+            followExecution={!isZenLayoutMode && Boolean(sidebarFollowSession?.processingUserMsgId)}
             receiptSessionId={sidebarFollowSession?.id ?? activeSession.id}
             active={
               activeSidebarTab === 'design' &&

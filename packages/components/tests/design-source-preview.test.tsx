@@ -161,13 +161,13 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-const mount = (props?: { active?: boolean; followTurnId?: string | null }) =>
+const mount = (props?: { active?: boolean; followExecution?: boolean }) =>
   act(async () =>
     root.render(
       <DesignCanvas
         sessionId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         active={props?.active ?? true}
-        followTurnId={props?.followTurnId ?? null}
+        followExecution={props?.followExecution ?? false}
         workspaceSlug="local"
         name="Synthetic"
       />
@@ -298,7 +298,7 @@ test('keeps preview pixels through turn completion under a menu until the editor
 test('hidden canvas retains the current run subscription without showing it and releases at completion', async () => {
   state.canvasState = { readonly: true, turnId: 'turn-a', preparing: false, changed: true };
   state.refresh = async () => ({ status: 'ready', sourceIdentity: 'step-1' });
-  await mount({ active: false, followTurnId: 'turn-a' });
+  await mount({ active: false, followExecution: true });
   expect(state.previewSubscribed).toBe(true);
   expect(state.previewVisible).toBe(false);
   expect(state.visible).toBe(false);
@@ -312,9 +312,9 @@ test('hidden canvas retains the current run subscription without showing it and 
   expect(state.previewVisible).toBe(false);
 });
 
-test('hidden canvas does not subscribe to another session turn', async () => {
+test('hidden canvas does not subscribe without current session execution', async () => {
   state.canvasState = { readonly: true, turnId: 'turn-a', preparing: false, changed: true };
-  await mount({ active: false, followTurnId: 'turn-b' });
+  await mount({ active: false, followExecution: false });
 
   expect(state.previewSubscribed).toBe(false);
   expect(state.previewVisible).toBe(false);

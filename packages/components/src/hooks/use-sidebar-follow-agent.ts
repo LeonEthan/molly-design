@@ -159,6 +159,11 @@ export function useSidebarFollowAgent({
     const reveal = (receipt: string) => {
       const key = `${sessionId}:${receipt}`;
       if (handledReceipts.has(key)) return;
+      const timestamp = Date.parse(committedReceiptTimestamp ?? '');
+      if (Number.isFinite(timestamp) && timestamp <= state.mountedAt) {
+        handledReceipts.set(key, true);
+        return;
+      }
       handledReceipts.set(key, true);
       const latest = latestRef.current;
       latest.onReveal('design', !latest.suppressed);

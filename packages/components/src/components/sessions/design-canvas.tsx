@@ -149,7 +149,7 @@ export function DesignCanvas({
   sessionId,
   artworkId: artworkIdProp,
   active,
-  followTurnId = null,
+  followExecution = false,
   receiptSessionId,
   workspaceSlug,
   name,
@@ -170,7 +170,7 @@ export function DesignCanvas({
    */
   artworkId?: string;
   active: boolean;
-  followTurnId?: string | null;
+  followExecution?: boolean;
   receiptSessionId?: string;
   workspaceSlug: string;
   name: string;
@@ -251,9 +251,8 @@ export function DesignCanvas({
   const [versionsLoad, setVersionsLoad] = useState<VersionHistoryLoad>({ phase: 'loading' });
   const versionsGeneration = useRef(0);
   const preview = !!canvasState?.turnId;
-  const followsCurrentRun = !!followTurnId && followTurnId === canvasState?.turnId;
-  const observeCurrentSession = active || !!followTurnId;
-  const previewSubscriptionActive = active || (preview && followsCurrentRun);
+  const observeCurrentSession = active || followExecution;
+  const previewSubscriptionActive = active || (preview && followExecution);
   const readonlyView = canvasState?.readonly ?? true;
   const currentVersion = versions.find((v) => v.commitId === canvasState?.baseVersionId);
   const visiblePreview = preview && previewReady;

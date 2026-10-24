@@ -419,4 +419,28 @@ describe('useSidebarFollowAgent', () => {
     expect(attribute('data-open')).toBe('false');
     expect(activeTab()).toBeNull();
   });
+
+  it('does not replay older receipts that arrive through later history synchronization', () => {
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: 'session-a',
+      turnId: 'turn-1',
+      canvasHostId: 'session-a',
+      historyReady: true,
+      historySynced: false,
+      initialPanel: { open: false, tab: null } satisfies Panel,
+    };
+    renderHarness(props);
+
+    renderHarness({
+      ...props,
+      historySynced: true,
+      committedReceipt: 'turn-1:revision-1',
+      committedReceiptTimestamp: '2026-10-23T00:00:00.000Z',
+    });
+
+    expect(attribute('data-open')).toBe('false');
+    expect(activeTab()).toBeNull();
+  });
 });

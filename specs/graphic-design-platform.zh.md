@@ -1,6 +1,7 @@
 # Molly 平面设计工作台
 
 Status: draft
+Previous approval: [2026-10-24 new design tab shares the current artwork](../.github/spec-approvals.md#2026-10-24-new-design-tab-shares-the-current-artwork)
 Previous approval: [2026-10-22 font sample rows](../.github/spec-approvals.md#2026-10-22-font-sample-rows-in-molly_view_image)
 Previous approval: [2026-10-11 whole-profile browser import](../.github/spec-approvals.md#2026-10-11-whole-profile-browser-import)
 Previous approval: [2026-10-08 sign-in-first website accounts](../.github/spec-approvals.md#2026-10-08-sign-in-first-website-accounts)
@@ -81,7 +82,7 @@ Translation: pending
 
 当前稿维护最新工作状态，设计会话记录讨论和执行过程，首期默认一个作品对应一个主会话。用户通过“存为版本”保留历史节点，Git 是唯一历史存储，不另建文件快照库或权威版本索引；自动保存不创建历史版本，Agent 回合只在派发前记录上述“Molly 修改前”节点。会话归档和删除沿用原项目语义，不新增删除普通 workspace 文件或设计历史的行为；删除会话记录不等于删除设计文件。既有 Git worktree 清理规则不因此获得删除版本存储的授权。
 
-“New design tab”（标签栏 + 或 `session.newTab`）在当前作品下新建兄弟会话，共享同一 artwork，不创建或复制作品。新 tab 的首条消息沿用现有子会话接受流程，携带主会话的作品关联；Agent 使用与 New design 相同的设计运行能力及其原有可用性门控，包括浏览器、图像、渲染预览与图片读取。派发前保存、作品只读、产物校验及冲突后的文件重读沿用现有机制，不新增协议或存储。此归属由 owner 于 2026-10-24 决定；本次新增的 Spec 描述保持 draft，待 owner 对修订重新批准。
+“New design tab”（标签栏 + 或 `session.newTab`）在当前作品下新建兄弟会话，共享同一 artwork，不创建或复制作品。新 tab 的首条消息沿用现有子会话接受流程，携带主会话的作品关联；Agent 使用与 New design 相同的设计运行能力及其原有可用性门控，包括浏览器、图像、渲染预览与图片读取。派发前保存、作品只读、产物校验及冲突后的文件重读沿用现有机制，不新增协议或存储。此归属由 owner 于 2026-10-24 决定，并已批准该修订（[批准记录](../.github/spec-approvals.md#2026-10-24-new-design-tab-shares-the-current-artwork)）。
 
 现有 CLI 后台继续负责 Agent 生命周期、权限回应、会话与回合。设计服务负责格式转换、结构校验、素材登记、版本校验及当前画稿保存；冲突时保留创作文件并返回可处理诊断。Electron 负责桌面资源、可信编辑器桥接、渲染进程与原生文件交互。设计服务不另建一套 Agent 调度、差异合并或聊天存储。
 

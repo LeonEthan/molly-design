@@ -11,7 +11,7 @@ The owner decided on 2026-10-24 that new tabs share the current artwork.
 Tab acceptance now carries that artwork association through the existing child
 creation path, enabling the ordinary design startup mechanism. Deterministic
 producer and startup tests pass; native Pinterest navigation remains untested.
-The added Spec description remains draft pending approval of the revision.
+The owner approved the added Spec revision on 2026-10-24.
 
 ## Root cause and decision
 
@@ -33,8 +33,8 @@ accepted metadata or the startup decision.
 The [Spec](../../../../specs/graphic-design-platform.zh.md) previously described
 one main conversation per artwork by default without defining New design tab
 ownership. The owner selected shared artwork on 2026-10-24. The new paragraph
-records that decision and remains draft; it needs owner approval of the written
-revision. The English translation is marked stale.
+records that decision; the owner approved the written revision on 2026-10-24
+and the English translation is current.
 
 ## Reuse ladder and scope
 

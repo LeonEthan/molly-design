@@ -6,6 +6,10 @@ import {
   MACHINE_PROTOCOL_CAPABILITIES,
   machineSupportsAcpAuthenticationInteractionsProtocol,
   machineSupportsLocalFileResourcesProtocol,
+  machineSupportsDesignCanvasSerialEditing,
+  negotiateDesignSourcePathVersion,
+  DESIGN_CANVAS_SERIAL_EDITING_PROTOCOL_VERSION,
+  DESIGN_SOURCE_PATH_IDENTITY_VERSION,
 } from '../src/machine-protocol-capabilities';
 
 describe('ACP authentication interaction protocol capability', () => {
@@ -35,6 +39,17 @@ describe('ACP authentication interaction protocol capability', () => {
   });
 });
 
+it('advertises source identity v2 while preserving the v1 canvas handshake', () => {
+  expect(DESIGN_CANVAS_SERIAL_EDITING_PROTOCOL_VERSION).toBe(2);
+  expect(CURRENT_MACHINE_PROTOCOL_CAPABILITIES.designCanvasSerialEditing).toBe(DESIGN_SOURCE_PATH_IDENTITY_VERSION);
+  for (const [version, sourceVersion, handshake] of [[0, 0, false], [1, 1, true], [2, 2, true], [3, 2, true]] as const) {
+    const machine = { protocolCapabilities: { designCanvasSerialEditing: version } };
+    expect(machineSupportsDesignCanvasSerialEditing(machine)).toBe(handshake);
+    expect(negotiateDesignSourcePathVersion(machine)).toBe(sourceVersion);
+  }
+  expect(negotiateDesignSourcePathVersion(undefined)).toBe(0);
+});
+
 it('requires an advertised local file resource protocol, independent of release version', () => {
   expect(machineSupportsLocalFileResourcesProtocol(undefined)).toBe(false);
   expect(
@@ -48,8 +63,7 @@ it('requires an advertised local file resource protocol, independent of release 
 });
 
 
-it('requires an advertised serial canvas capability for the desktop handshake', async () => {
-  const { machineSupportsDesignCanvasSerialEditing } = await import('../src/machine-protocol-capabilities');
+it('requires an advertised serial canvas capability for the desktop handshake', () => {
   expect(machineSupportsDesignCanvasSerialEditing(undefined)).toBe(false);
   expect(machineSupportsDesignCanvasSerialEditing({ protocolCapabilities: { designCanvasSerialEditing: 0 } })).toBe(false);
   expect(machineSupportsDesignCanvasSerialEditing({ protocolCapabilities: CURRENT_MACHINE_PROTOCOL_CAPABILITIES })).toBe(true);

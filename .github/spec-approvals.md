@@ -145,3 +145,14 @@ Font files are limited to the session workdir and platform system font
 directories, rows share one ink height, and missing-face detection is
 best-effort. This approves that revision only; the Spec's other draft
 revisions remain unapproved, so its status stays draft.
+
+## 2026-10-24 new design tab shares the current artwork
+
+The owner approved the English and Chinese `graphic-design-platform` revision
+that makes "New design tab" open a sibling session sharing the current artwork,
+with the same design-run capabilities as New design, introduced on
+[PR #238](https://github.com/LeonEthan/molly-design/pull/238) at commit
+`080e887f` for [#236](https://github.com/LeonEthan/molly-design/issues/236).
+Concurrent edits keep the existing pre-dispatch save, read-only and
+conflict re-read mechanisms. This approves that revision only; the Spec's other
+draft revisions remain unapproved, so its status stays draft.

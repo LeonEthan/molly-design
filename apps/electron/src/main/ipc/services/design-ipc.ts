@@ -14,7 +14,9 @@ import {
 } from '@molly/shared/electron-ipc'
 import {
   LocalMachineRpcRequestSchema,
-  DesignSourcePathResultSchema,
+  DesignSourcePathV1ResultSchema,
+  DesignSourcePathV2ResultSchema,
+  DESIGN_SOURCE_PATH_IDENTITY_VERSION,
   type LocalMachineRpcRequest
 } from '@molly/shared/local-machine-rpc'
 import {
@@ -224,21 +226,40 @@ export class DesignIpc extends IpcService {
     const request = LocalMachineRpcRequestSchema.parse(message)
     if (
       request.method !== 'design/source-path' ||
-      request.ownerSessionId !== artworkId ||
-      request.params.turnId !== undefined
+      request.params.turnId !== undefined ||
+      request.params.version !== undefined
     )
       throw Error('Invalid current design source request')
+    const version = designCanvasAccess.getSourcePathVersion()
+    if (!version) throw Error('Design source capability is unavailable')
+    if (version !== DESIGN_SOURCE_PATH_IDENTITY_VERSION && request.ownerSessionId !== artworkId)
+      throw Error('Invalid current design source request')
+    const sourceRequest = {
+      ...request,
+      params: version === DESIGN_SOURCE_PATH_IDENTITY_VERSION ? { version } : {}
+    }
     return refreshSourcePreview(window, artworkId, key, async () => {
-      const response = await getIpcServiceDeps().cliService.sendLocalMachineRpc(request)
+      const response = await getIpcServiceDeps().cliService.sendLocalMachineRpc(sourceRequest)
       if (!response.ok) throw Error(response.error)
-      const resolved = DesignSourcePathResultSchema.parse(response.result)
-      if (!resolved.ok) throw Error(resolved.error)
       const turnId = designCanvasAccess.state(artworkId).turnId
-      if (!turnId || (resolved.live && turnId !== resolved.live.turnId))
+      if (version !== DESIGN_SOURCE_PATH_IDENTITY_VERSION) {
+        const legacy = DesignSourcePathV1ResultSchema.parse(response.result)
+        if (!legacy.ok) throw Error(legacy.error)
+        if (!turnId || (legacy.live && turnId !== legacy.live.turnId))
+          throw Error('Design execution changed while resolving its source')
+        return {
+          path: legacy.path,
+          live: { sessionId: artworkId, turnId, sourceTurnId: legacy.live?.sourceTurnId }
+        }
+      }
+      const resolved = DesignSourcePathV2ResultSchema.parse(response.result)
+      if (!resolved.ok) throw Error(resolved.error)
+      if (resolved.artworkId !== artworkId) throw Error('Design source belongs to another artwork')
+      if (!turnId || !resolved.live || turnId !== resolved.live.turnId)
         throw Error('Design execution changed while resolving its source')
       return {
         path: resolved.path,
-        live: { sessionId: artworkId, turnId, sourceTurnId: resolved.live?.sourceTurnId }
+        live: resolved.live
       }
     })
   }

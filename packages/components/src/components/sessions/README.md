@@ -80,6 +80,19 @@ are retired from Molly. Existing turn diffs read historical snapshots; their sum
 uses the shared conversation derivation without provider scans or retries. Saved Changes
 panels show Files. File previews, editing and send-to-chat references remain.
 
+### New design tabs
+
+The tab strip's + and `session.newTab` create a draft child conversation for the
+current artwork. Its first accepted message uses the existing `startSession`
+unit with the parent's workspace context and complete `design` association,
+including when the artwork id differs from the parent Session id. It creates no
+blank artwork or copy. The daemon's existing design startup gate then supplies
+the same design runtime tools as New design, subject to the existing image
+connection and desktop/browser availability checks. Ordinary parents without a
+design association still create ordinary child conversations. Artwork-scoped
+flush/read-only ownership, final CAS and file conflict/re-read behavior stay in
+the existing design services.
+
 ### Copy a design without starting a turn
 
 Save as new design keeps the native copy and association acknowledgement flow. Before
@@ -126,7 +139,14 @@ the session meta's `design.artworkId`, never by session id: a continuation sessi
 edits its source session's artwork, so the two identities differ there. Conversation
 reads (`useSessionDoc`, `ownerSessionId`) stay session-keyed; the native view key
 (host id) stays per session consumer. Idle shows the editable current draft;
-an authoritative active Agent turn displays valid, frozen YAML/asset snapshots.
+with negotiated canvas protocol v2, current-source lookup resolves the artwork's executing
+Session, including a child tab while the root conversation is selected. The
+existing source reply carries artwork and live Session/canvas/input-turn identity;
+main validates artwork and execution turn before binding that Session's input.
+Every consumer of the artwork observes that same draft without changing its
+canonical artwork key or retained native host key. A v1 peer retains the requested
+Session's legacy preview behavior; the v1 flush and readonly handshake remains available.
+An authoritative active Agent turn displays valid, frozen YAML/asset snapshots.
 Until the first valid changed draft, retain the canonical canvas. Invalid subsequent
 files retain the last valid frame. There is no source switch, manual refresh or import.
 Focus canvas is the transient `designCanvasFocusAtom`. It hides only the navigation

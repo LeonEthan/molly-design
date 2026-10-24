@@ -13,6 +13,7 @@ export type CanvasInstance = {
 /** Desktop adapter: execution ownership comes exclusively from the daemon snapshot. */
 export class DesignCanvasAccess {
   private known = false
+  private sourcePathVersion: 0 | 1 | 2 = 0
   private active = new Map<string, DesignCanvasState>()
   private readonly instances = new Set<CanvasInstance>()
   private readonly permits = new Map<string, string>()
@@ -25,6 +26,9 @@ export class DesignCanvasAccess {
   }
   isActive(id: string): boolean {
     return this.active.has(id)
+  }
+  getSourcePathVersion(): 0 | 1 | 2 {
+    return this.sourcePathVersion
   }
   state(id: string) {
     const active = this.active.get(id)
@@ -46,13 +50,16 @@ export class DesignCanvasAccess {
 
   async disconnected(): Promise<void> {
     this.known = false
+    this.sourcePathVersion = 0
     await this.refresh()
   }
 
   async update(
     states: readonly DesignCanvasState[],
-    beforeRelease?: (id: string) => Promise<void>
+    beforeRelease?: (id: string) => Promise<void>,
+    sourcePathVersion: 0 | 1 | 2 = 0
   ): Promise<DesignCanvasReport[]> {
+    this.sourcePathVersion = sourcePathVersion
     const next = new Map(states.map((state) => [state.artworkId, state]))
     for (const [id, previous] of this.active) {
       if (next.has(id)) continue

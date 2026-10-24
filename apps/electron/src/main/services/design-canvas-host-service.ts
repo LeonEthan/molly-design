@@ -1,6 +1,7 @@
 import {
   DesignCanvasHostResultSchema,
   machineSupportsDesignCanvasSerialEditing,
+  negotiateDesignSourcePathVersion,
   type DesignCanvasReport
 } from '@molly/shared/local-machine-rpc'
 import { readLocalPlatformSnapshot } from '../platform'
@@ -44,15 +45,20 @@ export function startDesignCanvasHost(cli: CliService): () => void {
         for (const id of nextActive) if (!activeArtworks.has(id)) invalidateDesignCompare(id)
         activeArtworks = nextActive
         let released = false
+        const sourcePathVersion = negotiateDesignSourcePathVersion(response.machine)
         reports = [
           ...reports.slice(100),
-          ...(await designCanvasAccess.update(response.active, async (id) => {
-            refreshDesignThumbnailInBackground(id)
-            await syncDesignCanvasFromStore(id, undefined, { compare: true })
-            released = true
-          }))
+          ...(await designCanvasAccess.update(
+            response.active,
+            async (id) => {
+              refreshDesignThumbnailInBackground(id)
+              await syncDesignCanvasFromStore(id, undefined, { compare: true })
+              released = true
+            },
+            sourcePathVersion
+          ))
         ]
-        const state = JSON.stringify(response.active)
+        const state = JSON.stringify([sourcePathVersion, response.active])
         // A prior reload failure can retain local ownership after the daemon is idle.
         // Its eventual release still needs invalidation even when the wire state is unchanged.
         if (released || state !== lastState) {

@@ -12,7 +12,10 @@ import { BrowserHost } from '@/browser/browser-host';
 import { normalizeBrowserImage } from '@/browser/save-image';
 import { writeGeneratedImageAsset } from '@/mcp/image-generation';
 import type { AgentBrowserScope } from '@molly/shared/browser-agent-rpc';
-import { DesignAssetFailureSchema } from '@molly/shared/local-machine-rpc';
+import {
+  DesignAssetFailureSchema,
+  DESIGN_SOURCE_PATH_IDENTITY_VERSION,
+} from '@molly/shared/local-machine-rpc';
 import { clearImageConnectionFromFlock, getMachineFlockImageConnection } from '@molly/shared';
 import { readSessionHistory } from '@molly/shared/session-data';
 import { readLatestTurn } from '@molly/shared/session-data';
@@ -5990,13 +5993,23 @@ export class MessageHandler {
         if (!design)
           return { type: 'design/source-path', ok: false, error: 'Design session is unavailable.' };
         try {
-          const resolved = await this.resolveCodeCollabWorkspaceRoot(sessionId, true);
+          const identity = request.params.version === DESIGN_SOURCE_PATH_IDENTITY_VERSION;
+          const owner =
+            identity && request.params.turnId === undefined
+              ? this.designCanvasHost.getActiveOwner(design.artworkId)
+              : undefined;
+          const sourceSessionId = (owner?.sessionId ?? sessionId) as SessionId;
+          const sourceDesign =
+            sourceSessionId === sessionId ? design : await this.readDesignSession(sourceSessionId);
+          if (sourceDesign?.artworkId !== design.artworkId)
+            throw Error('Design source does not belong to this artwork.');
+          const resolved = await this.resolveCodeCollabWorkspaceRoot(sourceSessionId, true);
           if (!resolved.ok) throw Error(resolved.message);
           const workspace = await resolveDesignContext({
             workspaceRoot: resolved.workspaceRoot,
-            sessionId,
+            sessionId: sourceSessionId,
             artworkId: design.artworkId,
-            legacyWorkdir: getDefaultSessionWorkdir(sessionId),
+            legacyWorkdir: getDefaultSessionWorkdir(sourceSessionId),
             turnId: request.params.turnId,
             requireTurnManifest: request.params.turnId !== undefined,
           });
@@ -6014,15 +6027,38 @@ export class MessageHandler {
             )
               throw error;
           }
-          const turnId = this.designCanvasHost
-            .exchange([])
-            .find((state) => state.artworkId === design.artworkId)?.turnId;
-          const sourceTurnId = this.executionService.getActiveUserTurnId(sessionId);
+          if (identity && request.params.turnId === undefined) {
+            const current = this.designCanvasHost.getActiveOwner(design.artworkId);
+            if (current?.sessionId !== owner?.sessionId || current?.turnId !== owner?.turnId)
+              throw Error('Design execution changed while resolving its source');
+          }
+          if (!identity) {
+            const turnId = this.designCanvasHost.getActiveOwner(design.artworkId)?.turnId;
+            const sourceTurnId = this.executionService.getActiveUserTurnId(sessionId);
+            return {
+              type: 'design/source-path',
+              ok: true,
+              path: sourcePath,
+              ...(turnId && sourceTurnId ? { live: { turnId, sourceTurnId } } : {}),
+            };
+          }
+          const sourceTurnId = owner
+            ? this.executionService.getActiveUserTurnId(sourceSessionId)
+            : undefined;
           return {
             type: 'design/source-path',
             ok: true,
+            artworkId: design.artworkId,
             path: sourcePath,
-            ...(turnId && sourceTurnId ? { live: { turnId, sourceTurnId } } : {}),
+            ...(owner
+              ? {
+                  live: {
+                    sessionId: sourceSessionId,
+                    turnId: owner.turnId,
+                    ...(sourceTurnId ? { sourceTurnId } : {}),
+                  },
+                }
+              : {}),
           };
         } catch (error) {
           return { type: 'design/source-path', ok: false, error: formatErrorMessage(error) };

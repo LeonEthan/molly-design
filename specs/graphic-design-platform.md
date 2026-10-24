@@ -1,6 +1,7 @@
 # Molly Graphic Design Workbench
 
 Status: draft
+Previous approval: [2026-10-24 new design tab shares the current artwork](../.github/spec-approvals.md#2026-10-24-new-design-tab-shares-the-current-artwork)
 Previous approval: [2026-10-22 font sample rows](../.github/spec-approvals.md#2026-10-22-font-sample-rows-in-molly_view_image)
 Previous approval: [2026-10-11 whole-profile browser import](../.github/spec-approvals.md#2026-10-11-whole-profile-browser-import)
 Previous approval: [2026-10-08 sign-in-first website accounts](../.github/spec-approvals.md#2026-10-08-sign-in-first-website-accounts)
@@ -80,6 +81,8 @@ The home page keeps the original top bar and chat input structure. Size selectio
 The first-stage single-file contract has `format: molly-canvas/1`, required `size`/`elements`, and optional `background`/`customFonts`/`diagnostics`/`title`. Elements retain existing `id`/`kind`/`bounds`, without type blocks. Entry defaults, file metadata versus canonical state, explicit old-YAML conversion and test gates are defined in the first-stage review plan. This concrete plan passed the current review.
 
 The current artwork holds the latest working state, and the design session records the discussion and execution; by default one artwork maps to one main session in the first release. The user keeps historical nodes through "Save as version"; Git is the only history store, with no separate file-snapshot library or authoritative version index; autosave creates no history version, and an Agent turn only records the "Before Molly's edit" entry described above before it runs. Session archiving and deletion keep the original project's semantics, with no new behavior that deletes ordinary workspace files or design history; deleting a session record does not delete design files. Existing Git worktree cleanup rules do not gain authorization to delete the version store.
+
+"New design tab" (the tab bar + or `session.newTab`) opens a sibling session under the current artwork; it shares the same artwork and neither creates nor copies one. The new tab's first message reuses the existing child-session acceptance flow and carries the main session's artwork association, so its Agent gets the same design-run capabilities as New design under their existing availability gates, including browser, image, rendered preview and image reading. Pre-dispatch save, artwork read-only, artifact validation and re-reading files after conflicts keep the existing mechanisms; no protocol or storage is added. The owner decided this ownership on 2026-10-24 and approved the revision ([approval](../.github/spec-approvals.md#2026-10-24-new-design-tab-shares-the-current-artwork)).
 
 The existing CLI backend continues to own the Agent lifecycle, permission responses, sessions and turns. The design service owns format conversion, structural validation, asset registration, version checks and current-artwork saving; on conflict it preserves the authoring files and returns an actionable diagnostic. Electron owns desktop resources, the trusted editor bridge, the renderer process and native file interaction. The design service does not build a second Agent scheduler, diff-merge or chat store.
 

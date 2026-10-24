@@ -1,7 +1,5 @@
 # Electron service contracts
 
-`CLAUDE.md` links here; edit `AGENTS.md` only.
-
 ## Model credentials
 
 Capability IPC verifies adjacent CLI package/catalog digests/public fields without
@@ -82,7 +80,8 @@ Git history restores into the editable current draft. Save-version/switch flush 
 the artwork mutation gate; protect unversioned content in Git before canonical CAS.
 Persist base/operation identity outside BentoDoc; distinguish successful disk writes
 from canvas reload failures. Execution/artifact processing blocks both actions. Source
-display binds to the authoritative active turn, excluding unchanged inherited draft bytes.
+v2 display binds artwork/executing Session/turn; v1 keeps legacy sources.
+Keep consumer keys and exclude unchanged inherited draft bytes.
 
 Element references originate only from visible canonical selections while idle.
 Capture IDs before flush and pair them with its saved revision; never rebase stored

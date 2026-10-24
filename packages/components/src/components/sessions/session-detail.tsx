@@ -2076,16 +2076,21 @@ const SessionDetail = ({
 
   const sidebarFollowSession =
     activeBrowserSession?.id === activeSessionTabId ? activeBrowserSession : null;
+  const sidebarFollowDesignSession =
+    activeSession?.design &&
+    sidebarFollowSession?.design?.artworkId === activeSession.design.artworkId
+      ? sidebarFollowSession
+      : null;
   const {
     history: sidebarFollowHistory,
     synced: sidebarFollowHistorySynced,
     ready: sidebarFollowHistoryReady,
-  } = useSessionDoc(sidebarFollowSession?.id ?? sessionId, {
-    enabled: Boolean(sidebarFollowSession && activeSession?.design),
+  } = useSessionDoc(sidebarFollowDesignSession?.id ?? sessionId, {
+    enabled: Boolean(sidebarFollowDesignSession),
   });
   const sidebarFollowDesignHistory = useConversationIndexRows(sidebarFollowHistory);
   const sidebarFollowReceipt =
-    sidebarFollowSession && activeSession
+    sidebarFollowDesignSession && activeSession
       ? latestCommittedDesignReceiptDetails(
           sidebarFollowDesignHistory,
           activeSession.design?.artworkId ?? activeSession.id
@@ -2102,15 +2107,15 @@ const SessionDetail = ({
   );
   const { noteManualSidebarInteraction } = useSidebarFollowAgent({
     browserId: sidebarFollowSession ? `session-browser-${sidebarFollowSession.id}` : null,
-    sessionId: sidebarFollowSession?.id ?? null,
+    sessionId: sidebarFollowDesignSession?.id ?? null,
     historySessionId: sidebarFollowHistory?.sessionId ?? null,
     turnId: sidebarFollowSession
       ? (sidebarFollowSession.processingUserMsgId ?? sidebarFollowSession.latestUserMsgId ?? null)
       : null,
-    runningTurnId: sidebarFollowSession?.processingUserMsgId ?? null,
+    runningTurnId: sidebarFollowDesignSession?.processingUserMsgId ?? null,
     canvasHostId: activeSession?.design ? activeSession.id : null,
+    artworkId: activeSession?.design ? (activeSession.design.artworkId ?? activeSession.id) : null,
     committedReceipt: sidebarFollowReceipt?.id,
-    committedReceiptTimestamp: sidebarFollowReceipt?.timestamp,
     historyReady: sidebarFollowHistoryReady,
     historySynced: sidebarFollowHistorySynced,
     suppressed: isZenLayoutMode,
@@ -3551,8 +3556,10 @@ const SessionDetail = ({
             sessionId={activeSession.id}
             artworkId={activeSession.design?.artworkId ?? activeSession.id}
             workspaceSlug={workspaceSlug ?? ''}
-            followExecution={!isZenLayoutMode && Boolean(sidebarFollowSession?.processingUserMsgId)}
-            receiptSessionId={sidebarFollowSession?.id ?? activeSession.id}
+            followExecution={
+              !isZenLayoutMode && Boolean(sidebarFollowDesignSession?.processingUserMsgId)
+            }
+            receiptSessionId={sidebarFollowDesignSession?.id ?? activeSession.id}
             active={
               activeSidebarTab === 'design' &&
               isSidebarVisible &&

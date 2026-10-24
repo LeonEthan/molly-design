@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
-import { getPublicBrowserBridge, onIpcEvent } from '@/lib/electron-ipc-client';
+import { getIpcServices, getPublicBrowserBridge, onIpcEvent } from '@/lib/electron-ipc-client';
 import { LRUCache } from '@/lib/lru-cache';
 
 const MAX_REMEMBERED_KEYS = 100;
@@ -22,8 +22,8 @@ type SidebarFollowAgentOptions = {
   turnId: string | null;
   runningTurnId: string | null;
   canvasHostId: string | null;
+  artworkId: string | null;
   committedReceipt?: string;
-  committedReceiptTimestamp?: string;
   historyReady?: boolean;
   historySynced?: boolean;
   suppressed: boolean;
@@ -32,11 +32,15 @@ type SidebarFollowAgentOptions = {
 
 type SidebarReceiptState = {
   sessionId: string;
-  mountedAt: number;
   initialReceipt: string | undefined;
   initialized: boolean;
   receipt: string | undefined;
+  activityRevision: string | undefined;
+  activityRequest: number;
+  activityPending: boolean;
 };
+
+const receiptRevision = (receipt: string) => receipt.slice(receipt.indexOf(':') + 1);
 
 export function useSidebarFollowAgent({
   browserId,
@@ -45,16 +49,36 @@ export function useSidebarFollowAgent({
   turnId,
   runningTurnId,
   canvasHostId,
+  artworkId,
   committedReceipt,
-  committedReceiptTimestamp,
   historyReady = false,
   historySynced = false,
   suppressed,
   onReveal,
 }: SidebarFollowAgentOptions) {
-  const latestRef = useRef({ turnId, runningTurnId, suppressed, onReveal });
+  const latestRef = useRef({
+    sessionId,
+    historySessionId,
+    turnId,
+    runningTurnId,
+    committedReceipt,
+    historyReady,
+    historySynced,
+    suppressed,
+    onReveal,
+  });
   useLayoutEffect(() => {
-    latestRef.current = { turnId, runningTurnId, suppressed, onReveal };
+    latestRef.current = {
+      sessionId,
+      historySessionId,
+      turnId,
+      runningTurnId,
+      committedReceipt,
+      historyReady,
+      historySynced,
+      suppressed,
+      onReveal,
+    };
   });
 
   const noteManualSidebarInteraction = useCallback(() => {
@@ -130,68 +154,120 @@ export function useSidebarFollowAgent({
 
   const receiptStateRef = useRef<SidebarReceiptState>({
     sessionId: sessionId ?? '',
-    mountedAt: Date.now(),
     initialReceipt:
       historySessionId === sessionId && (historyReady || historySynced)
         ? committedReceipt
         : undefined,
     initialized: false,
     receipt: undefined,
+    activityRevision: undefined,
+    activityRequest: 0,
+    activityPending: false,
   });
   useLayoutEffect(() => {
     const nextSessionId = sessionId ?? '';
     if (receiptStateRef.current.sessionId === nextSessionId) return;
+    receiptStateRef.current.activityRequest += 1;
     receiptStateRef.current = {
       sessionId: nextSessionId,
-      mountedAt: Date.now(),
       initialReceipt:
         historySessionId === sessionId && (historyReady || historySynced)
           ? committedReceipt
           : undefined,
       initialized: false,
       receipt: undefined,
+      activityRevision: undefined,
+      activityRequest: 0,
+      activityPending: false,
     };
   }, [sessionId, historySessionId, historyReady, historySynced, committedReceipt]);
 
-  useEffect(() => {
-    if (!sessionId || historySessionId !== sessionId || (!historyReady && !historySynced)) return;
+  const attemptCommittedReceipt = useCallback(() => {
+    const latest = latestRef.current;
+    if (
+      !latest.sessionId ||
+      latest.historySessionId !== latest.sessionId ||
+      (!latest.historyReady && !latest.historySynced)
+    )
+      return;
     const state = receiptStateRef.current;
-    const reveal = (receipt: string) => {
-      const key = `${sessionId}:${receipt}`;
+    if (state.activityPending) return;
+    const receipt = latest.committedReceipt;
+    const reveal = () => {
+      if (!receipt) return;
+      const key = `${latest.sessionId}:${receipt}`;
       if (handledReceipts.has(key)) return;
-      const timestamp = Date.parse(committedReceiptTimestamp ?? '');
-      if (Number.isFinite(timestamp) && timestamp <= state.mountedAt) {
-        handledReceipts.set(key, true);
-        return;
-      }
       handledReceipts.set(key, true);
-      const latest = latestRef.current;
       latest.onReveal('design', !latest.suppressed);
     };
     if (!state.initialized) {
       state.initialized = true;
-      state.receipt = committedReceipt;
-      if (!committedReceipt) return;
-      const timestamp = Date.parse(committedReceiptTimestamp ?? '');
-      const isNew =
-        state.initialReceipt !== committedReceipt &&
-        Number.isFinite(timestamp) &&
-        timestamp > state.mountedAt;
-      if (isNew) reveal(committedReceipt);
-      else handledReceipts.set(`${sessionId}:${committedReceipt}`, true);
+      state.receipt = receipt;
+      if (!receipt) return;
+      if (state.initialReceipt !== receipt && state.activityRevision === receiptRevision(receipt)) {
+        state.activityRevision = undefined;
+        reveal();
+      } else {
+        handledReceipts.set(`${latest.sessionId}:${receipt}`, true);
+      }
       return;
     }
-    if (state.receipt === committedReceipt) return;
-    state.receipt = committedReceipt;
-    if (committedReceipt) reveal(committedReceipt);
+    if (state.receipt === receipt) return;
+    state.receipt = receipt;
+    if (!receipt) return;
+    if (state.activityRevision === receiptRevision(receipt)) {
+      state.activityRevision = undefined;
+      reveal();
+    } else {
+      handledReceipts.set(`${latest.sessionId}:${receipt}`, true);
+    }
+  }, []);
+
+  useEffect(() => {
+    attemptCommittedReceipt();
   }, [
     sessionId,
     historySessionId,
     committedReceipt,
-    committedReceiptTimestamp,
     historyReady,
     historySynced,
+    attemptCommittedReceipt,
   ]);
+
+  useEffect(() => {
+    if (!sessionId || !artworkId) return undefined;
+    let active = true;
+    const stop = onIpcEvent('design.state', (event) => {
+      if (event.artworkId && event.artworkId !== artworkId) return;
+      const state = receiptStateRef.current;
+      const request = ++state.activityRequest;
+      state.activityRevision = undefined;
+      state.activityPending = true;
+      const service = getIpcServices()?.design;
+      if (!service) {
+        state.activityPending = false;
+        attemptCommittedReceipt();
+        return;
+      }
+      void service
+        .state(artworkId)
+        .then((canvasState) => {
+          if (!active || state.activityRequest !== request) return;
+          state.activityPending = false;
+          state.activityRevision = canvasState.revisionId;
+          attemptCommittedReceipt();
+        })
+        .catch(() => {
+          if (!active || state.activityRequest !== request) return;
+          state.activityPending = false;
+          attemptCommittedReceipt();
+        });
+    });
+    return () => {
+      active = false;
+      stop();
+    };
+  }, [sessionId, artworkId, attemptCommittedReceipt]);
 
   return { noteManualSidebarInteraction };
 }

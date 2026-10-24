@@ -23,6 +23,7 @@ type HarnessProps = {
   historySessionId?: string | null;
   runningTurnId?: string | null;
   canvasHostId?: string | null;
+  artworkId?: string | null;
   committedReceipt?: string;
   committedReceiptTimestamp?: string;
   historyReady?: boolean;
@@ -35,6 +36,7 @@ describe('useSidebarFollowAgent', () => {
   let root: Root;
   let container: HTMLDivElement;
   let handlers: Record<string, Array<(payload: unknown) => void>>;
+  let revisions: Record<string, string>;
   let noteManualSidebarInteraction: () => void;
   let setPanel: (panel: Panel) => void;
 
@@ -54,6 +56,7 @@ describe('useSidebarFollowAgent', () => {
           : props.historySessionId,
       runningTurnId: props.runningTurnId ?? null,
       canvasHostId: props.canvasHostId ?? null,
+      artworkId: props.artworkId ?? props.canvasHostId ?? null,
       historyReady: props.historyReady ?? props.historySynced ?? false,
       suppressed: zen,
       onReveal: (tab, exitZen) => {
@@ -102,6 +105,12 @@ describe('useSidebarFollowAgent', () => {
       }
     });
   };
+  const emitDesignState = async (artworkId: string, revisionId: string) => {
+    revisions[artworkId] = revisionId;
+    await act(async () => {
+      for (const handler of handlers['design.state'] ?? []) handler({ artworkId });
+    });
+  };
   const finishBrowsingSegment = () => {
     act(() => {
       vi.advanceTimersByTime(500);
@@ -113,9 +122,11 @@ describe('useSidebarFollowAgent', () => {
     vi.setSystemTime('2026-10-24T00:00:00.000Z');
     clearSidebarFollowMemory();
     handlers = {};
+    revisions = {};
     window.__MOLLY_ELECTRON__ = true;
     window.ipc = {
-      invoke: async () => ({ ok: true }),
+      invoke: async (channel: string, ...args: unknown[]) =>
+        channel === 'design.state' ? { revisionId: revisions[args[0] as string] } : { ok: true },
       on: (channel: string, handler: (payload: unknown) => void) => {
         (handlers[channel] ??= []).push(handler);
         return () => {
@@ -222,7 +233,7 @@ describe('useSidebarFollowAgent', () => {
     expect(activeTab()).toBe('browser');
   });
 
-  it('reveals each commit once even after manual interaction and reopens the panel', () => {
+  it('reveals each commit once even after manual interaction and reopens the panel', async () => {
     const props = {
       browserId: 'session-browser-a',
       turnId: 'turn-1',
@@ -236,6 +247,7 @@ describe('useSidebarFollowAgent', () => {
       setPanel({ open: false, tab: null });
     });
 
+    await emitDesignState('session-a', 'revision-1');
     renderHarness({ ...props, committedReceipt: 'turn-1:revision-1' });
     expect(attribute('data-open')).toBe('true');
     expect(activeTab()).toBe('design');
@@ -243,11 +255,12 @@ describe('useSidebarFollowAgent', () => {
     act(() => setPanel({ open: true, tab: 'browser' }));
     renderHarness({ ...props, committedReceipt: 'turn-1:revision-1' });
     expect(activeTab()).toBe('browser');
+    await emitDesignState('session-a', 'revision-2');
     renderHarness({ ...props, committedReceipt: 'turn-2:revision-2' });
     expect(activeTab()).toBe('design');
   });
 
-  it('treats a receipt already present at mount as handled', () => {
+  it('treats a receipt already present at mount as handled', async () => {
     const props = {
       browserId: 'session-browser-a',
       turnId: 'turn-1',
@@ -259,12 +272,13 @@ describe('useSidebarFollowAgent', () => {
     expect(attribute('data-open')).toBe('false');
     expect(activeTab()).toBeNull();
 
+    await emitDesignState('session-a', 'new-revision');
     renderHarness({ ...props, committedReceipt: 'new-turn:new-revision' });
     expect(attribute('data-open')).toBe('true');
     expect(activeTab()).toBe('design');
   });
 
-  it('keeps Zen and navigation unchanged while recording a committed canvas reveal', () => {
+  it('keeps Zen and navigation unchanged while recording a committed canvas reveal', async () => {
     const props = {
       browserId: 'session-browser-a',
       turnId: 'turn-1',
@@ -281,6 +295,7 @@ describe('useSidebarFollowAgent', () => {
     expect(attribute('data-open')).toBe('false');
     expect(attribute('data-zen')).toBe('true');
 
+    await emitDesignState('session-a', 'revision-1');
     renderHarness({ ...props, committedReceipt: 'turn-1:revision-1' });
 
     expect(attribute('data-open')).toBe('true');
@@ -328,7 +343,7 @@ describe('useSidebarFollowAgent', () => {
     expect(activeTab()).toBe('browser');
   });
 
-  it('reveals a new receipt even when history becomes ready after the commit', () => {
+  it('reveals a new receipt even when history becomes ready after the commit', async () => {
     const props = {
       browserId: 'session-browser-a',
       sessionId: 'session-a',
@@ -342,13 +357,14 @@ describe('useSidebarFollowAgent', () => {
     };
     renderHarness(props);
     vi.setSystemTime('2026-10-24T00:00:01.000Z');
+    await emitDesignState('session-a', 'revision-1');
 
     renderHarness({
       ...props,
       historySessionId: 'session-a',
       historyReady: true,
       committedReceipt: 'turn-1:revision-1',
-      committedReceiptTimestamp: '2026-10-24T00:00:00.500Z',
+      committedReceiptTimestamp: '2026-10-23T00:00:00.000Z',
     });
 
     expect(attribute('data-open')).toBe('true');

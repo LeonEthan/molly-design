@@ -391,7 +391,7 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
   window.on('blur', sendForegroundState)
   window.webContents.on('did-finish-load', sendForegroundState)
 
-  window.on('ready-to-show', () => {
+  window.once('ready-to-show', () => {
     if (options.hideWindowOnAutoLaunch) {
       return
     }

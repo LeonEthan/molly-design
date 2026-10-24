@@ -154,12 +154,18 @@ const receipt = (
     timestamp: '2026-09-11T00:00:00.000Z',
   },
 });
-const render = (props?: { sessionId?: string; artworkId?: string; active?: boolean }) =>
+const render = (props?: {
+  sessionId?: string;
+  artworkId?: string;
+  active?: boolean;
+  receiptSessionId?: string;
+}) =>
   act(async () => {
     root.render(
       <DesignCanvas
         sessionId={props?.sessionId ?? 'artwork'}
         artworkId={props?.artworkId ?? 'artwork'}
+        receiptSessionId={props?.receiptSessionId}
         active={props?.active ?? true}
         workspaceSlug="local"
         name="Artwork"
@@ -383,6 +389,22 @@ it('routes artwork operations by artwork id while the conversation stays session
   expect(state.calls.map(([, id]) => id)).not.toContain('session-continuation');
   // The committed receipt for artwork-y must trigger a store sync of artwork-y.
   expect(state.sync).toHaveBeenCalled();
+});
+
+it('uses the viewed child conversation receipt to synchronize their shared artwork', async () => {
+  state.synced = true;
+  state.history = [receipt('child-turn', 'b'.repeat(64), 'committed', 'artwork')];
+  state.sync.mockRejectedValue(Error('Child receipt reached canvas synchronization'));
+  await render({
+    sessionId: 'root-session',
+    artworkId: 'artwork',
+    receiptSessionId: 'child-session',
+  });
+
+  expect(state.docSessionId).toBe('child-session');
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    'Child receipt reached canvas synchronization'
+  );
 });
 
 const openVersions = () =>

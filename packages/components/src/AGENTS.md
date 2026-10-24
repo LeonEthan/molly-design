@@ -37,8 +37,8 @@ Parent `AGENTS.md` files also apply.
   only its active target canvas consumes it. Later sends, ordinary history visits and
   failed submissions preserve layout; the request adds no persisted preference.
 - Drive hidden-panel work from effective visibility (`open && !zen`), not the stored
-  open bit. A Zen-hidden PR, Browser, viewer, or Side Chat must pause exactly like an
-  ordinarily collapsed right panel.
+  open bit, except the viewed running canvas's non-Zen follow subscription. Zen-hidden
+  PR, Browser, viewer, Side Chat and canvas-follow work must still pause.
 
 ## Workspace transitions
 

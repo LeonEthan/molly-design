@@ -149,6 +149,8 @@ export function DesignCanvas({
   sessionId,
   artworkId: artworkIdProp,
   active,
+  followTurnId = null,
+  receiptSessionId,
   workspaceSlug,
   name,
   onReferenceSelection,
@@ -168,6 +170,8 @@ export function DesignCanvas({
    */
   artworkId?: string;
   active: boolean;
+  followTurnId?: string | null;
+  receiptSessionId?: string;
   workspaceSlug: string;
   name: string;
   onReferenceSelection?: (reference: DesignElementReference, prompt?: string, image?: File) => void;
@@ -247,6 +251,9 @@ export function DesignCanvas({
   const [versionsLoad, setVersionsLoad] = useState<VersionHistoryLoad>({ phase: 'loading' });
   const versionsGeneration = useRef(0);
   const preview = !!canvasState?.turnId;
+  const followsCurrentRun = !!followTurnId && followTurnId === canvasState?.turnId;
+  const observeCurrentSession = active || !!followTurnId;
+  const previewSubscriptionActive = active || (preview && followsCurrentRun);
   const readonlyView = canvasState?.readonly ?? true;
   const currentVersion = versions.find((v) => v.commitId === canvasState?.baseVersionId);
   const visiblePreview = preview && previewReady;
@@ -276,11 +283,11 @@ export function DesignCanvas({
   );
   useEffect(() => {
     let cancelled = false;
-    if (active) void refreshVersions(() => !cancelled).catch(() => {});
+    if (observeCurrentSession) void refreshVersions(() => !cancelled).catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [active, refreshVersions]);
+  }, [observeCurrentSession, refreshVersions]);
   const [previewError, setPreviewError] = useState('');
   const [automaticError, setAutomaticError] = useState('');
   const previewGeneration = useRef(0);
@@ -313,12 +320,19 @@ export function DesignCanvas({
     const generationRef = previewGeneration;
     setPreviewReady(false);
     setPreviewError('');
-    if (preview && active && !canvasState?.preparing) void refreshPreview();
-    else if (!active) void getIpcServices()?.design.closePreview(hostId);
+    if (preview && previewSubscriptionActive && !canvasState?.preparing) void refreshPreview();
+    else if (!previewSubscriptionActive) void getIpcServices()?.design.closePreview(hostId);
     return () => {
       ++generationRef.current;
     };
-  }, [preview, active, canvasState?.turnId, canvasState?.preparing, hostId, refreshPreview]);
+  }, [
+    preview,
+    previewSubscriptionActive,
+    canvasState?.turnId,
+    canvasState?.preparing,
+    hostId,
+    refreshPreview,
+  ]);
   useEffect(
     () => () => {
       void getIpcServices()?.design.closePreview(hostId);
@@ -326,7 +340,7 @@ export function DesignCanvas({
     [hostId]
   );
   useEffect(() => {
-    if (!active) return undefined;
+    if (!observeCurrentSession) return undefined;
     const refresh = () => {
       void refreshVersions().catch(() => {});
     };
@@ -340,10 +354,11 @@ export function DesignCanvas({
       reconnect();
       window.removeEventListener('focus', refresh);
     };
-  }, [active, artworkId, refreshVersions]);
-  const { history: conversationView, synced } = useSessionDoc(sessionId as SessionId, {
-    enabled: sessionId.length > 0,
-  });
+  }, [observeCurrentSession, artworkId, refreshVersions]);
+  const { history: conversationView, synced } = useSessionDoc(
+    (receiptSessionId ?? sessionId) as SessionId,
+    { enabled: (receiptSessionId ?? sessionId).length > 0 }
+  );
   const designHistory = useConversationIndexRows(conversationView);
   const finalized = designHistory
     ?.filter(
@@ -352,7 +367,7 @@ export function DesignCanvas({
     .map((entry) => `${entry.id}:${entry.endedAt}:${JSON.stringify(entry.designOutcome)}`)
     .join('|');
   useEffect(() => {
-    if (!preview || !active) return undefined;
+    if (!preview || !previewSubscriptionActive) return undefined;
     const reconcile = () => {
       void refreshPreview();
     };
@@ -371,10 +386,10 @@ export function DesignCanvas({
       reconnect();
       window.removeEventListener('focus', reconcile);
     };
-  }, [preview, active, hostId, refreshPreview]);
+  }, [preview, previewSubscriptionActive, hostId, refreshPreview]);
   useEffect(() => {
-    if (preview && active && finalized) void refreshPreview();
-  }, [finalized, preview, active, refreshPreview]);
+    if (preview && previewSubscriptionActive && finalized) void refreshPreview();
+  }, [finalized, preview, previewSubscriptionActive, refreshPreview]);
   const committedReceipt = latestCommittedDesignReceipt(designHistory, artworkId);
   const turnElements = useRef({ view: conversationView, committedTurnId: '' });
   turnElements.current = {

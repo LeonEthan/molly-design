@@ -18,6 +18,7 @@ const state = vi.hoisted(() => ({
   },
   visible: false,
   previewVisible: false,
+  previewSubscribed: false,
   attachPreviewCalls: 0,
   refresh: async (): Promise<unknown> => ({ status: 'ready', source: '/synthetic/design.yaml' }),
   attach: async () => {},
@@ -88,6 +89,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       },
       refreshPreview: (_session: string, host: string) => {
         state.hostId = host;
+        state.previewSubscribed = true;
         state.refreshCalls += 1;
         return state.refresh();
       },
@@ -100,6 +102,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
         state.previewVisible = false;
       },
       closePreview: async () => {
+        state.previewSubscribed = false;
         state.previewVisible = false;
       },
       selectionSummary: async () => null,
@@ -124,6 +127,7 @@ beforeEach(async () => {
   state.canvasState = { readonly: false, turnId: undefined, preparing: false, changed: true };
   state.visible = false;
   state.previewVisible = false;
+  state.previewSubscribed = false;
   state.refreshCalls = 0;
   state.attachPreviewCalls = 0;
   state.attach = async () => {};
@@ -157,12 +161,13 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-const mount = () =>
+const mount = (props?: { active?: boolean; followTurnId?: string | null }) =>
   act(async () =>
     root.render(
       <DesignCanvas
         sessionId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-        active
+        active={props?.active ?? true}
+        followTurnId={props?.followTurnId ?? null}
         workspaceSlug="local"
         name="Synthetic"
       />
@@ -288,4 +293,29 @@ test('keeps preview pixels through turn completion under a menu until the editor
   } finally {
     menu.remove();
   }
+});
+
+test('hidden canvas retains the current run subscription without showing it and releases at completion', async () => {
+  state.canvasState = { readonly: true, turnId: 'turn-a', preparing: false, changed: true };
+  state.refresh = async () => ({ status: 'ready', sourceIdentity: 'step-1' });
+  await mount({ active: false, followTurnId: 'turn-a' });
+  expect(state.previewSubscribed).toBe(true);
+  expect(state.previewVisible).toBe(false);
+  expect(state.visible).toBe(false);
+
+  await publish({ hostId: artworkId, status: 'ready', sourceIdentity: 'step-2' });
+  expect(state.previewSubscribed).toBe(true);
+  expect(state.previewVisible).toBe(false);
+
+  await execution();
+  expect(state.previewSubscribed).toBe(false);
+  expect(state.previewVisible).toBe(false);
+});
+
+test('hidden canvas does not subscribe to another session turn', async () => {
+  state.canvasState = { readonly: true, turnId: 'turn-a', preparing: false, changed: true };
+  await mount({ active: false, followTurnId: 'turn-b' });
+
+  expect(state.previewSubscribed).toBe(false);
+  expect(state.previewVisible).toBe(false);
 });

@@ -107,13 +107,18 @@ this page is the full text of the rules summarised there.
   A dispatched operation whose result is unknown is never replayed automatically.
   Cancellation, timeout or disconnect rejects that operation's late result without
   freezing browser access for the rest of the run; the Agent can observe again.
-  A hidden Agent page reattaches when the Browser
-  panel opens; opening the panel must not navigate it again. The viewed
-  session's first transition to Agent control in each Turn (keyed on
-  `processingUserMsgId`, falling back to `latestUserMsgId`) opens the right
-  panel's Browser tab without navigation. Closing it keeps it closed until the
-  next Turn, Zen spends that Turn's reveal, and browsing ending never returns to
-  the canvas.
+  A hidden Agent page reattaches when the Browser panel opens; opening the panel
+  must not navigate it again. In the currently viewed conversation tab, each new
+  Agent browsing segment reveals Browser, coalescing per-command human transitions.
+  A new ready `design.preview` reveals Design; a new committed receipt reveals and
+  opens Design once even after manual action. Manual tab selection, closing or
+  collapse suppresses browser/live follow for that Turn, not commits. Other Sessions
+  or same-artwork tabs and receipts already present at mount never trigger it.
+  Following changes only local panel state, never the route or window focus. Zen
+  stays intact: browser/live reveals are suppressed and commits only update stored
+  panel state. Outside Zen, the current run's hidden mounted canvas keeps its preview
+  subscription until the Turn ends; background Sessions and tabs do not subscribe.
+  See the [sidebar-follow Spec](../../specs/graphic-design-platform.zh.md#侧栏跟随).
   A packaged Molly with a stable macOS signing identity stores site sessions in a
   separate persistent partition. Unpackaged development uses its own persisted
   development partition; packaged ad-hoc macOS builds use a memory-only partition.

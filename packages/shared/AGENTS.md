@@ -109,10 +109,12 @@ failure leave ownership intact. Keep this independent of preview rendering.
 
 ## Historical design files
 
-`design/source-path` may report active canvas/source turn identities for display
-isolation; these facts confer no commit authority.
+`design/source-path` binds artwork and active executing Session/canvas/source turn
+identities for display isolation; main checks artwork and turn. These facts confer
+no commit authority.
 `design/source-path` uses trusted Session workspace metadata, including archived
-Sessions. An omitted turn resolves today's expected entry even before creation.
+Sessions. An omitted turn resolves the artwork's active owner's draft, including
+sibling Sessions, or today's expected entry when idle, even before creation.
 Supplied turns require the frozen original root and an existing regular entry;
 never substitute today's draft, trust a manifest path as authority or start an
 Agent. Ordinary file preview transports bytes.

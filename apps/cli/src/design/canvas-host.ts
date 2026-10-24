@@ -49,6 +49,11 @@ export class DesignCanvasHost {
     }
   }
 
+  getActiveOwner(artworkId: string): { sessionId: string; turnId: string } | undefined {
+    const owner = this.active.get(artworkId);
+    return owner ? { sessionId: owner.sessionId, turnId: owner.turnId } : undefined;
+  }
+
   /** Whole authoritative snapshot. Lost transports and old reports never release ownership. */
   exchange(reports: readonly DesignCanvasReport[]): DesignCanvasState[] {
     for (const report of reports) {

@@ -222,23 +222,20 @@ export class DesignIpc extends IpcService {
     const artworkId = id.parse(sessionId)
     const key = id.parse(hostId)
     const request = LocalMachineRpcRequestSchema.parse(message)
-    if (
-      request.method !== 'design/source-path' ||
-      request.ownerSessionId !== artworkId ||
-      request.params.turnId !== undefined
-    )
+    if (request.method !== 'design/source-path' || request.params.turnId !== undefined)
       throw Error('Invalid current design source request')
     return refreshSourcePreview(window, artworkId, key, async () => {
       const response = await getIpcServiceDeps().cliService.sendLocalMachineRpc(request)
       if (!response.ok) throw Error(response.error)
       const resolved = DesignSourcePathResultSchema.parse(response.result)
       if (!resolved.ok) throw Error(resolved.error)
+      if (resolved.artworkId !== artworkId) throw Error('Design source belongs to another artwork')
       const turnId = designCanvasAccess.state(artworkId).turnId
-      if (!turnId || (resolved.live && turnId !== resolved.live.turnId))
+      if (!turnId || !resolved.live || turnId !== resolved.live.turnId)
         throw Error('Design execution changed while resolving its source')
       return {
         path: resolved.path,
-        live: { sessionId: artworkId, turnId, sourceTurnId: resolved.live?.sourceTurnId }
+        live: resolved.live
       }
     })
   }

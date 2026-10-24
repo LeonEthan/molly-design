@@ -328,9 +328,14 @@ export const DesignSourcePathResultSchema = z.discriminatedUnion('ok', [
     .object({
       type: z.literal('design/source-path'),
       ok: z.literal(true),
+      artworkId: z.string().uuid(),
       path: z.string().min(1),
       live: z
-        .object({ turnId: z.string().min(1).max(200), sourceTurnId: z.string().min(1).max(200) })
+        .object({
+          sessionId: z.string().uuid(),
+          turnId: z.string().min(1).max(200),
+          sourceTurnId: z.string().min(1).max(200).optional(),
+        })
         .strict()
         .optional(),
     })

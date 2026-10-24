@@ -92,3 +92,58 @@ DeepSeek Flash, ask the Agent to find poster references on Pinterest, and confir
 `mcp__molly_browser__navigate` executes successfully. Compare design namespaces
 with a New design session under the same host and connection settings. Verify
 the tab still targets the original artwork and preserves its saved content.
+
+## Codex P1 follow-up: executing child preview
+
+Codex CLI review identified that the shared canvas still requested the root
+conversation's source. With an idle root and an executing child, the handler
+returned the root draft and no causal input turn. Main IPC also equated the
+requested Session with the artwork, then used artwork identity as the input
+Session. Thus the missing preview was a separate defect after tool activation.
+
+Direct reuse of the selected tab identity was rejected: switching back to the
+root while its child executes must still show that same child draft. Reuse with
+adaptation selects the executing Session from `DesignCanvasHost`'s existing
+artwork owner map, resolves its trusted workspace and verifies its artwork
+association. The existing `design/source-path` result carries artwork and live
+Session/canvas/source-turn identity, including a pending causal input during
+preparation. No endpoint, protocol version, store or ownership index is added.
+After asynchronous resolution, the handler checks the same execution owner.
+Historical turn requests retain their own frozen Session paths.
+
+Main validates the returned artwork and current canvas turn, then forwards the
+executing Session identity through the existing `LiveSource` consumer and
+`bindLiveSource`. The renderer's artwork and retained host keys stay unchanged;
+root and child views share the same draft observation. Existing artwork-level
+readonly, flush, CAS and release mechanisms remain responsible for all Bento
+instances. No renderer presence heuristic or new lifecycle mechanism is needed.
+
+The deterministic handler regression first failed with the root path and missing
+child/input-turn identity. It passes after the repair and covers pending input,
+root/child lookup consistency and wrong-artwork refusal. Actual IPC-class tests
+cover child identity, stable artwork/host, late input binding and wrong-artwork,
+replaced-turn, idle-source and historical-request rejection. Preview consumers
+share one observation and pass the same child input to the worker. Focused
+verification passes: 6 CLI, 33 IPC/preview/access and 31 renderer tests. The
+existing access tests cover all artwork instances remaining readonly through
+execution and artifact processing. Fixtures use explicit promises and synthetic
+inputs without sleeps, external network or model calls.
+
+The owner supplied native evidence for HEAD `7d51998e` on 2026-10-24 using
+DeepSeek Flash: New design produced an editable poster; New design tab opened
+`https://www.pinterest.com/search/pins/?q=coffee%20shop%20opening%20poster` and
+returned three references in 2 minutes 8 seconds. Both conversations showed
+the same `canvas-1ebcc560-…`, readonly during execution and Autosaved afterward.
+The UI did not expose the full tool catalog, so `molly_image` was not directly
+observed. That turn did not change the artwork and does not validate this P1.
+This follow-up runs no new native E2E; child live-draft display still needs the
+separately assigned native acceptance. The approved shared-artwork Spec intent
+and owner approval record at `7d51998e` remain unchanged.
+
+Follow-up validation: `pnpm check` passes, including CLI 3016 passed / 3 skipped,
+components 3380 passed, Electron tests, typechecking, lint and all boundary
+checks. The first typecheck exposed a fixture/result identity type mismatch,
+and lint caught one test variable shadow; both were corrected before the final
+complete run. `pnpm format` and `pnpm run docs check` pass, with existing AGENTS
+size warnings and no registered SHA-protected topic changes. Review and native
+evidence are collected in [PR #238](https://github.com/LeonEthan/molly-design/pull/238).

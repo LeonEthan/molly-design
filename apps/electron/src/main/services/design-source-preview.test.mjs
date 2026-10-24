@@ -54,6 +54,8 @@ void test('preview IPC retains the shared artwork and consumer while binding the
     live: { sessionId: childId, turnId, sourceTurnId: 'child-user-turn' }
   }
   let consumer
+  let offered
+  let sourceVersion = 2
   const module = { exports: {} }
   compileFunction(compiledIpc.outputFiles[0].text, ['module', 'exports', 'require'])(
     module,
@@ -69,11 +71,21 @@ void test('preview IPC retains the shared artwork and consumer while binding the
         return {
           getIpcServiceDeps: () => ({
             getMainWindow: () => owner,
-            cliService: { sendLocalMachineRpc: async () => ({ ok: true, result: response }) }
+            cliService: {
+              sendLocalMachineRpc: async (message) => {
+                offered = message
+                return { ok: true, result: response }
+              }
+            }
           })
         }
       if (name === '../../services/design-service')
-        return { designCanvasAccess: { state: () => ({ turnId }) } }
+        return {
+          designCanvasAccess: {
+            state: () => ({ turnId }),
+            getSourcePathVersion: () => sourceVersion
+          }
+        }
       if (name === '../../services/design-source-preview')
         return {
           refreshSourcePreview: async (window, artwork, host, resolve) => {
@@ -94,8 +106,44 @@ void test('preview IPC retains the shared artwork and consumer while binding the
     params: {}
   }
   const resolved = await ipc.refreshPreview(artworkId, hostId, request)
+  assert.deepEqual(offered.params, { version: 2 })
   assert.deepEqual(consumer, { window: owner, artwork: artworkId, host: hostId })
   assert.deepEqual(resolved, { path: response.path, live: response.live })
+  sourceVersion = 1
+  response = {
+    type: 'design/source-path',
+    ok: true,
+    path: '/synthetic/root/design.yaml',
+    live: { turnId, sourceTurnId: 'root-input' }
+  }
+  const oldDaemon = await ipc.refreshPreview(artworkId, artworkId, {
+    ...request,
+    ownerSessionId: artworkId
+  })
+  assert.deepEqual(offered.params, {})
+  assert.deepEqual(oldDaemon, {
+    path: response.path,
+    live: { sessionId: artworkId, turnId, sourceTurnId: 'root-input' }
+  })
+  response = { ...response, live: undefined }
+  assert.deepEqual(
+    await ipc.refreshPreview(artworkId, artworkId, { ...request, ownerSessionId: artworkId }),
+    {
+      path: response.path,
+      live: { sessionId: artworkId, turnId, sourceTurnId: undefined }
+    }
+  )
+  await assert.rejects(
+    ipc.refreshPreview(artworkId, hostId, request),
+    /Invalid current design source request/
+  )
+  sourceVersion = 0
+  await assert.rejects(
+    ipc.refreshPreview(artworkId, artworkId, { ...request, ownerSessionId: artworkId }),
+    /capability is unavailable/
+  )
+  sourceVersion = 2
+  response = { ...resolved, type: 'design/source-path', ok: true, artworkId }
   const { bindLiveSource } = await import('./design-live-source.ts')
   assert.deepEqual(await bindLiveSource(resolved, async () => resolved), response.live)
   const current = response
@@ -115,6 +163,10 @@ void test('preview IPC retains the shared artwork and consumer while binding the
   turnId = current.live.turnId
   await assert.rejects(
     ipc.refreshPreview(artworkId, hostId, { ...request, params: { turnId: 'historical-turn' } }),
+    /Invalid current design source request/
+  )
+  await assert.rejects(
+    ipc.refreshPreview(artworkId, hostId, { ...request, params: { version: 2 } }),
     /Invalid current design source request/
   )
   response = { ...current, live: undefined }

@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
   LocalMachineRpcRequestSchema,
@@ -297,14 +298,25 @@ test('a shared canvas resolves the executing child draft and causal input while 
   });
 
   try {
-    expect(await request(handler, parentId, 'design/source-path', {})).toMatchObject({
+    const oldElectronParser = z.object({
+      type: z.literal('design/source-path'),
+      ok: z.literal(true),
+      path: z.string().min(1),
+      live: z.object({
+        turnId: z.string().min(1).max(200),
+        sourceTurnId: z.string().min(1).max(200),
+      }).strict().optional(),
+    }).strict();
+    const legacy = await request(handler, parentId, 'design/source-path', {});
+    expect(legacy.ok && oldElectronParser.safeParse(legacy.result).success).toBe(true);
+    expect(await request(handler, parentId, 'design/source-path', { version: 2 })).toMatchObject({
       ok: true,
       result: {
         live: { sessionId: childId, turnId: 'child-canvas-turn' },
       },
     });
     sourceTurnId = 'child-user-turn';
-    expect(await request(handler, parentId, 'design/source-path', {})).toMatchObject({
+    expect(await request(handler, parentId, 'design/source-path', { version: 2 })).toMatchObject({
       ok: true,
       result: {
         ok: true,
@@ -317,7 +329,7 @@ test('a shared canvas resolves the executing child draft and causal input while 
         },
       },
     });
-    expect(await request(handler, childId, 'design/source-path', {})).toMatchObject({
+    expect(await request(handler, childId, 'design/source-path', { version: 2 })).toMatchObject({
       ok: true,
       result: {
         path: path.join(childWorkspace.artifactWorkdir, ARTWORK_ENTRY),
@@ -325,7 +337,7 @@ test('a shared canvas resolves the executing child draft and causal input while 
       },
     });
     child.design = { ...design, artworkId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' };
-    expect(await request(handler, parentId, 'design/source-path', {})).toMatchObject({
+    expect(await request(handler, parentId, 'design/source-path', { version: 2 })).toMatchObject({
       ok: true,
       result: { ok: false, error: 'Design source does not belong to this artwork.' },
     });

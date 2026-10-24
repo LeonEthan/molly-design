@@ -139,12 +139,13 @@ the session meta's `design.artworkId`, never by session id: a continuation sessi
 edits its source session's artwork, so the two identities differ there. Conversation
 reads (`useSessionDoc`, `ownerSessionId`) stay session-keyed; the native view key
 (host id) stays per session consumer. Idle shows the editable current draft;
-current-source lookup resolves the shared artwork's authoritative executing
+with negotiated canvas protocol v2, current-source lookup resolves the artwork's executing
 Session, including a child tab while the root conversation is selected. The
 existing source reply carries artwork and live Session/canvas/input-turn identity;
 main validates artwork and execution turn before binding that Session's input.
 Every consumer of the artwork observes that same draft without changing its
-canonical artwork key or retained native host key.
+canonical artwork key or retained native host key. A v1 peer retains the requested
+Session's legacy preview behavior; the v1 flush and readonly handshake remains available.
 An authoritative active Agent turn displays valid, frozen YAML/asset snapshots.
 Until the first valid changed draft, retain the canonical canvas. Invalid subsequent
 files retain the last valid frame. There is no source switch, manual refresh or import.

@@ -1,5 +1,6 @@
 import { PersonalMemoryOperationSchema, PersonalMemorySnapshotSchema } from './personal-memory';
 import { LocalFileResolutionSchema } from './local-file-preview';
+import { DESIGN_SOURCE_PATH_IDENTITY_VERSION } from './machine-protocol-capabilities';
 import {
   AgentBrowserCommandSchema,
   BrowserHostCapabilitiesSchema,
@@ -323,7 +324,7 @@ export const DesignCanvasHostResultSchema = z
   .strict();
 
 /** Read-only historical draft location; byte transport stays with ordinary file preview. */
-export const DesignSourcePathResultSchema = z.discriminatedUnion('ok', [
+export const DesignSourcePathV2ResultSchema = z.discriminatedUnion('ok', [
   z
     .object({
       type: z.literal('design/source-path'),
@@ -347,6 +348,22 @@ export const DesignSourcePathResultSchema = z.discriminatedUnion('ok', [
       error: z.string().min(1),
     })
     .strict(),
+]);
+
+export const DesignSourcePathV1ResultSchema = z.discriminatedUnion('ok', [
+  DesignSourcePathV2ResultSchema.options[0].omit({ artworkId: true }).extend({
+    live: DesignSourcePathV2ResultSchema.options[0].shape.live.unwrap()
+      .omit({ sessionId: true }).required({ sourceTurnId: true }).optional(),
+  }),
+  DesignSourcePathV2ResultSchema.options[1],
+]);
+
+export const DesignSourcePathResultSchema = z.discriminatedUnion('ok', [
+  DesignSourcePathV2ResultSchema.options[0].partial({ artworkId: true }).extend({
+    live: DesignSourcePathV2ResultSchema.options[0].shape.live.unwrap()
+      .partial({ sessionId: true }).optional(),
+  }),
+  DesignSourcePathV2ResultSchema.options[1],
 ]);
 
 export const DesignResubmitInputSchema = z
@@ -435,7 +452,10 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
   BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('design/source-path'),
     ownerSessionId: SessionIdSchema,
-    params: z.object({ turnId: z.string().min(1).max(200).optional() }).strict(),
+    params: z.object({
+      turnId: z.string().min(1).max(200).optional(),
+      version: z.literal(DESIGN_SOURCE_PATH_IDENTITY_VERSION).optional(),
+    }).strict(),
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('design/canvas-host'),
@@ -752,4 +772,8 @@ export function safeParseLocalMachineRpcRequest(
 
 export { FilePreviewV3ErrorSchema } from './file-preview';
 
-export { machineSupportsDesignCanvasSerialEditing } from './machine-protocol-capabilities';
+export {
+  machineSupportsDesignCanvasSerialEditing,
+  negotiateDesignSourcePathVersion,
+  DESIGN_SOURCE_PATH_IDENTITY_VERSION,
+} from './machine-protocol-capabilities';

@@ -12,7 +12,10 @@ import { BrowserHost } from '@/browser/browser-host';
 import { normalizeBrowserImage } from '@/browser/save-image';
 import { writeGeneratedImageAsset } from '@/mcp/image-generation';
 import type { AgentBrowserScope } from '@molly/shared/browser-agent-rpc';
-import { DesignAssetFailureSchema } from '@molly/shared/local-machine-rpc';
+import {
+  DesignAssetFailureSchema,
+  DESIGN_SOURCE_PATH_IDENTITY_VERSION,
+} from '@molly/shared/local-machine-rpc';
 import { clearImageConnectionFromFlock, getMachineFlockImageConnection } from '@molly/shared';
 import { readSessionHistory } from '@molly/shared/session-data';
 import { readLatestTurn } from '@molly/shared/session-data';
@@ -5990,8 +5993,9 @@ export class MessageHandler {
         if (!design)
           return { type: 'design/source-path', ok: false, error: 'Design session is unavailable.' };
         try {
+          const identity = request.params.version === DESIGN_SOURCE_PATH_IDENTITY_VERSION;
           const owner =
-            request.params.turnId === undefined
+            identity && request.params.turnId === undefined
               ? this.designCanvasHost.getActiveOwner(design.artworkId)
               : undefined;
           const sourceSessionId = (owner?.sessionId ?? sessionId) as SessionId;
@@ -6023,10 +6027,20 @@ export class MessageHandler {
             )
               throw error;
           }
-          if (request.params.turnId === undefined) {
+          if (identity && request.params.turnId === undefined) {
             const current = this.designCanvasHost.getActiveOwner(design.artworkId);
             if (current?.sessionId !== owner?.sessionId || current?.turnId !== owner?.turnId)
               throw Error('Design execution changed while resolving its source');
+          }
+          if (!identity) {
+            const turnId = this.designCanvasHost.getActiveOwner(design.artworkId)?.turnId;
+            const sourceTurnId = this.executionService.getActiveUserTurnId(sessionId);
+            return {
+              type: 'design/source-path',
+              ok: true,
+              path: sourcePath,
+              ...(turnId && sourceTurnId ? { live: { turnId, sourceTurnId } } : {}),
+            };
           }
           const sourceTurnId = owner
             ? this.executionService.getActiveUserTurnId(sourceSessionId)

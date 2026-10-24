@@ -102,19 +102,20 @@ the desktop selects its channel from package metadata and pins child environment
 
 ## Machine RPC: canvas preparation
 
-`designCanvasSerialEditing` versions the desktop flush handshake. The daemon's
-visible-turn owner supplies whole active snapshots; a preparation report is bound
+`designCanvasSerialEditing` keeps v1 flush/source replies; v2 adds source identity.
+Negotiate before sending v2 source requests; omitted version returns strict v1.
+The visible-turn owner supplies whole active snapshots; a preparation report is bound
 to artwork and owner token, never an unlock signal. View removal and transport
 failure leave ownership intact. Keep this independent of preview rendering.
 
 ## Historical design files
 
-`design/source-path` binds artwork and active executing Session/canvas/source turn
+`design/source-path` v2 binds artwork and executing Session/canvas/source turn
 identities for display isolation; main checks artwork and turn. These facts confer
 no commit authority.
 `design/source-path` uses trusted Session workspace metadata, including archived
-Sessions. An omitted turn resolves the artwork's active owner's draft, including
-sibling Sessions, or today's expected entry when idle, even before creation.
+Sessions. V2 current reads resolve the artwork owner's draft, including siblings;
+v1 keeps the requested Session. Idle reads allow the expected entry before creation.
 Supplied turns require the frozen original root and an existing regular entry;
 never substitute today's draft, trust a manifest path as authority or start an
 Agent. Ordinary file preview transports bytes.

@@ -24,6 +24,19 @@ void test('a canvas that is not open is not reloaded — the next attach reads t
 import { DesignCanvasAccess } from './design-canvas-access.ts'
 import { DesignCanvasHost } from '../../../../cli/src/design/canvas-host.ts'
 
+void test('source negotiation follows the canvas host snapshot and resets on disconnect', async () => {
+  const access = new DesignCanvasAccess()
+  assert.equal(access.getSourcePathVersion(), 0)
+  await access.update([], undefined, 1)
+  assert.equal(access.getSourcePathVersion(), 1)
+  assert.equal(access.isReadonly('artwork'), false)
+  await access.update([], undefined, 2)
+  assert.equal(access.getSourcePathVersion(), 2)
+  await access.disconnected()
+  assert.equal(access.getSourcePathVersion(), 0)
+  assert.equal(access.isReadonly('artwork'), true)
+})
+
 const deferred = () => {
   let resolve
   const promise = new Promise((done) => {

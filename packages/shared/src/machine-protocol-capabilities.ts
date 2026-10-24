@@ -35,7 +35,9 @@ export const LOCAL_PROJECT_REMOVAL_PROTOCOL_VERSION = 1;
 export const PROVIDER_SETUP_PROTOCOL_VERSION = 1;
 export const LOCAL_FILE_RESOURCES_PROTOCOL_VERSION = 1;
 export const LOCAL_SESSION_ATTACHMENTS_PROTOCOL_VERSION = 1;
-export const DESIGN_CANVAS_SERIAL_EDITING_PROTOCOL_VERSION = 1;
+export const DESIGN_CANVAS_SERIAL_EDITING_BASE_VERSION = 1;
+export const DESIGN_SOURCE_PATH_IDENTITY_VERSION = 2;
+export const DESIGN_CANVAS_SERIAL_EDITING_PROTOCOL_VERSION = DESIGN_SOURCE_PATH_IDENTITY_VERSION;
 export const DESIGN_CONTINUATION_PREPARATION_PROTOCOL_VERSION = 1;
 export const DESIGN_TOOL_HOOKS_PROTOCOL_VERSION = 2;
 export const ACP_PROTOCOL_AUTHENTICATION_VERSION = 2;
@@ -173,8 +175,21 @@ export function machineSupportsDesignCanvasSerialEditing(
   return machineSupportsProtocolCapability(
     machine,
     MACHINE_PROTOCOL_CAPABILITIES.designCanvasSerialEditing,
-    DESIGN_CANVAS_SERIAL_EDITING_PROTOCOL_VERSION
+    DESIGN_CANVAS_SERIAL_EDITING_BASE_VERSION
   );
+}
+
+export function negotiateDesignSourcePathVersion(
+  machine: MachineProtocolCapabilityCarrier | null | undefined
+): 0 | typeof DESIGN_CANVAS_SERIAL_EDITING_BASE_VERSION | typeof DESIGN_SOURCE_PATH_IDENTITY_VERSION {
+  const version = getMachineProtocolCapabilityVersion(
+    machine,
+    MACHINE_PROTOCOL_CAPABILITIES.designCanvasSerialEditing
+  );
+  if (version >= DESIGN_SOURCE_PATH_IDENTITY_VERSION) return DESIGN_SOURCE_PATH_IDENTITY_VERSION;
+  return version >= DESIGN_CANVAS_SERIAL_EDITING_BASE_VERSION
+    ? DESIGN_CANVAS_SERIAL_EDITING_BASE_VERSION
+    : 0;
 }
 
 /** Explicit legacy-design receipt and attachment preflight, not target publication. */

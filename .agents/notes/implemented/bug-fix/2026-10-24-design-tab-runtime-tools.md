@@ -147,3 +147,48 @@ and lint caught one test variable shadow; both were corrected before the final
 complete run. `pnpm format` and `pnpm run docs check` pass, with existing AGENTS
 size warnings and no registered SHA-protected topic changes. Review and native
 evidence are collected in [PR #238](https://github.com/LeonEthan/molly-design/pull/238).
+
+## Codex P1 follow-up: version-skew compatibility
+
+[Review comment 4367322575](https://github.com/LeonEthan/molly-design/pull/238#discussion_r4367322575)
+correctly identified the unversioned strict response change in `43ea28af`.
+The original Electron parser rejects extra fields at both the response and
+`live` levels; the changed parser requires artwork and executing Session ids.
+Deterministic regressions reproduced both directions: the current IPC rejected
+an old daemon response for missing identities, and a frozen original strict
+parser rejected the current daemon's unversioned response.
+
+The shared negotiation contract requires capability-based workflow selection.
+Making new fields optional alone cannot protect an old strict parser. Reuse the
+existing `MachineMeta.protocolCapabilities` advertisement and canvas-host
+exchange: `designCanvasSerialEditing` now advertises v2, while the base v1
+flush handshake remains supported. The existing host snapshot supplies the
+negotiated source version to the canvas-access state; disconnect clears it,
+and a version change invalidates the existing display state notification.
+No release-string inference, discovery endpoint, retry path or persisted
+version store is introduced.
+
+Reuse with adaptation retains strict v1/v2 codecs for `design/source-path`.
+Unversioned requests return the exact v1 shape and requested-Session behavior,
+so an original Electron can still parse a new daemon's response. New Electron
+requests source identity v2 only after negotiation, and uses the v1 codec and
+empty parameters with an old daemon. The aggregate RPC decoder accepts both
+shapes; the IPC selects a strict codec from the negotiated version. V1 still
+checks artwork/request identity and current turn and allows pending input to
+bind later. V2 retains the shared-artwork/child-input checks from the prior fix.
+Missing capability is unsupported, rather than assumed to be v1. Legacy peers
+keep their existing child-preview limitation, without breaking normal previews
+or making the v1 flush handshake unavailable.
+
+Focused validation passes: 8 daemon source/registration tests, 34 IPC/preview/access tests
+and 5 capability tests. The frozen original parser and real IPC class cover
+both skew directions, request parameters, pending input, unavailable capability
+and strict current-source validation. Capability fixtures cover missing/v1/v2/
+future peers, v1 handshake acceptance and clearing negotiation on disconnect.
+`pnpm check` passes, including CLI 3016 passed / 3 skipped, components 3380 passed,
+Electron tests, typechecking, lint and all boundary guards. The exhaustive machine
+registration fixture now acknowledges capability v2. `pnpm format`, docs status
+and docs check pass with existing AGENTS size warnings and no registered protected
+topic changes. No native E2E is run for this repair. The owner's ready state is
+retained; no comment reply or review
+trigger is sent.

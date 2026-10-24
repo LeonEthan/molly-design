@@ -17,21 +17,37 @@ export type SidebarFollowTab = 'browser' | 'design';
 
 type SidebarFollowAgentOptions = {
   browserId: string | null;
+  sessionId: string | null;
+  historySessionId?: string | null;
   turnId: string | null;
   runningTurnId: string | null;
   canvasHostId: string | null;
   committedReceipt?: string;
+  committedReceiptTimestamp?: string;
+  historyReady?: boolean;
   historySynced?: boolean;
   suppressed: boolean;
   onReveal: (tab: SidebarFollowTab, exitZen: boolean) => void;
 };
 
+type SidebarReceiptState = {
+  sessionId: string;
+  mountedAt: number;
+  initialReceipt: string | undefined;
+  initialized: boolean;
+  receipt: string | undefined;
+};
+
 export function useSidebarFollowAgent({
   browserId,
+  sessionId,
+  historySessionId,
   turnId,
   runningTurnId,
   canvasHostId,
   committedReceipt,
+  committedReceiptTimestamp,
+  historyReady = false,
   historySynced = false,
   suppressed,
   onReveal,
@@ -112,35 +128,65 @@ export function useSidebarFollowAgent({
     };
   }, [browserId, canvasHostId]);
 
-  const receiptStateRef = useRef<{
-    sessionId: string;
-    initialized: boolean;
-    receipt?: string;
-  }>({ sessionId: '', initialized: false });
+  const receiptStateRef = useRef<SidebarReceiptState>({
+    sessionId: sessionId ?? '',
+    mountedAt: Date.now(),
+    initialReceipt:
+      historySessionId === sessionId && (historyReady || historySynced)
+        ? committedReceipt
+        : undefined,
+    initialized: false,
+    receipt: undefined,
+  });
+  useLayoutEffect(() => {
+    const nextSessionId = sessionId ?? '';
+    if (receiptStateRef.current.sessionId === nextSessionId) return;
+    receiptStateRef.current = {
+      sessionId: nextSessionId,
+      mountedAt: Date.now(),
+      initialReceipt:
+        historySessionId === sessionId && (historyReady || historySynced)
+          ? committedReceipt
+          : undefined,
+      initialized: false,
+      receipt: undefined,
+    };
+  }, [sessionId, historySessionId, historyReady, historySynced, committedReceipt]);
+
   useEffect(() => {
-    const sessionId = browserId ?? '';
-    let state = receiptStateRef.current;
-    if (state.sessionId !== sessionId) {
-      state = { sessionId, initialized: false };
-      receiptStateRef.current = state;
-    }
-    if (!sessionId) return;
+    if (!sessionId || historySessionId !== sessionId || (!historyReady && !historySynced)) return;
+    const state = receiptStateRef.current;
+    const reveal = (receipt: string) => {
+      const key = `${sessionId}:${receipt}`;
+      if (handledReceipts.has(key)) return;
+      handledReceipts.set(key, true);
+      const latest = latestRef.current;
+      latest.onReveal('design', !latest.suppressed);
+    };
     if (!state.initialized) {
-      if (!committedReceipt && !historySynced) return;
       state.initialized = true;
       state.receipt = committedReceipt;
-      if (committedReceipt) handledReceipts.set(`${sessionId}:${committedReceipt}`, true);
+      if (!committedReceipt) return;
+      const timestamp = Date.parse(committedReceiptTimestamp ?? '');
+      const isNew =
+        state.initialReceipt !== committedReceipt &&
+        Number.isFinite(timestamp) &&
+        timestamp > state.mountedAt;
+      if (isNew) reveal(committedReceipt);
+      else handledReceipts.set(`${sessionId}:${committedReceipt}`, true);
       return;
     }
     if (state.receipt === committedReceipt) return;
     state.receipt = committedReceipt;
-    if (!committedReceipt) return;
-    const key = `${sessionId}:${committedReceipt}`;
-    if (handledReceipts.has(key)) return;
-    handledReceipts.set(key, true);
-    const latest = latestRef.current;
-    latest.onReveal('design', !latest.suppressed);
-  }, [browserId, committedReceipt, historySynced]);
+    if (committedReceipt) reveal(committedReceipt);
+  }, [
+    sessionId,
+    historySessionId,
+    committedReceipt,
+    committedReceiptTimestamp,
+    historyReady,
+    historySynced,
+  ]);
 
   return { noteManualSidebarInteraction };
 }

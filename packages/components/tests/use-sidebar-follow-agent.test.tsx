@@ -19,9 +19,13 @@ type Panel = { open: boolean; tab: 'browser' | 'design' | null };
 type HarnessProps = {
   browserId: string | null;
   turnId: string | null;
+  sessionId?: string | null;
+  historySessionId?: string | null;
   runningTurnId?: string | null;
   canvasHostId?: string | null;
   committedReceipt?: string;
+  committedReceiptTimestamp?: string;
+  historyReady?: boolean;
   historySynced?: boolean;
   suppressed?: boolean;
   initialPanel?: Panel;
@@ -43,8 +47,14 @@ describe('useSidebarFollowAgent', () => {
     setPanel = updatePanel;
     const follow = useSidebarFollowAgent({
       ...props,
+      sessionId: props.sessionId ?? props.browserId,
+      historySessionId:
+        props.historySessionId === undefined
+          ? (props.sessionId ?? props.browserId)
+          : props.historySessionId,
       runningTurnId: props.runningTurnId ?? null,
       canvasHostId: props.canvasHostId ?? null,
+      historyReady: props.historyReady ?? props.historySynced ?? false,
       suppressed: zen,
       onReveal: (tab, exitZen) => {
         if (exitZen) setZen(false);
@@ -100,6 +110,7 @@ describe('useSidebarFollowAgent', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.setSystemTime('2026-10-24T00:00:00.000Z');
     clearSidebarFollowMemory();
     handlers = {};
     window.__MOLLY_ELECTRON__ = true;
@@ -315,5 +326,97 @@ describe('useSidebarFollowAgent', () => {
     renderHarness({ ...props, committedReceipt: undefined });
 
     expect(activeTab()).toBe('browser');
+  });
+
+  it('reveals a new receipt even when history becomes ready after the commit', () => {
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: null,
+      turnId: 'turn-1',
+      runningTurnId: 'turn-1',
+      canvasHostId: 'session-a',
+      historyReady: false,
+      historySynced: false,
+      initialPanel: { open: false, tab: null } satisfies Panel,
+    };
+    renderHarness(props);
+    vi.setSystemTime('2026-10-24T00:00:01.000Z');
+
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      committedReceipt: 'turn-1:revision-1',
+      committedReceiptTimestamp: '2026-10-24T00:00:00.500Z',
+    });
+
+    expect(attribute('data-open')).toBe('true');
+    expect(activeTab()).toBe('design');
+  });
+
+  it('does not replay an older receipt when history becomes ready after mount', () => {
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: null,
+      turnId: 'turn-1',
+      runningTurnId: 'turn-1',
+      canvasHostId: 'session-a',
+      historyReady: false,
+      historySynced: false,
+      initialPanel: { open: false, tab: null } satisfies Panel,
+    };
+    renderHarness(props);
+
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      committedReceipt: 'turn-1:revision-1',
+      committedReceiptTimestamp: '2026-10-23T23:59:59.000Z',
+    });
+
+    expect(attribute('data-open')).toBe('false');
+    expect(activeTab()).toBeNull();
+  });
+
+  it('does not initialize a new conversation baseline from the previous conversation history', () => {
+    const initialPanel = { open: false, tab: null } satisfies Panel;
+    renderHarness({
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: 'session-a',
+      turnId: 'turn-1',
+      canvasHostId: 'session-a',
+      historyReady: true,
+      historySynced: true,
+      initialPanel,
+    });
+
+    const switched = {
+      browserId: 'session-browser-b',
+      sessionId: 'session-b',
+      turnId: 'turn-2',
+      canvasHostId: 'session-a',
+      historyReady: true,
+      historySynced: true,
+      initialPanel,
+    };
+    renderHarness({
+      ...switched,
+      historySessionId: 'session-a',
+      committedReceipt: 'turn-1:revision-1',
+      committedReceiptTimestamp: '2026-10-23T00:00:00.000Z',
+    });
+    renderHarness({
+      ...switched,
+      historySessionId: 'session-b',
+      committedReceipt: 'turn-2:revision-2',
+      committedReceiptTimestamp: '2026-10-23T00:00:00.000Z',
+    });
+
+    expect(attribute('data-open')).toBe('false');
+    expect(activeTab()).toBeNull();
   });
 });

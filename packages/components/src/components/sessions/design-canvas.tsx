@@ -23,7 +23,7 @@ import { userAtom, currentWorkspaceIdAtom, getAllAgentConfigAtom } from '@/atoms
 import { getIpcServices, onIpcEvent, type IpcServices } from '@/lib/electron-ipc-client';
 import { isDesignCanvasRetired, registerDesignCanvas } from '@/lib/design-canvas-close';
 import {
-  latestCommittedDesignReceipt,
+  latestCommittedDesignReceiptDetails,
   latestCommittedDesignTurnId,
   syncOpenDesignCanvas,
 } from '@/lib/design-canvas-sync';
@@ -355,11 +355,15 @@ export function DesignCanvas({
       window.removeEventListener('focus', refresh);
     };
   }, [observeCurrentSession, artworkId, refreshVersions]);
-  const { history: conversationView, synced } = useSessionDoc(
+  const { history: conversationView, synced } = useSessionDoc(sessionId as SessionId, {
+    enabled: sessionId.length > 0,
+  });
+  const { history: additionalConversationView, synced: additionalSynced } = useSessionDoc(
     (receiptSessionId ?? sessionId) as SessionId,
-    { enabled: (receiptSessionId ?? sessionId).length > 0 }
+    { enabled: Boolean(receiptSessionId && receiptSessionId !== sessionId) }
   );
   const designHistory = useConversationIndexRows(conversationView);
+  const additionalDesignHistory = useConversationIndexRows(additionalConversationView);
   const finalized = designHistory
     ?.filter(
       (entry) => entry.role === 'assistant' && (entry.finished || typeof entry.endedAt === 'number')
@@ -390,11 +394,20 @@ export function DesignCanvas({
   useEffect(() => {
     if (preview && previewSubscriptionActive && finalized) void refreshPreview();
   }, [finalized, preview, previewSubscriptionActive, refreshPreview]);
-  const committedReceipt = latestCommittedDesignReceipt(designHistory, artworkId);
+  const rootReceipt = latestCommittedDesignReceiptDetails(designHistory, artworkId);
+  const additionalReceipt = latestCommittedDesignReceiptDetails(additionalDesignHistory, artworkId);
+  const useAdditionalReceipt = Boolean(
+    additionalReceipt &&
+    (!rootReceipt ||
+      Date.parse(additionalReceipt.timestamp ?? '') > Date.parse(rootReceipt.timestamp ?? ''))
+  );
+  const committedReceipt = (useAdditionalReceipt ? additionalReceipt : rootReceipt)?.id;
+  const committedSynced = useAdditionalReceipt ? additionalSynced : synced;
+  const committedDesignHistory = useAdditionalReceipt ? additionalDesignHistory : designHistory;
   const turnElements = useRef({ view: conversationView, committedTurnId: '' });
   turnElements.current = {
-    view: conversationView,
-    committedTurnId: latestCommittedDesignTurnId(designHistory, artworkId) ?? '',
+    view: useAdditionalReceipt ? additionalConversationView : conversationView,
+    committedTurnId: latestCommittedDesignTurnId(committedDesignHistory, artworkId) ?? '',
   };
   const [outsideChanges, setOutsideChanges] = useState<{ ids: string[]; removed: number } | null>(
     null
@@ -658,7 +671,7 @@ export function DesignCanvas({
     settle,
   ]);
   useEffect(() => {
-    if (!synced || !committedReceipt) return undefined;
+    if (!committedSynced || !committedReceipt) return undefined;
     let cancelled = false;
     void syncOpenDesignCanvas(artworkId, hostId)
       .then(async (changes) => {
@@ -698,7 +711,7 @@ export function DesignCanvas({
     return () => {
       cancelled = true;
     };
-  }, [artworkId, hostId, committedReceipt, synced, refreshVersions, settle]);
+  }, [artworkId, hostId, committedReceipt, committedSynced, refreshVersions, settle]);
   const run = (action: () => Promise<unknown>) => {
     setBusy(true);
     setError('');

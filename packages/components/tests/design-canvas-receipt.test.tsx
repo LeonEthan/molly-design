@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   history: [] as { designOutcome?: unknown; items?: unknown }[],
+  historyBySession: null as null | Record<string, { designOutcome?: unknown; items?: unknown }[]>,
   highlights: [] as unknown[],
   synced: false,
   previewVisible: false,
@@ -59,7 +60,7 @@ vi.mock('../src/hooks/use-session-doc', () => ({
       history: createConversationViewFromHistory({
         sessionId: 'artwork' as SessionId,
         getHistory: () =>
-          state.history.map((entry, index) => ({
+          (state.historyBySession?.[sessionId] ?? state.history).map((entry, index) => ({
             id: `turn-${index}`,
             role: 'user',
             timestamp: '2026-09-17T00:00:00Z',
@@ -205,6 +206,7 @@ beforeEach(() => {
     }
   );
   state.history = [];
+  state.historyBySession = null;
   state.synced = false;
   state.previewVisible = false;
   state.processing = false;
@@ -404,6 +406,22 @@ it('uses the viewed child conversation receipt to synchronize their shared artwo
   expect(state.docSessionId).toBe('child-session');
   expect(container.querySelector('[role="alert"]')?.textContent).toContain(
     'Child receipt reached canvas synchronization'
+  );
+});
+
+it('keeps the parent receipt synchronization when a shared-artwork child is viewed', async () => {
+  state.synced = true;
+  state.history = [receipt('parent-turn', 'a'.repeat(64), 'committed', 'artwork')];
+  state.historyBySession = { 'child-session': [] };
+  state.sync.mockRejectedValue(Error('Parent receipt reached canvas synchronization'));
+  await render({
+    sessionId: 'root-session',
+    artworkId: 'artwork',
+    receiptSessionId: 'child-session',
+  });
+
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    'Parent receipt reached canvas synchronization'
   );
 });
 

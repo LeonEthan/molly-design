@@ -170,7 +170,7 @@ import {
   getSessionDetailInitialTabState,
   revealDesignCanvas,
 } from '@/lib/session-detail-initial-state';
-import { latestCommittedDesignReceipt } from '@/lib/design-canvas-sync';
+import { latestCommittedDesignReceiptDetails } from '@/lib/design-canvas-sync';
 import { recordSessionRenderTrace, shortTraceId } from '@/lib/session-render-trace';
 /* Relative, not `@/providers/*`: the Electron web tsconfig maps only an
    allowlist of `@/` subpaths and has no `@/providers/*` entry, so the alias
@@ -2076,14 +2076,17 @@ const SessionDetail = ({
 
   const sidebarFollowSession =
     activeBrowserSession?.id === activeSessionTabId ? activeBrowserSession : null;
-  const { history: sidebarFollowHistory, synced: sidebarFollowHistorySynced } = useSessionDoc(
-    sidebarFollowSession?.id ?? sessionId,
-    { enabled: Boolean(sidebarFollowSession && activeSession?.design) }
-  );
+  const {
+    history: sidebarFollowHistory,
+    synced: sidebarFollowHistorySynced,
+    ready: sidebarFollowHistoryReady,
+  } = useSessionDoc(sidebarFollowSession?.id ?? sessionId, {
+    enabled: Boolean(sidebarFollowSession && activeSession?.design),
+  });
   const sidebarFollowDesignHistory = useConversationIndexRows(sidebarFollowHistory);
   const sidebarFollowReceipt =
     sidebarFollowSession && activeSession
-      ? latestCommittedDesignReceipt(
+      ? latestCommittedDesignReceiptDetails(
           sidebarFollowDesignHistory,
           activeSession.design?.artworkId ?? activeSession.id
         )
@@ -2099,12 +2102,16 @@ const SessionDetail = ({
   );
   const { noteManualSidebarInteraction } = useSidebarFollowAgent({
     browserId: sidebarFollowSession ? `session-browser-${sidebarFollowSession.id}` : null,
+    sessionId: sidebarFollowSession?.id ?? null,
+    historySessionId: sidebarFollowHistory?.sessionId ?? null,
     turnId: sidebarFollowSession
       ? (sidebarFollowSession.processingUserMsgId ?? sidebarFollowSession.latestUserMsgId ?? null)
       : null,
     runningTurnId: sidebarFollowSession?.processingUserMsgId ?? null,
     canvasHostId: activeSession?.design ? activeSession.id : null,
-    committedReceipt: sidebarFollowReceipt,
+    committedReceipt: sidebarFollowReceipt?.id,
+    committedReceiptTimestamp: sidebarFollowReceipt?.timestamp,
+    historyReady: sidebarFollowHistoryReady,
     historySynced: sidebarFollowHistorySynced,
     suppressed: isZenLayoutMode,
     onReveal: handleSidebarFollowReveal,
@@ -3545,7 +3552,9 @@ const SessionDetail = ({
             artworkId={activeSession.design?.artworkId ?? activeSession.id}
             workspaceSlug={workspaceSlug ?? ''}
             followTurnId={
-              isZenLayoutMode ? null : (sidebarFollowSession?.processingUserMsgId ?? null)
+              isZenLayoutMode || !sidebarFollowSession?.processingUserMsgId
+                ? null
+                : `assistant:${sidebarFollowSession.processingUserMsgId}`
             }
             receiptSessionId={sidebarFollowSession?.id ?? activeSession.id}
             active={

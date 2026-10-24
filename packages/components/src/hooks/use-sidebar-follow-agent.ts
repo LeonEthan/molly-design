@@ -33,14 +33,17 @@ type SidebarFollowAgentOptions = {
 type SidebarReceiptState = {
   sessionId: string;
   initialReceipt: string | undefined;
-  initialized: boolean;
-  receipt: string | undefined;
   activityRevision: string | undefined;
+  activityTurnId: string | undefined;
+  activityTurnIds: Set<string>;
   activityRequest: number;
   activityPending: boolean;
 };
 
 const receiptRevision = (receipt: string) => receipt.slice(receipt.indexOf(':') + 1);
+const userTurnId = (turnId: string) =>
+  turnId.startsWith('assistant:') ? turnId.slice('assistant:'.length) : turnId;
+const receiptTurn = (receipt: string) => userTurnId(receipt.slice(0, receipt.indexOf(':')));
 
 export function useSidebarFollowAgent({
   browserId,
@@ -158,9 +161,9 @@ export function useSidebarFollowAgent({
       historySessionId === sessionId && (historyReady || historySynced)
         ? committedReceipt
         : undefined,
-    initialized: false,
-    receipt: undefined,
     activityRevision: undefined,
+    activityTurnId: undefined,
+    activityTurnIds: new Set(),
     activityRequest: 0,
     activityPending: false,
   });
@@ -174,9 +177,9 @@ export function useSidebarFollowAgent({
         historySessionId === sessionId && (historyReady || historySynced)
           ? committedReceipt
           : undefined,
-      initialized: false,
-      receipt: undefined,
       activityRevision: undefined,
+      activityTurnId: undefined,
+      activityTurnIds: new Set(),
       activityRequest: 0,
       activityPending: false,
     };
@@ -193,34 +196,25 @@ export function useSidebarFollowAgent({
     const state = receiptStateRef.current;
     if (state.activityPending) return;
     const receipt = latest.committedReceipt;
-    const reveal = () => {
-      if (!receipt) return;
-      const key = `${latest.sessionId}:${receipt}`;
-      if (handledReceipts.has(key)) return;
+    if (!receipt) return;
+    const key = `${latest.sessionId}:${receipt}`;
+    if (state.initialReceipt === receipt) {
       handledReceipts.set(key, true);
-      latest.onReveal('design', !latest.suppressed);
-    };
-    if (!state.initialized) {
-      state.initialized = true;
-      state.receipt = receipt;
-      if (!receipt) return;
-      if (state.initialReceipt !== receipt && state.activityRevision === receiptRevision(receipt)) {
-        state.activityRevision = undefined;
-        reveal();
-      } else {
-        handledReceipts.set(`${latest.sessionId}:${receipt}`, true);
-      }
       return;
     }
-    if (state.receipt === receipt) return;
-    state.receipt = receipt;
-    if (!receipt) return;
-    if (state.activityRevision === receiptRevision(receipt)) {
-      state.activityRevision = undefined;
-      reveal();
-    } else {
-      handledReceipts.set(`${latest.sessionId}:${receipt}`, true);
+    if (state.activityRevision !== receiptRevision(receipt)) return;
+    const activityTurns = [...state.activityTurnIds, state.activityTurnId, latest.turnId].map(
+      (activityTurn) => (activityTurn ? userTurnId(activityTurn) : '')
+    );
+    if (!activityTurns.includes(receiptTurn(receipt))) {
+      state.initialReceipt ??= receipt;
+      handledReceipts.set(key, true);
+      return;
     }
+    state.activityRevision = undefined;
+    if (handledReceipts.has(key)) return;
+    handledReceipts.set(key, true);
+    latest.onReveal('design', !latest.suppressed);
   }, []);
 
   useEffect(() => {
@@ -242,6 +236,7 @@ export function useSidebarFollowAgent({
       const state = receiptStateRef.current;
       const request = ++state.activityRequest;
       state.activityRevision = undefined;
+      state.activityTurnId = undefined;
       state.activityPending = true;
       const service = getIpcServices()?.design;
       if (!service) {
@@ -255,6 +250,8 @@ export function useSidebarFollowAgent({
           if (!active || state.activityRequest !== request) return;
           state.activityPending = false;
           state.activityRevision = canvasState.revisionId;
+          state.activityTurnId = canvasState.turnId;
+          if (canvasState.turnId) state.activityTurnIds.add(canvasState.turnId);
           attemptCommittedReceipt();
         })
         .catch(() => {

@@ -5,11 +5,27 @@ import type {
   AgentConfigId,
   AgentRoleId,
   SessionId,
+  SessionMeta,
+  SessionToCreate,
 } from '@molly/shared';
 import { isValidSessionImagePathSegment, SessionIdSchema } from '@molly/shared';
 import { z } from 'zod';
 
 const DRAFT_TAB_PREFIX = 'draft:';
+
+export const getDraftSessionParentContext = (
+  parent: Pick<SessionMeta, 'id' | 'project' | 'repoFullName' | 'baseBranch' | 'design'>
+): Pick<
+  SessionToCreate,
+  'project' | 'repoFullName' | 'baseBranch' | 'parentSessionId' | 'design'
+> => ({
+  project: parent.project,
+  repoFullName: parent.repoFullName,
+  baseBranch: parent.baseBranch,
+  parentSessionId: parent.id,
+  design: parent.design,
+});
+
 const configOptionValueSchema = z.union([z.string(), z.boolean()]);
 
 const draftSessionTabSchema = z.object({

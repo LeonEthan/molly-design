@@ -80,6 +80,19 @@ are retired from Molly. Existing turn diffs read historical snapshots; their sum
 uses the shared conversation derivation without provider scans or retries. Saved Changes
 panels show Files. File previews, editing and send-to-chat references remain.
 
+### New design tabs
+
+The tab strip's + and `session.newTab` create a draft child conversation for the
+current artwork. Its first accepted message uses the existing `startSession`
+unit with the parent's workspace context and complete `design` association,
+including when the artwork id differs from the parent Session id. It creates no
+blank artwork or copy. The daemon's existing design startup gate then supplies
+the same design runtime tools as New design, subject to the existing image
+connection and desktop/browser availability checks. Ordinary parents without a
+design association still create ordinary child conversations. Artwork-scoped
+flush/read-only ownership, final CAS and file conflict/re-read behavior stay in
+the existing design services.
+
 ### Copy a design without starting a turn
 
 Save as new design keeps the native copy and association acknowledgement flow. Before

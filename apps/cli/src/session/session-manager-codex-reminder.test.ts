@@ -5,6 +5,7 @@ import type { LoroDocumentManager } from '../lib/loro/doc';
 import type { Logger } from '../utils/logger';
 import type { SessionConfig } from './types';
 import { SessionManager, type ISession, type CreateAgentConfig } from './session-manager';
+import { HarnessCredentialBroker } from '../agent/harness-credential-broker';
 
 vi.mock('@/agent/setting', async (original) => ({
   ...(await original<typeof import('@/agent/setting')>()),
@@ -33,7 +34,7 @@ const config = {
   mcpServerIds: [],
 } as unknown as SessionConfig;
 
-function manager(design: boolean) {
+function manager(design: boolean, parentSessionId?: string) {
   return new SessionManager(
     logger,
     'local-test',
@@ -41,7 +42,12 @@ function manager(design: boolean) {
     'workspace' as WorkspaceId,
     {
       getOrCreateSessionDoc: async () => ({
-        getMetaState: async () => (design ? { design: { artworkId: 'codex-design' } } : {}),
+        getMetaState: async () => ({
+          ...(design
+            ? { design: { artworkId: parentSessionId ?? 'codex-design', path: 'design.json' } }
+            : {}),
+          ...(parentSessionId ? { parentSessionId } : {}),
+        }),
       }),
     } as unknown as LoroDocumentManager,
     { cloudPort: createLocalCloudPort({ identity: { userId: 'local:test' }, workspaces: [] }) }
@@ -49,6 +55,57 @@ function manager(design: boolean) {
 }
 
 describe('Codex design reminder activation', () => {
+  it('enables design runtime tools from accepted shared-artwork tab metadata', async () => {
+    const owner = manager(true, 'design-parent');
+    const credentials = new HarnessCredentialBroker();
+    credentials.exchange({
+      version: 1,
+      connections: [
+        {
+          schemaVersion: 1,
+          id: 'synthetic-connection',
+          revision: 1,
+          providerPresetId: 'openai',
+          displayName: 'Synthetic',
+          baseUrl: 'https://example.invalid/v1',
+          credentialRef: 'synthetic-unused',
+          enabled: true,
+        },
+      ],
+      reports: [],
+    });
+    owner.setHarnessCredentials(credentials);
+    let received: CreateAgentConfig | undefined;
+    const signal = Error('synthetic spawn boundary');
+    const session = {
+      getWorkdir: () => '/synthetic',
+      updateGitIdentity() {},
+      async terminate() {},
+      async createAgent(value: CreateAgentConfig) {
+        received = value;
+        throw signal;
+      },
+    } as unknown as ISession;
+    const internal = owner as unknown as {
+      createSessionInner(value: SessionConfig): Promise<ISession>;
+      createSessionInnerWithAgent(value: SessionConfig): Promise<ISession>;
+    };
+    vi.spyOn(internal, 'createSessionInner').mockResolvedValue(session);
+
+    await expect(
+      internal.createSessionInnerWithAgent({
+        ...config,
+        agentType: 'molly',
+        modelSelection: {
+          connectionId: 'synthetic-connection',
+          modelId: 'synthetic-model',
+        },
+      })
+    ).rejects.toBe(signal);
+
+    expect(received?.designHooks).toBe(true);
+  });
+
   it.each(['codex', 'kimi', 'grok', 'claude'])(
     'takes %s registration from durable design identity',
     async (agentType) => {

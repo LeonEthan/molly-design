@@ -35,6 +35,7 @@ import {
   type SessionActions,
 } from '../src/hooks/use-session-actions';
 import { buildResendInputBlocks } from '../src/lib/undelivered-user-turn';
+import { getDraftSessionParentContext } from '../src/lib/session-draft-tabs';
 import * as electronIpc from '../src/lib/electron-ipc-client';
 import { isDesignCanvasRetired, registerDesignCanvas } from '../src/lib/design-canvas-close';
 
@@ -795,6 +796,53 @@ describe('useSessionActions', () => {
     );
     expect(runtime.withSessionStore).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { artworkId: 'design-parent', parentSessionId: 'design-parent' },
+    { artworkId: 'original-artwork', parentSessionId: 'continuation-parent' },
+    { artworkId: undefined, parentSessionId: 'ordinary-parent' },
+  ])(
+    'accepts a draft tab with its parent artwork: $parentSessionId',
+    async ({ artworkId, parentSessionId }) => {
+      const childSessionId = 'design-child';
+      const design = artworkId ? { artworkId, path: 'design.json' as const } : undefined;
+      let acceptedMeta: SessionMeta | undefined;
+      let acceptedEntry: unknown;
+      const runtime = createRuntime({
+        writer: {
+          modeForMachine: () => 'direct' as const,
+          modeForSession: async () => 'direct' as const,
+          startSession: async (_id, meta, entry) => {
+            acceptedMeta = meta;
+            acceptedEntry = entry;
+            return 'direct' as const;
+          },
+        } as WorkspaceRuntime['writer'],
+      });
+      const actions = await renderActions(runtime);
+      const result = await actions.startSession(
+        {
+          ...createSessionPayload(childSessionId),
+          ...getDraftSessionParentContext({ id: parentSessionId, design }),
+        },
+        {
+          role: 'user',
+          userId: 'user-1',
+          items: [{ type: 'text', text: 'Find poster references' }],
+          timestamp: '2026-10-24T00:00:00.000Z',
+          status: 'pending',
+          read: false,
+          finished: true,
+          inputConfig: { inputBlocks: [{ type: 'text', text: 'Find poster references' }] },
+        } as Parameters<SessionActions['startSession']>[1]
+      );
+
+      expect(acceptedMeta).toMatchObject({ id: childSessionId, parentSessionId });
+      expect(acceptedMeta?.design).toEqual(design);
+      expect(result.sessionMeta.design).toEqual(design);
+      expect(acceptedEntry).toMatchObject({ id: result.historyEntry.id, role: 'user' });
+    }
+  );
 
   it('keeps a local branch selector out of baseBranch until the target machine resolves it', async () => {
     const sessionId = 'session-local-selector' as SessionId;

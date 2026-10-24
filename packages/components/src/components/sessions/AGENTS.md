@@ -1,7 +1,5 @@
 # components/sessions
 
-Edit `AGENTS.md`; `CLAUDE.md` links here.
-
 Files: [README.md](README.md). Scopes:
 [components/](components/AGENTS.md), [message-queue/](message-queue/AGENTS.md).
 
@@ -25,8 +23,8 @@ Files: [README.md](README.md). Scopes:
 
 - File, historical diff and browser surfaces use closeable right-panel tabs.
   `sidePanelTabs` owns order and close fallback; retired Changes entries show Files.
-- Human forks share the workspace; no Git probe/new-worktree menu. Keep recovery
-  for previously accepted worktree forks.
+- New design tabs inherit parent artwork metadata; human forks share the workspace.
+  No Git probe/new-worktree menu; recover accepted worktree forks.
 - Keep one canvas, Save version and direct history switching. Only valid Agent
   drafts replace its display; execution/processing owns readonly.
 - Portal a sole canvas toolbar only when it fits (`soloPanelMinWidth`);

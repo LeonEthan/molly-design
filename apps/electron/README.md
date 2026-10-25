@@ -120,6 +120,18 @@ including when a custom output directory is selected. Generated `resources/cli`
 bytes are excluded from formatting: the embedded engine manifest seals their
 hashes. Rebuild and sync these resources instead of editing them in place.
 
+Before-pack copies the product `LICENSE`, root `NOTICE`, complete Lody Apache 2.0
+license, generated `THIRD_PARTY_NOTICES.md`, and retained Lody theme notices from
+the repository into `resources/licenses/`. Explicit Builder includes retain these
+files after the Markdown exclusion, as with the browser-cookie-reader license.
+After-pack rejects missing, unreadable or empty legal files before signing.
+The delivered files are under
+`Molly.app/Contents/Resources/app.asar.unpacked/resources/licenses/` on macOS;
+Windows uses `resources/app.asar.unpacked/resources/licenses/` beside the executable.
+The Lody copy applies to retained Lody-derived material; Molly's product license
+is the separate FSL `LICENSE`. See [NOTICE](../../NOTICE) and the
+[delivery record](../../.agents/notes/implemented/bug-fix/2026-10-25-license-notices-delivery.md).
+
 ### Molly P0 design sample
 
 The File menu opens the fixed Molly sample and exports PNG/JPEG. Both development

@@ -10,9 +10,16 @@ the Apache License, Version 2.0.
 Molly is an independent project based on the Lody codebase:
 https://github.com/LodyAI/Lody
 
-Lody's interface, Agent execution architecture and related source materials are
-retained under the Apache License, Version 2.0. The original Lody attribution and
-license notices remain in this repository. Lody's license is not the root LICENSE.
+The retained Lody-derived interface, Agent execution architecture and related
+source materials remain under the Apache License, Version 2.0. Its complete,
+verbatim upstream license is in LICENSES/Lody-Apache-2.0.txt. This copy applies
+to that Lody-derived material; it is not Molly Design's product license.
+Lody and its contributors retain their applicable copyright and attribution
+notices. Upstream's LICENSE contains the standard appendix placeholder
+"Copyright [yyyy] [name of copyright owner]", with no project-specific
+copyright line. Upstream has no root NOTICE file. Its bundled theme notices
+remain in packages/components/src/lib/vscode-theme/bundled/NOTICE.md and are
+also shipped as Lody-theme-NOTICE.md beside this NOTICE in packaged resources.
 
 Additional source components retain their own provenance and licenses:
 

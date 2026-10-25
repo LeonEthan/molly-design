@@ -1,5 +1,6 @@
 import { buildBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { buildAgentBrowser } from './agent-browser-resources.mjs'
+import { stageLegalResources } from './legal-resources.mjs'
 import { installEmbeddedSqliteBinding, installEmbeddedSharpBinding } from './cli-native-deps.mjs'
 
 // electron-builder Arch enum (electron-builder/out/index Arch).
@@ -23,6 +24,7 @@ export default async function beforePack(context) {
         `universal builds would need one binding per slice.`
     )
   }
+  stageLegalResources()
   await buildAgentBrowser({ platform, arch: archName })
   await buildBrowserCookieReader({ platform, arch: archName })
   installEmbeddedSqliteBinding({ platform, arch: archName })

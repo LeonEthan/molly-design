@@ -8,6 +8,7 @@ tsconfig.*.json
 resources/design
 resources/cli
 resources/agent-browser
+resources/licenses
 .cache/agent-browser
 .sparkle-local
 

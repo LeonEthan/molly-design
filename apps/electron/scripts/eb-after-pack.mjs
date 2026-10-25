@@ -1,6 +1,7 @@
 import { PI_ENGINE_VERSION } from '../../../packages/shared/src/embedded-harness.ts'
 import { verifyBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { verifyAgentBrowser } from './agent-browser-resources.mjs'
+import { verifyLegalResources } from './legal-resources.mjs'
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript packaging hook. */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -61,6 +62,10 @@ export default async function afterPack(context) {
     binaryPath = path.join(context.appOutDir, `${executableName}.exe`)
     resourcesDir = path.join(context.appOutDir, 'resources')
   }
+  const legalDirectory = path.join(resourcesDir, 'app.asar.unpacked', 'resources', 'licenses')
+  verifyLegalResources(legalDirectory)
+  console.log(`[licenses] verified packaged legal resources: ${legalDirectory}`)
+
   // The browser's persistent account partition must never start writing real
   // cookies into Electron's default plaintext store. Flip before Builder signs
   // the package and verify the bytes in the exact executable being delivered.

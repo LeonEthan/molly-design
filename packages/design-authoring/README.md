@@ -20,8 +20,10 @@ available under Apache-2.0. Third-party
 components retain their individual licenses. `source-manifest.json` records live pins with upstream path,
 derivation (`verbatim` / `adapted` / `ported`), and hashes; rewritten skills and
 the PPTD catalogue/example are not live ALD pins. `scripts/build.mjs` re-verifies
-verbatim files on every build. The imagegen skill ships the upstream MIT
-`LICENSE.txt`.
+verbatim files on every build. Molly-authored skill text and helpers follow the
+package’s FSL-1.1-ALv2 license. Third-party imagegen reference material retains its
+upstream Apache-2.0 terms; the verbatim license copy ships as
+`skills/imagegen/LICENSE.txt`.
 
 ## Scope
 

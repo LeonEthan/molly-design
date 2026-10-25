@@ -4,7 +4,7 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-25T12:40:45.380Z",
+  "generatedAt": "2026-10-25T13:10:17.825Z",
   "entries": [
     {
       "id": "molly-design-adapters",

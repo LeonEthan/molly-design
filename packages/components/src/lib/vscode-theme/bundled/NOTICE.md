@@ -11,8 +11,9 @@ theme adapter. Do not execute extension code from a theme package.
   (`.agents/notes/proposed/feature/2026-09-16-monochrome-chrome-visual-refresh.zh.md`)
 - Molly Light lineage: Lody Light ← Vitesse Light Soft (`antfu/theme-vitesse`, MIT)
 - Molly Dark lineage: Vesper (`raunofreiberg/vesper`, MIT)
-- License: MIT (same as the forked themes)
-- License text in this repository:
+- Molly Design modifications: FSL-1.1-ALv2; see the root `LICENSE`.
+- Upstream Vitesse Light Soft and Vesper portions remain under MIT; their
+  copyright and license notices are preserved in these existing files:
   `packages/components/src/lib/vscode-theme/bundled/themes/vitesse/LICENSE.md` (light lineage),
   `packages/components/src/lib/vscode-theme/bundled/themes/vesper/LICENSE.md` (dark lineage)
 

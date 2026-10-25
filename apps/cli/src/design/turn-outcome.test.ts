@@ -397,6 +397,25 @@ describe('collectDesignTurnOutcome', () => {
     expect(attempt.artworkTitle).toBe('Turn outcome test');
   });
 
+  it('stamps committed receipts when the save succeeds', async () => {
+    const harness = createHarness();
+    const created = await createDesign(harness);
+    await writeArtifact(harness, PAGE);
+    await writeManifest(harness, created.revisionId);
+    const timestamps = [new Date('2026-09-10T01:00:00.100Z'), new Date('2026-09-10T01:00:00.300Z')];
+    const now = () => timestamps.shift() ?? new Date('2026-09-10T01:00:00.300Z');
+
+    const attempt = await collectDesignTurnOutcome({ ...contextFor(harness), now });
+
+    expect(attempt.status).toBe('recorded');
+    if (attempt.status !== 'recorded') return;
+    expect(attempt.outcome).toMatchObject({
+      status: 'committed',
+      timestamp: '2026-09-10T01:00:00.300Z',
+    });
+    expect(recordedOutcome(harness)?.timestamp).toBe('2026-09-10T01:00:00.300Z');
+  });
+
   it.each(['absent', 'rejected'] as const)(
     'does not infer unchanged contents from %s dispatch evidence',
     async (status) => {

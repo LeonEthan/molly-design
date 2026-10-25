@@ -399,6 +399,20 @@ describe('useSidebarFollowAgent', () => {
     expect(revealCount()).toBe(2);
   });
 
+  it('reveals once when collection starts before the view and commit lands after it', () => {
+    const props = {
+      browserId: 'session-browser-a',
+      turnId: 'turn-a',
+      committedReceipts: [receipt('turn-a:revision-1', AFTER_VIEW)],
+      initialPanel: { open: false, tab: null } satisfies Panel,
+    };
+    renderHarness(props);
+    expect(revealCount()).toBe(1);
+
+    renderHarness(props);
+    expect(revealCount()).toBe(1);
+  });
+
   it('ignores a receipt from a non-current history session', () => {
     const props = {
       browserId: 'session-browser-a',

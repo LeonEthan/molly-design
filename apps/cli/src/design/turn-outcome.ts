@@ -491,7 +491,12 @@ export async function collectDesignTurnOutcome(
           { lock: ctx.lock }
         );
         return {
-          outcome: { ...base, status: 'committed', revisionId: saved.revisionId },
+          outcome: {
+            ...base,
+            status: 'committed',
+            revisionId: saved.revisionId,
+            timestamp: (ctx.now ?? (() => new Date()))().toISOString(),
+          },
           artworkTitle: intake.validated.title,
         };
       } catch (error) {

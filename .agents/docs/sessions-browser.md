@@ -117,8 +117,8 @@ this page is the full text of the rules summarised there.
   comes from history processing, the shared pending activation resolver and history
   order, never timestamp migration; a queued next Turn starts clear. Each viewed
   Session tab records `viewStartedAt`; a committed receipt reveals once when its CLI
-  timestamp is at or after that time and `turnId:revisionId:timestamp` has not been
-  handled in this view. Missing, invalid, or earlier timestamps never reveal, and a
+  timestamp, taken after the awaited save succeeds, is at or after that time and
+  `turnId:revisionId:timestamp` has not been handled in this view. Missing, invalid, or earlier timestamps never reveal, and a
   new view does not replay away events. No revision evidence, history baseline,
   activity transition, pending candidate, or canvas query is involved. Snapshot identity
   deduplicates across conversation re-subscription. Other Sessions or

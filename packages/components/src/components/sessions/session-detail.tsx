@@ -577,13 +577,6 @@ const SessionDetail = ({
   const activeSession = session ?? null;
   const designElementFocus = useAtomValue(designElementFocusAtom);
   const seenDesignElementFocus = useRef(designElementFocus);
-  useEffect(() => {
-    if (!designElementFocus || designElementFocus === seenDesignElementFocus.current) return;
-    seenDesignElementFocus.current = designElementFocus;
-    if (!activeSession?.design) return;
-    revealRightSidebar();
-    activateSidebarTab('design');
-  }, [activateSidebarTab, activeSession?.design, designElementFocus, revealRightSidebar]);
   const activeSessionLiveStatus = useAtomValue(
     sessionLiveStatusAtomFamily((activeSession?.id ?? '__no_session__') as SessionId)
   );
@@ -1953,8 +1946,80 @@ const SessionDetail = ({
     [fileDiffsByTurn]
   );
 
+  const sidebarFollowSession =
+    activeBrowserSession?.id === activeSessionTabId ? activeBrowserSession : null;
+  const sidebarFollowDesignSession =
+    activeSession?.design &&
+    sidebarFollowSession?.design?.artworkId === activeSession.design.artworkId
+      ? sidebarFollowSession
+      : null;
+  const {
+    history: sidebarFollowHistory,
+    synced: sidebarFollowHistorySynced,
+    ready: sidebarFollowHistoryReady,
+  } = useSessionDoc(sidebarFollowDesignSession?.id ?? sessionId, {
+    enabled: Boolean(sidebarFollowDesignSession),
+  });
+  const sidebarFollowDesignHistory = useConversationIndexRows(sidebarFollowHistory);
+  const sidebarFollowAcceptedTurn = sidebarFollowDesignHistory.findLast(
+    (entry) => entry.role === 'user'
+  );
+  const sidebarFollowRunningTurnId =
+    sidebarFollowDesignSession?.processingUserMsgId ??
+    (sidebarFollowAcceptedTurn &&
+    sidebarFollowAcceptedTurn.id !== sidebarFollowDesignSession?.lastHandledUserMsgId
+      ? sidebarFollowAcceptedTurn.id
+      : null);
+  const sidebarFollowReceipt =
+    sidebarFollowDesignSession && activeSession
+      ? latestCommittedDesignReceiptDetails(
+          sidebarFollowDesignHistory,
+          activeSession.design?.artworkId ?? activeSession.id
+        )
+      : undefined;
+  const handleSidebarFollowReveal = useCallback(
+    (tab: SidebarTab, exitZen: boolean) => {
+      if (!isSidebarOpen) setSidebarRestoreSeq((seq) => seq + 1);
+      if (exitZen) revealRightSidebar();
+      else setIsSidebarOpen(true);
+      activateSidebarTab(tab);
+    },
+    [activateSidebarTab, isSidebarOpen, revealRightSidebar]
+  );
+  const { noteManualSidebarInteraction } = useSidebarFollowAgent({
+    browserId: sidebarFollowSession ? `session-browser-${sidebarFollowSession.id}` : null,
+    sessionId: sidebarFollowDesignSession?.id ?? null,
+    historySessionId: sidebarFollowHistory?.sessionId ?? null,
+    acceptedTurnId: sidebarFollowAcceptedTurn?.id ?? null,
+    acceptedTurnTimestamp: sidebarFollowAcceptedTurn?.timestamp ?? null,
+    turnId: sidebarFollowSession
+      ? (sidebarFollowSession.processingUserMsgId ??
+        sidebarFollowSession.latestUserMsgId ??
+        sidebarFollowAcceptedTurn?.id ??
+        null)
+      : null,
+    runningTurnId: sidebarFollowRunningTurnId,
+    canvasHostId: activeSession?.design ? activeSession.id : null,
+    artworkId: activeSession?.design ? (activeSession.design.artworkId ?? activeSession.id) : null,
+    committedReceipt: sidebarFollowReceipt?.id,
+    historyReady: sidebarFollowHistoryReady,
+    historySynced: sidebarFollowHistorySynced,
+    suppressed: isZenLayoutMode,
+    onReveal: handleSidebarFollowReveal,
+  });
+
+  useEffect(() => {
+    if (!designElementFocus || designElementFocus === seenDesignElementFocus.current) return;
+    seenDesignElementFocus.current = designElementFocus;
+    if (!activeSession?.design) return;
+    noteManualSidebarInteraction();
+    revealRightSidebar();
+    activateSidebarTab('design');
+  }, [activateSidebarTab, activeSession?.design, designElementFocus, noteManualSidebarInteraction, revealRightSidebar]);
+
   const upsertViewerTab = useCallback(
     (tab: ViewerTab) => {
+      noteManualSidebarInteraction();
       setViewerTabs((prev) => {
         const idx = prev.findIndex((item) => item.id === tab.id);
         if (idx === -1) {
@@ -1974,7 +2039,7 @@ const SessionDetail = ({
       selectSidePanelTab(tab.id);
       revealRightSidebar();
     },
-    [revealRightSidebar, selectSidePanelTab]
+    [noteManualSidebarInteraction, revealRightSidebar, selectSidePanelTab]
   );
 
   const nextFocusRequestSeq = useCallback(() => {
@@ -2057,6 +2122,7 @@ const SessionDetail = ({
 
   const handleOpenBrowser = useCallback(
     (tabSessionId?: SessionId, navigateCandidate = false) => {
+      noteManualSidebarInteraction();
       const browserSessionId = tabSessionId ?? activeBrowserSession?.id;
       if (tabSessionId) {
         navigateToSessionTab(tabSessionId, { push: true });
@@ -2071,56 +2137,14 @@ const SessionDetail = ({
       revealRightSidebar();
       activateSidebarTab('browser');
     },
-    [activeBrowserSession?.id, activateSidebarTab, navigateToSessionTab, revealRightSidebar]
+    [
+      activeBrowserSession?.id,
+      activateSidebarTab,
+      navigateToSessionTab,
+      noteManualSidebarInteraction,
+      revealRightSidebar,
+    ]
   );
-
-  const sidebarFollowSession =
-    activeBrowserSession?.id === activeSessionTabId ? activeBrowserSession : null;
-  const sidebarFollowDesignSession =
-    activeSession?.design &&
-    sidebarFollowSession?.design?.artworkId === activeSession.design.artworkId
-      ? sidebarFollowSession
-      : null;
-  const {
-    history: sidebarFollowHistory,
-    synced: sidebarFollowHistorySynced,
-    ready: sidebarFollowHistoryReady,
-  } = useSessionDoc(sidebarFollowDesignSession?.id ?? sessionId, {
-    enabled: Boolean(sidebarFollowDesignSession),
-  });
-  const sidebarFollowDesignHistory = useConversationIndexRows(sidebarFollowHistory);
-  const sidebarFollowReceipt =
-    sidebarFollowDesignSession && activeSession
-      ? latestCommittedDesignReceiptDetails(
-          sidebarFollowDesignHistory,
-          activeSession.design?.artworkId ?? activeSession.id
-        )
-      : undefined;
-  const handleSidebarFollowReveal = useCallback(
-    (tab: SidebarTab, exitZen: boolean) => {
-      if (!isSidebarOpen) setSidebarRestoreSeq((seq) => seq + 1);
-      if (exitZen) revealRightSidebar();
-      else setIsSidebarOpen(true);
-      activateSidebarTab(tab);
-    },
-    [activateSidebarTab, isSidebarOpen, revealRightSidebar]
-  );
-  const { noteManualSidebarInteraction } = useSidebarFollowAgent({
-    browserId: sidebarFollowSession ? `session-browser-${sidebarFollowSession.id}` : null,
-    sessionId: sidebarFollowDesignSession?.id ?? null,
-    historySessionId: sidebarFollowHistory?.sessionId ?? null,
-    turnId: sidebarFollowSession
-      ? (sidebarFollowSession.processingUserMsgId ?? sidebarFollowSession.latestUserMsgId ?? null)
-      : null,
-    runningTurnId: sidebarFollowDesignSession?.processingUserMsgId ?? null,
-    canvasHostId: activeSession?.design ? activeSession.id : null,
-    artworkId: activeSession?.design ? (activeSession.design.artworkId ?? activeSession.id) : null,
-    committedReceipt: sidebarFollowReceipt?.id,
-    historyReady: sidebarFollowHistoryReady,
-    historySynced: sidebarFollowHistorySynced,
-    suppressed: isZenLayoutMode,
-    onReveal: handleSidebarFollowReveal,
-  });
 
   const handleBrowserCandidateNavigationRequestHandled = useCallback((requestId: number) => {
     setBrowserCandidateNavigationRequest((current) => (current?.id === requestId ? null : current));
@@ -2310,6 +2334,7 @@ const SessionDetail = ({
 
   const handleForkedConversationPrepared = useCallback(
     (sourceSessionId: string, targetSessionId: SessionId) => {
+      noteManualSidebarInteraction();
       const taken = takePendingFork(sourceSessionId, targetSessionId);
       if (!taken) return;
       if (taken.placement === 'side-panel') {
@@ -2330,6 +2355,7 @@ const SessionDetail = ({
     },
     [
       handleSessionTabSelect,
+      noteManualSidebarInteraction,
       revealRightSidebar,
       router,
       selectSidePanelTab,
@@ -2367,10 +2393,11 @@ const SessionDetail = ({
   // When a viewer tab is selected, activate the viewer surface for the current session.
   const handleViewerTabSelect = useCallback(
     (tabId: string) => {
+      noteManualSidebarInteraction();
       selectSidePanelTab(tabId);
       revealRightSidebar();
     },
-    [revealRightSidebar, selectSidePanelTab]
+    [noteManualSidebarInteraction, revealRightSidebar, selectSidePanelTab]
   );
 
   const handleSidebarTabSelect = useCallback(
@@ -3556,9 +3583,7 @@ const SessionDetail = ({
             sessionId={activeSession.id}
             artworkId={activeSession.design?.artworkId ?? activeSession.id}
             workspaceSlug={workspaceSlug ?? ''}
-            followExecution={
-              !isZenLayoutMode && Boolean(sidebarFollowDesignSession?.processingUserMsgId)
-            }
+            followExecution={!isZenLayoutMode && Boolean(sidebarFollowRunningTurnId)}
             receiptSessionId={sidebarFollowDesignSession?.id ?? activeSession.id}
             active={
               activeSidebarTab === 'design' &&

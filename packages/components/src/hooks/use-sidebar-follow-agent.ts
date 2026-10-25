@@ -5,12 +5,14 @@ import { LRUCache } from '@/lib/lru-cache';
 
 const MAX_REMEMBERED_KEYS = 100;
 const BROWSER_SEGMENT_IDLE_MS = 500;
-const manualTurns = new LRUCache<string, true>(MAX_REMEMBERED_KEYS);
+const manualTurns = new LRUCache<string, { at: number }>(MAX_REMEMBERED_KEYS);
 const handledReceipts = new LRUCache<string, true>(MAX_REMEMBERED_KEYS);
+const handledPreviews = new LRUCache<string, true>(MAX_REMEMBERED_KEYS);
 
 export const clearSidebarFollowMemory = (): void => {
   manualTurns.clear();
   handledReceipts.clear();
+  handledPreviews.clear();
 };
 
 export type SidebarFollowTab = 'browser' | 'design';
@@ -19,6 +21,8 @@ type SidebarFollowAgentOptions = {
   browserId: string | null;
   sessionId: string | null;
   historySessionId?: string | null;
+  acceptedTurnId?: string | null;
+  acceptedTurnTimestamp?: string | null;
   turnId: string | null;
   runningTurnId: string | null;
   canvasHostId: string | null;
@@ -33,6 +37,10 @@ type SidebarFollowAgentOptions = {
 type SidebarReceiptState = {
   sessionId: string;
   initialReceipt: string | undefined;
+  initialRevision: string | undefined;
+  initialTurnId: string | undefined;
+  initialRequest: number;
+  initialPending: boolean;
   activityRevision: string | undefined;
   activityTurnId: string | undefined;
   activityTurnIds: Set<string>;
@@ -49,6 +57,8 @@ export function useSidebarFollowAgent({
   browserId,
   sessionId,
   historySessionId,
+  acceptedTurnId,
+  acceptedTurnTimestamp,
   turnId,
   runningTurnId,
   canvasHostId,
@@ -84,17 +94,33 @@ export function useSidebarFollowAgent({
     };
   });
 
+  const lastManualInteractionRef = useRef<{ browserId: string; key: string; at: number } | null>(
+    null
+  );
   const noteManualSidebarInteraction = useCallback(() => {
-    if (browserId) manualTurns.set(`${browserId}:${turnId ?? ''}`, true);
+    if (!browserId) return;
+    const key = `${browserId}:${turnId ?? ''}`;
+    const at = Date.now();
+    lastManualInteractionRef.current = { browserId, key, at };
+    manualTurns.set(key, { at });
   }, [browserId, turnId]);
+
+  useEffect(() => {
+    if (!browserId || !acceptedTurnId || !acceptedTurnTimestamp) return;
+    const acceptedAt = Date.parse(acceptedTurnTimestamp);
+    const latest = lastManualInteractionRef.current;
+    if (!latest || latest.browserId !== browserId || latest.at < acceptedAt) return;
+    const acceptedKey = `${browserId}:${acceptedTurnId}`;
+    manualTurns.set(acceptedKey, { at: latest.at });
+    if (latest.key !== acceptedKey) manualTurns.delete(latest.key);
+    lastManualInteractionRef.current = { ...latest, key: acceptedKey };
+  }, [browserId, acceptedTurnId, acceptedTurnTimestamp]);
 
   useEffect(() => {
     if (!browserId && !canvasHostId) return undefined;
     const bridge = getPublicBrowserBridge();
     let key = '';
     let browsing = false;
-    let previewTurnId = '';
-    let lastSourceIdentity = '';
     let idleTimer: ReturnType<typeof setTimeout> | undefined;
     const clearIdleTimer = () => {
       if (idleTimer !== undefined) clearTimeout(idleTimer);
@@ -137,13 +163,11 @@ export function useSidebarFollowAgent({
     const stopPreview = onIpcEvent('design.preview', (result) => {
       if (result.hostId !== canvasHostId || result.status !== 'ready' || !result.sourceIdentity)
         return;
+      const previewKey = `${canvasHostId}:${result.sourceIdentity}`;
+      if (handledPreviews.has(previewKey)) return;
+      handledPreviews.set(previewKey, true);
       const latest = latestRef.current;
-      if (previewTurnId !== (latest.runningTurnId ?? '')) {
-        previewTurnId = latest.runningTurnId ?? '';
-        lastSourceIdentity = '';
-      }
-      if (!previewTurnId || lastSourceIdentity === result.sourceIdentity) return;
-      lastSourceIdentity = result.sourceIdentity;
+      if (!latest.runningTurnId) return;
       endBrowsingSegment();
       const manualKey = `${browserId ?? ''}:${latest.turnId ?? ''}`;
       if (!latest.suppressed && !manualTurns.has(manualKey)) latest.onReveal('design', true);
@@ -161,6 +185,10 @@ export function useSidebarFollowAgent({
       historySessionId === sessionId && (historyReady || historySynced)
         ? committedReceipt
         : undefined,
+    initialRevision: undefined,
+    initialTurnId: undefined,
+    initialRequest: 0,
+    initialPending: false,
     activityRevision: undefined,
     activityTurnId: undefined,
     activityTurnIds: new Set(),
@@ -170,13 +198,16 @@ export function useSidebarFollowAgent({
   useLayoutEffect(() => {
     const nextSessionId = sessionId ?? '';
     if (receiptStateRef.current.sessionId === nextSessionId) return;
-    receiptStateRef.current.activityRequest += 1;
     receiptStateRef.current = {
       sessionId: nextSessionId,
       initialReceipt:
         historySessionId === sessionId && (historyReady || historySynced)
           ? committedReceipt
           : undefined,
+      initialRevision: undefined,
+      initialTurnId: undefined,
+      initialRequest: 0,
+      initialPending: false,
       activityRevision: undefined,
       activityTurnId: undefined,
       activityTurnIds: new Set(),
@@ -184,6 +215,11 @@ export function useSidebarFollowAgent({
       activityPending: false,
     };
   }, [sessionId, historySessionId, historyReady, historySynced, committedReceipt]);
+  useLayoutEffect(() => {
+    if (!runningTurnId) return;
+    receiptStateRef.current.activityTurnIds.add(runningTurnId);
+    if (turnId) receiptStateRef.current.activityTurnIds.add(turnId);
+  }, [turnId, runningTurnId]);
 
   const attemptCommittedReceipt = useCallback(() => {
     const latest = latestRef.current;
@@ -194,7 +230,7 @@ export function useSidebarFollowAgent({
     )
       return;
     const state = receiptStateRef.current;
-    if (state.activityPending) return;
+    if (state.initialPending || state.activityPending) return;
     const receipt = latest.committedReceipt;
     if (!receipt) return;
     const key = `${latest.sessionId}:${receipt}`;
@@ -202,10 +238,27 @@ export function useSidebarFollowAgent({
       handledReceipts.set(key, true);
       return;
     }
+    if (state.initialReceipt === undefined && state.activityRevision === undefined) {
+      if (state.initialRevision !== receiptRevision(receipt)) return;
+      const initialTurnId = state.initialTurnId && userTurnId(state.initialTurnId);
+      const running = latest.runningTurnId && userTurnId(latest.runningTurnId);
+      if (
+        running !== receiptTurn(receipt) &&
+        (!initialTurnId || initialTurnId === receiptTurn(receipt))
+      ) {
+        state.initialReceipt = receipt;
+        handledReceipts.set(key, true);
+        return;
+      }
+    }
     if (state.activityRevision !== receiptRevision(receipt)) return;
-    const activityTurns = [...state.activityTurnIds, state.activityTurnId, latest.turnId].map(
-      (activityTurn) => (activityTurn ? userTurnId(activityTurn) : '')
-    );
+    const completedTurnId =
+      state.initialRevision !== state.activityRevision ? latest.turnId : null;
+    const activityTurns = [
+      ...state.activityTurnIds,
+      state.activityTurnId,
+      completedTurnId,
+    ].map((activityTurn) => (activityTurn ? userTurnId(activityTurn) : ''));
     if (!activityTurns.includes(receiptTurn(receipt))) {
       state.initialReceipt ??= receipt;
       handledReceipts.set(key, true);
@@ -231,14 +284,32 @@ export function useSidebarFollowAgent({
   useEffect(() => {
     if (!sessionId || !artworkId) return undefined;
     let active = true;
+    const state = receiptStateRef.current;
+    const service = getIpcServices()?.design;
+    if (service) {
+      const request = ++state.initialRequest;
+      state.initialPending = true;
+      void service
+        .state(artworkId)
+        .then((canvasState) => {
+          if (!active || state.initialRequest !== request) return;
+          state.initialPending = false;
+          state.initialRevision = canvasState.revisionId;
+          state.initialTurnId = canvasState.turnId;
+          attemptCommittedReceipt();
+        })
+        .catch(() => {
+          if (!active || state.initialRequest !== request) return;
+          state.initialPending = false;
+          attemptCommittedReceipt();
+        });
+    }
     const stop = onIpcEvent('design.state', (event) => {
       if (event.artworkId && event.artworkId !== artworkId) return;
-      const state = receiptStateRef.current;
       const request = ++state.activityRequest;
       state.activityRevision = undefined;
       state.activityTurnId = undefined;
       state.activityPending = true;
-      const service = getIpcServices()?.design;
       if (!service) {
         state.activityPending = false;
         attemptCommittedReceipt();

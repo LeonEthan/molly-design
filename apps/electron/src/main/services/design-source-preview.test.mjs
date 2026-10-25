@@ -374,6 +374,20 @@ for (const event of ['did-start-navigation', 'render-process-gone', 'closed']) {
   })
 }
 
+void test('same-document navigation retains preview ownership until a document change', async () => {
+  const f = fixture()
+  f.loading.resolve()
+  assert.equal((await f.refreshSourcePreview(f.owner, 'artwork', 'host', source)).status, 'ready')
+  const contents = f.nativeViews[0].webContents
+  f.owner.webContents.emit('did-start-navigation', {}, 'file:///design#tab=session', true, true)
+  assert.equal(contents.isDestroyed(), false)
+  assert.equal(f.watchers[0].closed, false)
+
+  f.owner.webContents.emit('did-start-navigation', {}, 'file:///other', false, true)
+  assert.equal(contents.isDestroyed(), true)
+  assert.equal(f.watchers[0].closed, true)
+})
+
 void test('a ready preview whose contents were destroyed can be closed repeatedly', async () => {
   const f = fixture()
   f.loading.resolve()

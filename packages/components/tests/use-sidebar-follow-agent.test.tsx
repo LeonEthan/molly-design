@@ -21,6 +21,8 @@ type HarnessProps = {
   turnId: string | null;
   sessionId?: string | null;
   historySessionId?: string | null;
+  acceptedTurnId?: string | null;
+  acceptedTurnTimestamp?: string | null;
   runningTurnId?: string | null;
   canvasHostId?: string | null;
   artworkId?: string | null;
@@ -38,6 +40,8 @@ describe('useSidebarFollowAgent', () => {
   let handlers: Record<string, Array<(payload: unknown) => void>>;
   let revisions: Record<string, string>;
   let canvasTurnIds: Record<string, string | undefined>;
+  let deferDesignState: boolean;
+  let resumeDesignState: (() => void) | undefined;
   let noteManualSidebarInteraction: () => void;
   let setPanel: (panel: Panel) => void;
 
@@ -126,15 +130,23 @@ describe('useSidebarFollowAgent', () => {
     handlers = {};
     revisions = {};
     canvasTurnIds = {};
+    deferDesignState = false;
+    resumeDesignState = undefined;
     window.__MOLLY_ELECTRON__ = true;
     window.ipc = {
-      invoke: async (channel: string, ...args: unknown[]) =>
-        channel === 'design.state'
-          ? {
-              revisionId: revisions[args[0] as string],
-              turnId: canvasTurnIds[args[0] as string],
-            }
-          : { ok: true },
+      invoke: async (channel: string, ...args: unknown[]) => {
+        if (channel !== 'design.state') return { ok: true };
+        if (deferDesignState) {
+          deferDesignState = false;
+          await new Promise<void>((resolve) => {
+            resumeDesignState = resolve;
+          });
+        }
+        return {
+          revisionId: revisions[args[0] as string],
+          turnId: canvasTurnIds[args[0] as string],
+        };
+      },
       on: (channel: string, handler: (payload: unknown) => void) => {
         (handlers[channel] ??= []).push(handler);
         return () => {
@@ -195,6 +207,41 @@ describe('useSidebarFollowAgent', () => {
     expect(activeTab()).toBe('browser');
   });
 
+  it('carries manual suppression to the accepted turn and clears it for the next turn', () => {
+    renderHarness({
+      browserId: 'session-browser-a',
+      turnId: null,
+      runningTurnId: 'turn-new',
+      canvasHostId: 'session-a',
+    });
+    act(() => {
+      noteManualSidebarInteraction();
+      setPanel({ open: true, tab: 'browser' });
+    });
+
+    renderHarness({
+      browserId: 'session-browser-a',
+      turnId: 'turn-new',
+      acceptedTurnId: 'turn-new',
+      acceptedTurnTimestamp: '2026-10-23T23:59:59.000Z',
+      runningTurnId: 'turn-new',
+      canvasHostId: 'session-a',
+    });
+    emitPreview('session-a', 'snapshot-1');
+    expect(activeTab()).toBe('browser');
+
+    renderHarness({
+      browserId: 'session-browser-a',
+      turnId: 'turn-next',
+      acceptedTurnId: 'turn-next',
+      acceptedTurnTimestamp: '2026-10-24T00:00:01.000Z',
+      runningTurnId: 'turn-next',
+      canvasHostId: 'session-a',
+    });
+    emitPreview('session-a', 'snapshot-2');
+    expect(activeTab()).toBe('design');
+  });
+
   it('follows only new ready snapshots for the current executing session', () => {
     renderHarness({
       browserId: 'session-browser-a',
@@ -222,6 +269,41 @@ describe('useSidebarFollowAgent', () => {
     });
     emitPreview('session-a', 'snapshot-3');
     expect(activeTab()).toBe('browser');
+  });
+
+  it('deduplicates a ready snapshot across conversation resubscriptions', () => {
+    renderHarness({
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      turnId: 'turn-1',
+      runningTurnId: 'turn-1',
+      canvasHostId: 'session-a',
+    });
+    emitPreview('session-a', 'snapshot-1');
+    expect(activeTab()).toBe('design');
+    act(() => setPanel({ open: true, tab: 'browser' }));
+
+    renderHarness({
+      browserId: 'session-browser-b',
+      sessionId: 'session-b',
+      turnId: 'turn-2',
+      runningTurnId: null,
+      canvasHostId: 'session-a',
+    });
+    emitPreview('session-a', 'snapshot-2');
+    expect(activeTab()).toBe('browser');
+
+    renderHarness({
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      turnId: 'turn-1',
+      runningTurnId: 'turn-1',
+      canvasHostId: 'session-a',
+    });
+    emitPreview('session-a', 'snapshot-2');
+    expect(activeTab()).toBe('browser');
+    emitPreview('session-a', 'snapshot-3');
+    expect(activeTab()).toBe('design');
   });
 
   it('does not follow live snapshots after a manual sidebar switch', () => {
@@ -284,6 +366,36 @@ describe('useSidebarFollowAgent', () => {
     renderHarness({ ...props, committedReceipt: 'turn-1:new-revision' });
     expect(attribute('data-open')).toBe('true');
     expect(activeTab()).toBe('design');
+  });
+
+  it('baselines an existing receipt when history becomes ready', async () => {
+    revisions['session-a'] = 'revision-1';
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: null,
+      turnId: 'old-turn',
+      runningTurnId: null,
+      canvasHostId: 'session-a',
+      historyReady: false,
+      initialPanel: { open: true, tab: 'browser' } satisfies Panel,
+    };
+    renderHarness(props);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      committedReceipt: 'old-turn:revision-1',
+    });
+    expect(activeTab()).toBe('browser');
+
+    await emitDesignState('session-a', 'revision-1', 'assistant:turn-b');
+    await emitDesignState('session-a', 'revision-1');
+
+    expect(activeTab()).toBe('browser');
   });
 
   it('keeps Zen and navigation unchanged while recording a committed canvas reveal', async () => {
@@ -600,6 +712,39 @@ describe('useSidebarFollowAgent', () => {
     await emitDesignState('session-a', 'revision-1', 'assistant:turn-b');
     await emitDesignState('session-a', 'revision-1', 'assistant:turn-c');
     renderHarness({ ...props, committedReceipt: 'turn-b:revision-1' });
+
+    expect(attribute('data-open')).toBe('true');
+    expect(activeTab()).toBe('design');
+  });
+
+  it('retains an applied steer receipt while its canvas query is pending', async () => {
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: 'session-a',
+      turnId: 'steer-turn',
+      runningTurnId: 'original-turn',
+      canvasHostId: 'session-a',
+      historyReady: true,
+      historySynced: true,
+      initialPanel: { open: false, tab: null } satisfies Panel,
+    };
+    renderHarness(props);
+    deferDesignState = true;
+    await emitDesignState('session-a', 'revision-1', 'assistant:original-turn');
+    renderHarness({ ...props, committedReceipt: 'steer-turn:revision-1' });
+    renderHarness({
+      ...props,
+      turnId: 'turn-c',
+      runningTurnId: 'turn-c',
+      committedReceipt: 'steer-turn:revision-1',
+    });
+    expect(attribute('data-open')).toBe('false');
+
+    await act(async () => {
+      if (!resumeDesignState) throw new Error('Expected a pending design.state query');
+      resumeDesignState();
+    });
 
     expect(attribute('data-open')).toBe('true');
     expect(activeTab()).toBe('design');

@@ -117,8 +117,10 @@ this page is the full text of the rules summarised there.
   comes from history processing, the shared pending activation resolver and history
   order, never timestamp migration; a queued next Turn starts clear. Initial canvas
   revision/turn and actual canvas turns baseline late history in either release
-  order, while accepted/steer candidates survive pending receipt queries. Snapshot
-  identity deduplicates across conversation re-subscription. Other Sessions or
+  order, while accepted/steer candidates survive pending receipt queries. With an
+  established receipt/no-receipt baseline and synced history, a different same-revision
+  receipt is new, even after an older receipt; post-mount canvas activity vetoes a late
+  old baseline. Snapshot identity deduplicates across conversation re-subscription. Other Sessions or
   same-artwork tabs and receipts already present at mount never trigger it. In-place
   navigation does not release preview ownership; a full document navigation still
   does. Following changes only local panel state, never the route or window focus. Zen

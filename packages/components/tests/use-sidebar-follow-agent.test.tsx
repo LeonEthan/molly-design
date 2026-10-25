@@ -878,4 +878,137 @@ describe('useSidebarFollowAgent', () => {
     expect(attribute('data-open')).toBe('true');
     expect(activeTab()).toBe('design');
   });
+
+  it('reveals a same-revision commit produced after mount, even after a manual close', async () => {
+    revisions['session-a'] = 'revision-1';
+    canvasTurnIds['session-a'] = 'assistant:turn-a';
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: null,
+      turnId: 'turn-a',
+      runningTurnId: 'turn-a',
+      canvasHostId: 'session-a',
+      historyReady: false,
+      initialPanel: { open: false, tab: null } satisfies Panel,
+    };
+    renderHarness(props);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => noteManualSidebarInteraction());
+
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      committedReceipt: 'turn-a:revision-1',
+    });
+    await emitDesignState('session-a', 'revision-1', 'assistant:turn-a');
+    await emitDesignState('session-a', 'revision-1');
+
+    expect(attribute('data-open')).toBe('true');
+    expect(activeTab()).toBe('design');
+    act(() => setPanel({ open: true, tab: 'browser' }));
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      committedReceipt: 'turn-a:revision-1',
+    });
+    expect(activeTab()).toBe('browser');
+  });
+
+  it('reveals a receipt that was absent from the initially synced history', async () => {
+    revisions['session-a'] = 'revision-1';
+    canvasTurnIds['session-a'] = 'assistant:turn-a';
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: 'session-a',
+      turnId: 'turn-a',
+      runningTurnId: 'turn-a',
+      canvasHostId: 'session-a',
+      historyReady: true,
+      historySynced: true,
+      initialPanel: { open: false, tab: null } satisfies Panel,
+    };
+    renderHarness(props);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    renderHarness({ ...props, committedReceipt: 'turn-a:revision-1' });
+
+    expect(attribute('data-open')).toBe('true');
+    expect(activeTab()).toBe('design');
+  });
+
+  it('reveals a same-revision resubmission after an older mounted receipt', async () => {
+    revisions['session-a'] = 'revision-1';
+    canvasTurnIds['session-a'] = 'assistant:turn-new';
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: 'session-a',
+      turnId: 'turn-new',
+      runningTurnId: 'turn-new',
+      canvasHostId: 'session-a',
+      committedReceipt: 'turn-old:revision-1',
+      historyReady: true,
+      historySynced: true,
+      initialPanel: { open: false, tab: null } satisfies Panel,
+    };
+    renderHarness(props);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => noteManualSidebarInteraction());
+
+    renderHarness({ ...props, committedReceipt: 'turn-new:revision-1' });
+
+    expect(attribute('data-open')).toBe('true');
+    expect(activeTab()).toBe('design');
+  });
+
+  it('distinguishes an older receipt that arrives during the initial canvas query', async () => {
+    revisions['session-a'] = 'revision-1';
+    canvasTurnIds['session-a'] = 'assistant:turn-new';
+    deferDesignState = true;
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: null,
+      turnId: 'turn-new',
+      runningTurnId: 'turn-new',
+      canvasHostId: 'session-a',
+      historyReady: false,
+      historySynced: false,
+      initialPanel: { open: false, tab: null } satisfies Panel,
+    };
+    renderHarness(props);
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      committedReceipt: 'turn-old:revision-1',
+    });
+    await act(async () => {
+      if (!resumeDesignState) throw new Error('Expected a pending initial design.state query');
+      resumeDesignState();
+    });
+    expect(attribute('data-open')).toBe('false');
+    act(() => noteManualSidebarInteraction());
+
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      historySynced: true,
+      committedReceipt: 'turn-new:revision-1',
+    });
+
+    expect(attribute('data-open')).toBe('true');
+    expect(activeTab()).toBe('design');
+  });
 });

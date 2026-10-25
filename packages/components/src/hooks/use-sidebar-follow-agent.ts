@@ -40,6 +40,7 @@ type SidebarReceiptState = {
   initialTurnId: string | undefined;
   initialRequest: number;
   initialPending: boolean;
+  historyBaselineSynced: boolean;
   activityRevision: string | undefined;
   activityTurnId: string | undefined;
   activityTurnIds: Set<string>;
@@ -173,6 +174,7 @@ export function useSidebarFollowAgent({
     initialTurnId: undefined,
     initialRequest: 0,
     initialPending: false,
+    historyBaselineSynced: historySessionId === sessionId && historySynced,
     activityRevision: undefined,
     activityTurnId: undefined,
     activityTurnIds: new Set(),
@@ -193,10 +195,11 @@ export function useSidebarFollowAgent({
       initialTurnId: undefined,
       initialRequest: 0,
       initialPending: false,
+      historyBaselineSynced: historySessionId === sessionId && historySynced,
       activityRevision: undefined,
       activityTurnId: undefined,
       activityTurnIds: new Set(),
-    activityCanvasTurnIds: new Set(),
+      activityCanvasTurnIds: new Set(),
       activityRequest: 0,
       activityPending: false,
     };
@@ -219,25 +222,56 @@ export function useSidebarFollowAgent({
     const state = receiptStateRef.current;
     if (state.initialPending || state.activityPending) return;
     const receipt = latest.committedReceipt;
-    if (!receipt) return;
+    if (!receipt) {
+      if (latest.historySynced && latest.historySessionId === latest.sessionId) {
+        state.historyBaselineSynced = true;
+      }
+      return;
+    }
     const key = `${latest.sessionId}:${receipt}`;
     if (state.initialReceipt === receipt) {
+      if (latest.historySynced) state.historyBaselineSynced = true;
       handledReceipts.set(key, true);
       return;
     }
+    if (
+      state.historyBaselineSynced &&
+      latest.historySynced &&
+      state.initialRevision === receiptRevision(receipt)
+    ) {
+      if (handledReceipts.has(key)) return;
+      handledReceipts.set(key, true);
+      latest.onReveal('design', !latest.suppressed);
+      return;
+    }
+    const initialTurnId = state.initialTurnId && userTurnId(state.initialTurnId);
+    const receiptTurnId = receiptTurn(receipt);
+    if (
+      state.initialReceipt === undefined &&
+      state.initialRevision === receiptRevision(receipt) &&
+      initialTurnId &&
+      initialTurnId !== receiptTurnId &&
+      ![...state.activityTurnIds].some(
+        (activityTurn) => userTurnId(activityTurn) === receiptTurnId
+      )
+    ) {
+      state.initialReceipt = receipt;
+      state.historyBaselineSynced = true;
+      handledReceipts.set(key, true);
+      return;
+    }
+    if (state.activityRevision !== receiptRevision(receipt)) return;
     if (state.initialReceipt === undefined && state.initialRevision === receiptRevision(receipt)) {
-      const initialTurnId = state.initialTurnId && userTurnId(state.initialTurnId);
-      const receiptTurnId = receiptTurn(receipt);
-      const existing = initialTurnId
-        ? initialTurnId === receiptTurnId
-        : !state.activityCanvasTurnIds.has(receiptTurnId);
+      const existing =
+        !state.activityCanvasTurnIds.has(receiptTurnId) &&
+        (!initialTurnId || initialTurnId === receiptTurnId);
       if (existing) {
         state.initialReceipt = receipt;
+        if (latest.historySynced) state.historyBaselineSynced = true;
         handledReceipts.set(key, true);
         return;
       }
     }
-    if (state.activityRevision !== receiptRevision(receipt)) return;
     const completedTurnId =
       state.initialRevision !== state.activityRevision ? latest.turnId : null;
     const activityTurns = [
@@ -247,10 +281,12 @@ export function useSidebarFollowAgent({
     ].map((activityTurn) => (activityTurn ? userTurnId(activityTurn) : ''));
     if (!activityTurns.includes(receiptTurn(receipt))) {
       state.initialReceipt ??= receipt;
+      if (latest.historySynced) state.historyBaselineSynced = true;
       handledReceipts.set(key, true);
       return;
     }
     state.activityRevision = undefined;
+    if (latest.historySynced) state.historyBaselineSynced = true;
     if (handledReceipts.has(key)) return;
     handledReceipts.set(key, true);
     latest.onReveal('design', !latest.suppressed);

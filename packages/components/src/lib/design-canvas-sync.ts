@@ -55,34 +55,40 @@ export async function syncOpenDesignCanvas(artworkId: string, hostId?: string) {
   return design.syncFromStore(artworkId, hostId);
 }
 
-function latestCommittedDesignOutcome(
+function committedDesignOutcomes(
   history: readonly { designOutcome?: unknown }[] | undefined,
   artworkId: string
 ) {
-  let latest: { turnId: string; revisionId: string; timestamp?: string } | undefined;
+  const committed: { turnId: string; revisionId: string; timestamp?: string }[] = [];
   for (const entry of history ?? []) {
     const outcome = sanitizeDesignTurnOutcome(entry.designOutcome);
-    if (outcome?.status === 'committed' && outcome.artworkId === artworkId && outcome.revisionId)
-      latest = {
+    if (outcome?.status === 'committed' && outcome.artworkId === artworkId && outcome.revisionId) {
+      committed.push({
         turnId: outcome.turnId,
         revisionId: outcome.revisionId,
         timestamp: outcome.timestamp,
-      };
+      });
+    }
   }
-  return latest;
+  return committed;
+}
+
+export function committedDesignReceiptDetails(
+  history: readonly { designOutcome?: unknown }[] | undefined,
+  artworkId: string
+): { id: string; timestamp?: string }[] {
+  return committedDesignOutcomes(history, artworkId).map((receipt) => ({
+    id: `${receipt.turnId}:${receipt.revisionId}`,
+    timestamp: receipt.timestamp,
+  }));
 }
 
 export function latestCommittedDesignReceiptDetails(
   history: readonly { designOutcome?: unknown }[] | undefined,
   artworkId: string
 ): { id: string; timestamp?: string } | undefined {
-  const latest = latestCommittedDesignOutcome(history, artworkId);
-  return (
-    latest && {
-      id: `${latest.turnId}:${latest.revisionId}`,
-      timestamp: latest.timestamp,
-    }
-  );
+  const receipts = committedDesignReceiptDetails(history, artworkId);
+  return receipts[receipts.length - 1];
 }
 
 /** A receipt identity distinguishes a new successful turn even at the same revision. */
@@ -97,5 +103,6 @@ export function latestCommittedDesignTurnId(
   history: readonly { designOutcome?: unknown }[] | undefined,
   artworkId: string
 ): string | undefined {
-  return latestCommittedDesignOutcome(history, artworkId)?.turnId;
+  const outcomes = committedDesignOutcomes(history, artworkId);
+  return outcomes[outcomes.length - 1]?.turnId;
 }

@@ -115,14 +115,12 @@ this page is the full text of the rules summarised there.
   opening, closing or collapse, including reopening a collapsed panel, suppresses
   browser/live follow for the current claimed user message, not commits. Identity
   comes from history processing, the shared pending activation resolver and history
-  order, never timestamp migration; a queued next Turn starts clear. Receipt
-  candidates and the first synced history snapshot, including empty, are recorded
-  independently of pending canvas queries. A receipt absent from an established
-  baseline reveals once with revision evidence; unresolved candidates stay pending
-  rather than becoming old. Accepted/steer candidates survive those queries. Activity
-  requires a revision or ownership change against both the mount baseline and the
-  previous observed snapshot after initial resolution; an event, identical re-query,
-  or release/reacquire of the mount state is not activity. Snapshot identity
+  order, never timestamp migration; a queued next Turn starts clear. Each viewed
+  Session tab records `viewStartedAt`; a committed receipt reveals once when its CLI
+  timestamp is at or after that time and `turnId:revisionId:timestamp` has not been
+  handled in this view. Missing, invalid, or earlier timestamps never reveal, and a
+  new view does not replay away events. No revision evidence, history baseline,
+  activity transition, pending candidate, or canvas query is involved. Snapshot identity
   deduplicates across conversation re-subscription. Other Sessions or
   same-artwork tabs and receipts already present at mount never trigger it. In-place
   navigation does not release preview ownership; a full document navigation still

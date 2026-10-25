@@ -6,6 +6,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
 }));
 
 import {
+  committedDesignReceiptDetails,
   latestCommittedDesignReceiptDetails,
   latestCommittedDesignRevision,
   syncOpenDesignCanvas,
@@ -127,6 +128,23 @@ describe('latestCommittedDesignReceiptDetails', () => {
       id: `turn-1:${FIRST}`,
       timestamp: '2026-09-10T00:00:00.000Z',
     });
+  });
+});
+
+describe('committedDesignReceiptDetails', () => {
+  it('returns every committed receipt with its timestamp in history order', () => {
+    const second = {
+      designOutcome: {
+        ...committed(SECOND).designOutcome,
+        turnId: 'turn-2',
+        timestamp: '2026-09-10T00:01:00.000Z',
+      },
+    };
+    const invalid = { designOutcome: { ...second.designOutcome, status: 'invalid' } };
+    expect(committedDesignReceiptDetails([committed(FIRST), invalid, second], ARTWORK)).toEqual([
+      { id: `turn-1:${FIRST}`, timestamp: '2026-09-10T00:00:00.000Z' },
+      { id: `turn-2:${SECOND}`, timestamp: '2026-09-10T00:01:00.000Z' },
+    ]);
   });
 });
 

@@ -1,134 +1,72 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
-import { getIpcServices, getPublicBrowserBridge, onIpcEvent } from '@/lib/electron-ipc-client';
+import { getPublicBrowserBridge, onIpcEvent } from '@/lib/electron-ipc-client';
 import { LRUCache } from '@/lib/lru-cache';
 
 const MAX_REMEMBERED_KEYS = 100;
 const BROWSER_SEGMENT_IDLE_MS = 500;
 const manualTurns = new LRUCache<string, true>(MAX_REMEMBERED_KEYS);
-const handledReceipts = new LRUCache<string, true>(MAX_REMEMBERED_KEYS);
 const handledPreviews = new LRUCache<string, true>(MAX_REMEMBERED_KEYS);
 
 export const clearSidebarFollowMemory = (): void => {
   manualTurns.clear();
-  handledReceipts.clear();
   handledPreviews.clear();
 };
 
 export type SidebarFollowTab = 'browser' | 'design';
 
+type SidebarCommittedReceipt = { id: string; timestamp?: string };
+
 type SidebarFollowAgentOptions = {
   browserId: string | null;
   sessionId: string | null;
   historySessionId?: string | null;
-  acceptedTurnId?: string | null;
   turnId: string | null;
   runningTurnId: string | null;
   canvasHostId: string | null;
-  artworkId: string | null;
-  committedReceipt?: string;
-  historyReady?: boolean;
-  historySynced?: boolean;
+  committedReceipts?: readonly SidebarCommittedReceipt[];
   suppressed: boolean;
   onReveal: (tab: SidebarFollowTab, exitZen: boolean) => void;
+  now?: () => number;
 };
 
-type SidebarReceiptState = {
+type SidebarView = {
   sessionId: string;
-  initialReceipt: string | undefined;
-  initialRevision: string | undefined;
-  initialTurnId: string | undefined;
-  initialRequest: number;
-  initialResolved: boolean;
-  syncedHistory: { receipt: string | null } | undefined;
-  candidateReceipts: Set<string>;
-  hasObservedCanvas: boolean;
-  observedRevision: string | undefined;
-  observedTurnId: string | undefined;
-  activityRevision: string | undefined;
-  activityTurnId: string | undefined;
-  activityTurnIds: Set<string>;
-  activityCanvasTurnIds: Set<string>;
-  activityRequest: number;
+  startedAt: number;
+  handledReceiptIds: Set<string>;
 };
 
-const createReceiptState = (
-  sessionId: string | null,
-  historySessionId: string | null | undefined,
-  historyReady: boolean,
-  historySynced: boolean,
-  committedReceipt?: string
-): SidebarReceiptState => ({
-  sessionId: sessionId ?? '',
-  initialReceipt:
-    historySessionId === sessionId && (historyReady || historySynced)
-      ? committedReceipt
-      : undefined,
-  initialRevision: undefined,
-  initialTurnId: undefined,
-  initialRequest: 0,
-  initialResolved: false,
-  syncedHistory:
-    historySessionId === sessionId && historySynced
-      ? { receipt: committedReceipt ?? null }
-      : undefined,
-  candidateReceipts: new Set(),
-  hasObservedCanvas: false,
-  observedRevision: undefined,
-  observedTurnId: undefined,
-  activityRevision: undefined,
-  activityTurnId: undefined,
-  activityTurnIds: new Set(),
-  activityCanvasTurnIds: new Set(),
-  activityRequest: 0,
-});
+const EMPTY_RECEIPTS: readonly SidebarCommittedReceipt[] = [];
 
-const receiptRevision = (receipt: string) => receipt.slice(receipt.indexOf(':') + 1);
-const userTurnId = (turnId: string) =>
-  turnId.startsWith('assistant:') ? turnId.slice('assistant:'.length) : turnId;
-const receiptTurn = (receipt: string) => userTurnId(receipt.slice(0, receipt.indexOf(':')));
+const createSidebarView = (sessionId: string | null, now: () => number): SidebarView => ({
+  sessionId: sessionId ?? '',
+  startedAt: now(),
+  handledReceiptIds: new Set(),
+});
 
 export function useSidebarFollowAgent({
   browserId,
   sessionId,
   historySessionId,
-  acceptedTurnId,
   turnId,
   runningTurnId,
   canvasHostId,
-  artworkId,
-  committedReceipt,
-  historyReady = false,
-  historySynced = false,
+  committedReceipts = EMPTY_RECEIPTS,
   suppressed,
   onReveal,
+  now = Date.now,
 }: SidebarFollowAgentOptions) {
-  const latestRef = useRef({
-    sessionId,
-    historySessionId,
-    acceptedTurnId,
-    turnId,
-    runningTurnId,
-    committedReceipt,
-    historyReady,
-    historySynced,
-    suppressed,
-    onReveal,
-  });
+  const latestRef = useRef({ runningTurnId, turnId, suppressed, onReveal });
   useLayoutEffect(() => {
-    latestRef.current = {
-      sessionId,
-      historySessionId,
-      acceptedTurnId,
-      turnId,
-      runningTurnId,
-      committedReceipt,
-      historyReady,
-      historySynced,
-      suppressed,
-      onReveal,
-    };
+    latestRef.current = { runningTurnId, turnId, suppressed, onReveal };
   });
+  const viewRef = useRef<SidebarView | null>(null);
+  if (viewRef.current === null) viewRef.current = createSidebarView(sessionId, now);
+  useLayoutEffect(() => {
+    const nextSessionId = sessionId ?? '';
+    if (viewRef.current?.sessionId === nextSessionId) return;
+    viewRef.current = createSidebarView(sessionId, now);
+  }, [sessionId, now]);
 
   const noteManualSidebarInteraction = useCallback(() => {
     if (!browserId) return;
@@ -198,203 +136,20 @@ export function useSidebarFollowAgent({
     };
   }, [browserId, canvasHostId]);
 
-  const receiptStateRef = useRef<SidebarReceiptState>(
-    createReceiptState(sessionId, historySessionId, historyReady, historySynced, committedReceipt)
-  );
-  useLayoutEffect(() => {
-    const nextSessionId = sessionId ?? '';
-    if (receiptStateRef.current.sessionId === nextSessionId) return;
-    receiptStateRef.current = createReceiptState(
-      sessionId,
-      historySessionId,
-      historyReady,
-      historySynced,
-      committedReceipt
-    );
-  }, [sessionId, historySessionId, historyReady, historySynced, committedReceipt]);
-  useLayoutEffect(() => {
-    if (!runningTurnId) return;
-    receiptStateRef.current.activityTurnIds.add(runningTurnId);
-    if (turnId) receiptStateRef.current.activityTurnIds.add(turnId);
-    if (acceptedTurnId) receiptStateRef.current.activityTurnIds.add(acceptedTurnId);
-  }, [acceptedTurnId, turnId, runningTurnId]);
-
-  const attemptCommittedReceipt = useCallback(() => {
-    const latest = latestRef.current;
-    if (
-      !latest.sessionId ||
-      latest.historySessionId !== latest.sessionId ||
-      (!latest.historyReady && !latest.historySynced)
-    )
-      return;
-    const state = receiptStateRef.current;
-    if (latest.historySynced && state.syncedHistory === undefined) {
-      state.syncedHistory = { receipt: latest.committedReceipt ?? null };
-    }
-    const currentReceipt = latest.committedReceipt;
-    if (currentReceipt && currentReceipt !== state.initialReceipt) {
-      state.candidateReceipts.add(currentReceipt);
-    }
-    const baseline = (receipt: string) => {
-      state.initialReceipt ??= receipt;
-      handledReceipts.set(`${latest.sessionId}:${receipt}`, true);
-      state.candidateReceipts.delete(receipt);
-    };
-    const reveal = (receipt: string) => {
-      state.activityRevision = undefined;
-      handledReceipts.set(`${latest.sessionId}:${receipt}`, true);
-      state.candidateReceipts.delete(receipt);
-      latest.onReveal('design', !latest.suppressed);
-    };
-    for (const receipt of state.candidateReceipts) {
-      const key = `${latest.sessionId}:${receipt}`;
-      if (handledReceipts.has(key)) {
-        state.candidateReceipts.delete(receipt);
-        continue;
-      }
-      if (receipt === state.initialReceipt) {
-        baseline(receipt);
-        continue;
-      }
-      const revision = receiptRevision(receipt);
-      const turn = receiptTurn(receipt);
-      const candidateTurnIds = [
-        ...state.activityTurnIds,
-        latest.turnId,
-        latest.acceptedTurnId,
-        latest.runningTurnId,
-      ];
-      if (
-        candidateTurnIds.some(Boolean) &&
-        !candidateTurnIds.some((candidate) => candidate && userTurnId(candidate) === turn)
-      ) {
-        baseline(receipt);
-        continue;
-      }
-      const newFromHistory =
-        latest.historySynced &&
-        ((state.syncedHistory !== undefined && state.syncedHistory.receipt !== receipt) ||
-          (state.initialReceipt !== undefined && state.initialReceipt !== receipt));
-      if (
-        newFromHistory &&
-        (state.initialRevision === revision || state.activityRevision === revision)
-      ) {
-        reveal(receipt);
-        continue;
-      }
-      const initialTurnId = state.initialTurnId && userTurnId(state.initialTurnId);
-      const revisionChanged = state.initialResolved && state.initialRevision !== revision;
-      const revisionMatches =
-        (state.initialResolved && state.initialRevision === revision) ||
-        state.activityRevision === revision;
-      if (
-        state.initialReceipt === undefined &&
-        !revisionChanged &&
-        revisionMatches &&
-        !state.activityCanvasTurnIds.has(turn) &&
-        (!initialTurnId || initialTurnId === turn)
-      ) {
-        if (state.syncedHistory?.receipt === receipt) baseline(receipt);
-        continue;
-      }
-      if (state.activityRevision !== revision) continue;
-      const completedTurnId =
-        state.initialRevision !== state.activityRevision ? latest.turnId : null;
-      const activityTurns = [
-        ...state.activityTurnIds,
-        state.activityTurnId,
-        completedTurnId,
-      ].map((activityTurn) => (activityTurn ? userTurnId(activityTurn) : ''));
-      if (activityTurns.includes(turn)) reveal(receipt);
-      else baseline(receipt);
-    }
-  }, []);
-
   useEffect(() => {
-    attemptCommittedReceipt();
-  }, [
-    sessionId,
-    historySessionId,
-    committedReceipt,
-    historyReady,
-    historySynced,
-    attemptCommittedReceipt,
-  ]);
-
-  useEffect(() => {
-    if (!sessionId || !artworkId) return undefined;
-    let active = true;
-    const state = receiptStateRef.current;
-    const service = getIpcServices()?.design;
-    const recordActivityTurn = (activityTurn: string) => {
-      state.activityTurnIds.add(activityTurn);
-      state.activityCanvasTurnIds.add(userTurnId(activityTurn));
-    };
-    if (service) {
-      const request = ++state.initialRequest;
-      void service
-        .state(artworkId)
-        .then((canvasState) => {
-          if (!active || state.initialRequest !== request) return;
-          if (
-            state.hasObservedCanvas &&
-            state.observedTurnId &&
-            (state.observedRevision !== canvasState.revisionId ||
-              state.observedTurnId !== canvasState.turnId)
-          ) {
-            recordActivityTurn(state.observedTurnId);
-          }
-          state.initialResolved = true;
-          state.initialRevision = canvasState.revisionId;
-          state.initialTurnId = canvasState.turnId;
-          state.hasObservedCanvas = true;
-          state.observedRevision = canvasState.revisionId;
-          state.observedTurnId = canvasState.turnId;
-          attemptCommittedReceipt();
-        })
-        .catch(() => {
-          if (!active || state.initialRequest !== request) return;
-          attemptCommittedReceipt();
-        });
+    if (!sessionId || historySessionId !== sessionId) return;
+    const view = viewRef.current;
+    if (!view || view.sessionId !== sessionId) return;
+    for (const receipt of committedReceipts) {
+      if (!receipt.timestamp) continue;
+      const timestamp = Date.parse(receipt.timestamp);
+      if (!Number.isFinite(timestamp) || timestamp < view.startedAt) continue;
+      const key = `${receipt.id}:${timestamp}`;
+      if (view.handledReceiptIds.has(key)) continue;
+      view.handledReceiptIds.add(key);
+      onReveal('design', !suppressed);
     }
-    const stop = onIpcEvent('design.state', (event) => {
-      if (event.artworkId && event.artworkId !== artworkId) return;
-      const request = ++state.activityRequest;
-      state.activityRevision = undefined;
-      state.activityTurnId = undefined;
-      if (!service) {
-        attemptCommittedReceipt();
-        return;
-      }
-      void service
-        .state(artworkId)
-        .then((canvasState) => {
-          if (!active || state.activityRequest !== request) return;
-          const changed =
-            state.initialResolved &&
-            state.hasObservedCanvas &&
-            (state.observedRevision !== canvasState.revisionId ||
-              state.observedTurnId !== canvasState.turnId) &&
-            (state.initialRevision !== canvasState.revisionId ||
-              state.initialTurnId !== canvasState.turnId);
-          state.activityRevision = canvasState.revisionId;
-          state.activityTurnId = canvasState.turnId;
-          if (changed && canvasState.turnId) recordActivityTurn(canvasState.turnId);
-          state.hasObservedCanvas = true;
-          state.observedRevision = canvasState.revisionId;
-          state.observedTurnId = canvasState.turnId;
-          attemptCommittedReceipt();
-        })
-        .catch(() => {
-          if (!active || state.activityRequest !== request) return;
-          attemptCommittedReceipt();
-        });
-    });
-    return () => {
-      active = false;
-      stop();
-    };
-  }, [sessionId, artworkId, attemptCommittedReceipt]);
+  }, [sessionId, historySessionId, committedReceipts, suppressed, onReveal]);
 
   return { noteManualSidebarInteraction };
 }

@@ -172,7 +172,7 @@ import {
   getSessionDetailInitialTabState,
   revealDesignCanvas,
 } from '@/lib/session-detail-initial-state';
-import { latestCommittedDesignReceiptDetails } from '@/lib/design-canvas-sync';
+import { committedDesignReceiptDetails } from '@/lib/design-canvas-sync';
 import { recordSessionRenderTrace, shortTraceId } from '@/lib/session-render-trace';
 /* Relative, not `@/providers/*`: the Electron web tsconfig maps only an
    allowlist of `@/` subpaths and has no `@/providers/*` entry, so the alias
@@ -1955,11 +1955,7 @@ const SessionDetail = ({
     sidebarFollowSession?.design?.artworkId === activeSession.design.artworkId
       ? sidebarFollowSession
       : null;
-  const {
-    history: sidebarFollowHistory,
-    synced: sidebarFollowHistorySynced,
-    ready: sidebarFollowHistoryReady,
-  } = useSessionDoc(sidebarFollowDesignSession?.id ?? sessionId, {
+  const { history: sidebarFollowHistory } = useSessionDoc(sidebarFollowDesignSession?.id ?? sessionId, {
     enabled: Boolean(sidebarFollowDesignSession),
   });
   const sidebarFollowDesignHistory = useConversationIndexRows(sidebarFollowHistory);
@@ -1997,9 +1993,9 @@ const SessionDetail = ({
       sidebarFollowPendingTurnIndex > sidebarFollowAcceptedTurnIndex)
       ? sidebarFollowPendingTurnId
       : (sidebarFollowAcceptedTurn?.id ?? sidebarFollowPendingTurnId ?? null));
-  const sidebarFollowReceipt =
+  const sidebarFollowReceipts =
     sidebarFollowDesignSession && activeSession
-      ? latestCommittedDesignReceiptDetails(
+      ? committedDesignReceiptDetails(
           sidebarFollowDesignHistory,
           activeSession.design?.artworkId ?? activeSession.id
         )
@@ -2017,7 +2013,6 @@ const SessionDetail = ({
     browserId: sidebarFollowSession ? `session-browser-${sidebarFollowSession.id}` : null,
     sessionId: sidebarFollowDesignSession?.id ?? null,
     historySessionId: sidebarFollowHistory?.sessionId ?? null,
-    acceptedTurnId: sidebarFollowAcceptedTurn?.id ?? null,
     turnId: sidebarFollowSession
       ? (sidebarFollowRunningTurnId ??
         sidebarFollowAcceptedTurn?.id ??
@@ -2026,10 +2021,7 @@ const SessionDetail = ({
       : null,
     runningTurnId: sidebarFollowRunningTurnId,
     canvasHostId: activeSession?.design ? activeSession.id : null,
-    artworkId: activeSession?.design ? (activeSession.design.artworkId ?? activeSession.id) : null,
-    committedReceipt: sidebarFollowReceipt?.id,
-    historyReady: sidebarFollowHistoryReady,
-    historySynced: sidebarFollowHistorySynced,
+    committedReceipts: sidebarFollowReceipts,
     suppressed: isZenLayoutMode,
     onReveal: handleSidebarFollowReveal,
   });

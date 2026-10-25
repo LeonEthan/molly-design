@@ -49,6 +49,7 @@ describe('useSidebarFollowAgent', () => {
       props.initialPanel ?? { open: true, tab: 'design' }
     );
     const [zen, setZen] = useState(props.suppressed ?? false);
+    const [designReveals, setDesignReveals] = useState(0);
     const [location] = useState('/local/sessions/a?tab=session:a');
     setPanel = updatePanel;
     const follow = useSidebarFollowAgent({
@@ -65,6 +66,7 @@ describe('useSidebarFollowAgent', () => {
       suppressed: zen,
       onReveal: (tab, exitZen) => {
         if (exitZen) setZen(false);
+        if (tab === 'design') setDesignReveals((count) => count + 1);
         updatePanel({ open: true, tab });
       },
     });
@@ -76,6 +78,7 @@ describe('useSidebarFollowAgent', () => {
         data-tab={panel.tab}
         data-zen={String(zen)}
         data-location={location}
+        data-design-reveals={designReveals}
       />
     );
   }
@@ -142,16 +145,17 @@ describe('useSidebarFollowAgent', () => {
     window.ipc = {
       invoke: async (channel: string, ...args: unknown[]) => {
         if (channel !== 'design.state') return { ok: true };
+        const snapshot = {
+          revisionId: revisions[args[0] as string],
+          turnId: canvasTurnIds[args[0] as string],
+        };
         if (deferDesignState) {
           deferDesignState = false;
           await new Promise<void>((resolve) => {
             resumeDesignState = resolve;
           });
         }
-        return {
-          revisionId: revisions[args[0] as string],
-          turnId: canvasTurnIds[args[0] as string],
-        };
+        return snapshot;
       },
       on: (channel: string, handler: (payload: unknown) => void) => {
         (handlers[channel] ??= []).push(handler);
@@ -1101,5 +1105,141 @@ describe('useSidebarFollowAgent', () => {
 
     expect(attribute('data-open')).toBe('true');
     expect(activeTab()).toBe('design');
+  });
+
+  type PermutationEvent = 'history' | 'resolve' | 'receipt' | 'release' | 'unchanged';
+  type PermutationScenario = {
+    name: string;
+    mountSynced: boolean;
+    mountReceipt?: string;
+    historyReceipt?: string;
+    newReceipt: string;
+    revealCount: 0 | 1;
+  };
+  const permute = (items: PermutationEvent[]): PermutationEvent[][] =>
+    items.length === 0
+      ? [[]]
+      : items.flatMap((item, index) =>
+          permute([...items.slice(0, index), ...items.slice(index + 1)]).map((rest) => [
+            item,
+            ...rest,
+          ])
+        );
+  const scenarios: PermutationScenario[] = [
+    {
+      name: 'empty history during mount',
+      mountSynced: false,
+      newReceipt: 'turn-a:revision-1',
+      revealCount: 1,
+    },
+    {
+      name: 'old history during mount',
+      mountSynced: false,
+      historyReceipt: 'turn-a:revision-1',
+      newReceipt: 'turn-a:revision-1',
+      revealCount: 0,
+    },
+    {
+      name: 'empty sync with an empty mount baseline',
+      mountSynced: true,
+      newReceipt: 'turn-a:revision-1',
+      revealCount: 1,
+    },
+    {
+      name: 'older sync with an empty mount baseline',
+      mountSynced: true,
+      historyReceipt: 'turn-old:revision-1',
+      newReceipt: 'turn-a:revision-1',
+      revealCount: 1,
+    },
+    {
+      name: 'new sync with an empty mount baseline',
+      mountSynced: true,
+      historyReceipt: 'turn-a:revision-1',
+      newReceipt: 'turn-a:revision-1',
+      revealCount: 1,
+    },
+    {
+      name: 'old receipt at mount',
+      mountSynced: true,
+      mountReceipt: 'turn-a:revision-1',
+      historyReceipt: 'turn-a:revision-1',
+      newReceipt: 'turn-a:revision-1',
+      revealCount: 0,
+    },
+    {
+      name: 'older history before a new commit',
+      mountSynced: false,
+      historyReceipt: 'turn-old:revision-1',
+      newReceipt: 'turn-a:revision-1',
+      revealCount: 1,
+    },
+  ];
+  const eventOrders = permute(['resolve', 'receipt', 'release', 'unchanged']).flatMap((tail) =>
+    Array.from(
+      { length: 5 },
+      (_, index) =>
+        [...tail.slice(0, index), 'history', ...tail.slice(index)] as PermutationEvent[]
+    )
+  );
+  const cases = scenarios.flatMap((scenario) =>
+    eventOrders.map((events) => ({
+      scenario,
+      events,
+      title: `${scenario.name}: ${events
+        .map((event) => ({ history: 'h', resolve: 'q', receipt: 'r', release: 'l', unchanged: 'u' })[event])
+        .join('')}`,
+    }))
+  );
+
+  it.each(cases)('$title', async ({ scenario, events }) => {
+    revisions['session-a'] = 'revision-1';
+    canvasTurnIds['session-a'] = 'assistant:turn-a';
+    deferDesignState = true;
+    let current: HarnessProps = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: scenario.mountSynced ? 'session-a' : null,
+      turnId: 'turn-a',
+      runningTurnId: 'turn-a',
+      canvasHostId: 'session-a',
+      committedReceipt: scenario.mountReceipt,
+      historyReady: scenario.mountSynced,
+      historySynced: scenario.mountSynced,
+      initialPanel: { open: false, tab: 'browser' } satisfies Panel,
+    };
+    renderHarness(current);
+
+    for (const event of events) {
+      if (event === 'history') {
+        current = {
+          ...current,
+          historySessionId: 'session-a',
+          historyReady: true,
+          historySynced: true,
+          committedReceipt: scenario.historyReceipt,
+        };
+        renderHarness(current);
+      } else if (event === 'receipt') {
+        current = {
+          ...current,
+          historySessionId: 'session-a',
+          historyReady: true,
+          committedReceipt: scenario.newReceipt,
+        };
+        renderHarness(current);
+      } else if (event === 'resolve') {
+        await act(async () => {
+          if (!resumeDesignState) throw new Error('Expected a pending initial design.state query');
+          resumeDesignState();
+        });
+      } else if (event === 'release') {
+        await emitDesignState('session-a', 'revision-1');
+      } else {
+        await emitDesignState('session-a', 'revision-1', 'assistant:turn-a', true);
+      }
+    }
+
+    expect(Number(attribute('data-design-reveals'))).toBe(scenario.revealCount);
   });
 });

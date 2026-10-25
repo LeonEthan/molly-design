@@ -191,7 +191,7 @@ export function OpenSourceAttributionsDialog({
       <DialogContent className="max-w-5xl gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b border-border/70 px-4 py-4 sm:px-6">
           <DialogTitle>
-            {t('settings.about.openSourceAttributions', 'Open Source Licenses')}
+            {t('settings.about.openSourceAttributions', 'Licenses & Notices')}
           </DialogTitle>
           <DialogDescription>
             {t('settings.about.generatedAt', 'Generated at')}: {generatedAtLabel}

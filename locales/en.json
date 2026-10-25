@@ -1902,7 +1902,7 @@
   "settings.about.licenseGroup": "License group",
   "settings.about.licenseGroupHelper": "Showing one license expression at a time to keep the list usable.",
   "settings.about.licenses": "Licenses",
-  "settings.about.openSourceAttributions": "Open Source Licenses",
+  "settings.about.openSourceAttributions": "Licenses & Notices",
   "settings.about.upToDate": "You're up to date",
   "settings.about.updateAndRestart": "Ready — Install and Relaunch",
   "settings.about.updateError": "Update check failed",

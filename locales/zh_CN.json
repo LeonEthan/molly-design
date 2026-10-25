@@ -1900,7 +1900,7 @@
   "settings.about.licenseGroup": "许可证分组",
   "settings.about.licenseGroupHelper": "一次只显示一种许可证表达式，方便查看。",
   "settings.about.licenses": "许可证",
-  "settings.about.openSourceAttributions": "开源许可",
+  "settings.about.openSourceAttributions": "许可与声明",
   "settings.about.upToDate": "已是最新版本",
   "settings.about.updateAndRestart": "准备就绪 — 安装并重新打开",
   "settings.about.updateError": "检查更新失败",

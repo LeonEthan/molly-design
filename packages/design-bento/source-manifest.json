@@ -98,9 +98,9 @@
     "Molly-authored selection-toolbar.ts renders fixed-screen controls in the isolated canvas; the temporary canvas copy excludes its UI from selection gestures and consumes shared command types"
   ],
   "adapterLicense": {
-    "spdx": "Apache-2.0",
+    "spdx": "FSL-1.1-ALv2",
     "scope": "Rights-holder-owned agentic-listing-design code migrated into this package; third-party components retain their own licenses.",
-    "authorization": "Rights holder LeonEthan confirmed ownership and Apache-2.0 distribution on 2026-09-20.",
+    "authorization": "Rights holder LeonEthan confirmed ownership and Apache-2.0 distribution on 2026-09-20; current distribution is FSL-1.1-ALv2 (root LICENSE).",
     "notice": "../../NOTICE"
   }
 }

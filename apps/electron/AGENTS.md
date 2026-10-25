@@ -63,10 +63,10 @@ and native source outside the package. See [driver build](native/agent-browser/R
 - Every embedded-CLI descendant launched through `process.execPath` must inherit
   `ELECTRON_RUN_AS_NODE` when it exists. On packaged macOS, omitting it launches a
   second GUI app instead of Node.
-- Electron Builder ignores nested staged `node_modules`. `eb-after-pack.mjs` must copy
-  them into `app.asar.unpacked`, verify the sealed Pi closure and absence of retired
-  adapters/presets, then probe CLI `--help` and a real in-memory SQLite
-  database before signing.
+- Copy skipped nested `node_modules` into `app.asar.unpacked` after-pack; verify
+  Pi seals, no retired adapters/presets, CLI `--help` and in-memory SQLite before signing.
+- Stage `resources/licenses` before-pack; reject missing/empty copies after-pack.
+  Keep legal includes after Markdown exclusions.
 - Keep Pi's Node 22.19 floor, `better-sqlite3 >= 13.0.2`, CLI `engines.node`, the first-import
   guard in `sqlite-runtime-support.ts`, and its tests aligned. Older Node versions can
   segfault while loading the N-API 10 binding.

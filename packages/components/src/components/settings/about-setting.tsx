@@ -156,7 +156,7 @@ export function AboutSettingsComponent() {
             {t('settings.about.visitWebsite', 'Visit website')}
           </Button>
         </CompactRow>
-        <CompactRow label={t('settings.about.openSourceAttributions', 'Open Source Licenses')}>
+        <CompactRow label={t('settings.about.openSourceAttributions', 'Licenses & Notices')}>
           <OpenSourceAttributionsDialog
             onTriggerDoubleClick={() => setDeveloperModeRevealed(true)}
           />

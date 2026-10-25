@@ -32,6 +32,11 @@ files:
   - '!**/*.{md,markdown,mkd}'
   # Keep the cookie reader license required by afterPack's manifest verification.
   - 'resources/browser-cookie-reader/LICENSE.md'
+  - 'resources/licenses/LICENSE'
+  - 'resources/licenses/NOTICE'
+  - 'resources/licenses/LICENSES/Lody-Apache-2.0.txt'
+  - 'resources/licenses/THIRD_PARTY_NOTICES.md'
+  - 'resources/licenses/Lody-theme-NOTICE.md'
   - '!**/{test,tests,__tests__,testing,__mocks__,mocks,spec,examples,example,stories,storybook}/**'
   # `resources/cli` is staged build output, not the app's source tree, so the two
   # source-tree exclusions above must not reach into the skill trees it carries.

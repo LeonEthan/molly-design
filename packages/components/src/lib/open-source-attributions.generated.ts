@@ -4,17 +4,17 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-18T03:25:48.346Z",
+  "generatedAt": "2026-10-25T13:42:59.881Z",
   "entries": [
     {
       "id": "molly-design-adapters",
       "kind": "vendored",
       "scope": "vendored-source",
       "name": "agentic-listing-design adapters",
-      "license": "Apache-2.0",
+      "license": "FSL-1.1-ALv2",
       "homepage": "https://github.com/LeonEthan/molly-design/blob/main/NOTICE",
       "author": "LeonEthan",
-      "description": "Rights-holder-owned adapters migrated into Molly, authorized under Apache-2.0 on 2026-09-20. Third-party components retain their own licenses.",
+      "description": "Rights-holder-owned adapters migrated into Molly, authorized under Apache-2.0 on 2026-09-20; currently distributed under FSL-1.1-ALv2. Third-party components retain their own licenses.",
       "assets": [
         "Design authoring and Bento editor adapters"
       ],
@@ -1966,7 +1966,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://github.com/googleapis/js-genai#readme",
       "versions": [
         "1.52.0",
-        "2.21.0"
+        "2.23.0"
       ]
     },
     {

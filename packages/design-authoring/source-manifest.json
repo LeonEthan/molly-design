@@ -140,9 +140,9 @@
     "skills/design-text/scripts/font-prepare.mjs": "Optional explicit isolated pinned FontTools setup and lossless complete-face WOFF preparation; no intake mutation or current-copy subsetting (moved from skills/graphic-design in the 2026-10 skill split)"
   },
   "adapterLicense": {
-    "spdx": "Apache-2.0",
+    "spdx": "FSL-1.1-ALv2",
     "scope": "Rights-holder-owned agentic-listing-design code migrated into this package; third-party components retain their own licenses.",
-    "authorization": "Rights holder LeonEthan confirmed ownership and Apache-2.0 distribution on 2026-09-20.",
+    "authorization": "Rights holder LeonEthan confirmed ownership and Apache-2.0 distribution on 2026-09-20; current distribution is FSL-1.1-ALv2 (root LICENSE).",
     "notice": "../../NOTICE"
   }
 }

@@ -173,4 +173,5 @@ apps/electron/resources/cli/
 apps/electron/resources/design/
 apps/electron/resources/agent-browser/
 apps/electron/resources/browser-cookie-reader/
+apps/electron/resources/licenses/
 apps/electron/.cache/agent-browser/

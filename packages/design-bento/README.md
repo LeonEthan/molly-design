@@ -19,10 +19,11 @@ quality orchestration, revision persistence, Web/HTTP/SSE applications and Agent
 Runtime Manager are not migrated. The source repository
 `agentic-listing-design` (private; not publicly distributed) is pinned at
 `7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12`; the pinned original source has no root license file. Its rights holder LeonEthan
-authorized the migrated, self-owned adapter code under Apache-2.0 on 2026-09-20;
-see [NOTICE](../../NOTICE) and `adapterLicense` in the source manifest.
-This package is distributed with Molly Design under FSL-1.1-ALv2 (see the
-repository [LICENSE](../../LICENSE)). Versions released up to and including
+authorized the migrated, self-owned adapter code under Apache-2.0 on 2026-09-20.
+The source manifest’s `adapterLicense.authorization` preserves that historical
+grant; `adapterLicense.spdx` records the current FSL-1.1-ALv2 distribution under
+the repository [LICENSE](../../LICENSE). See [NOTICE](../../NOTICE) for provenance.
+Versions released up to and including
 v0.1.2 remain available under Apache-2.0.
 Bento and other third-party components retain their individual licenses.
 

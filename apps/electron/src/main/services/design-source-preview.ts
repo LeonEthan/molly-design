@@ -216,8 +216,8 @@ function registerConsumer(owner: BrowserWindow, artworkId: string, hostId: strin
     }
     owner.once('closed', close)
     owner.webContents.on('render-process-gone', close)
-    owner.webContents.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => {
-      if (mainFrame) close()
+    owner.webContents.on('did-start-navigation', (_event, _url, inPlace, mainFrame) => {
+      if (mainFrame && !inPlace) close()
     })
   }
   const retained = views.get(hostId)

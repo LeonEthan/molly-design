@@ -12,6 +12,8 @@ import {
   getServerNow,
   getSessionRoomId,
   getAcpCapabilityCacheEntryAuthority,
+  getPendingUserTurnActivationId,
+  isSessionHistoryPendingForDispatch,
   resolveProjectGitHubRepo,
   SessionForkOperationSchema,
   type CommentReferencePayload,
@@ -170,6 +172,7 @@ import {
   getSessionDetailInitialTabState,
   revealDesignCanvas,
 } from '@/lib/session-detail-initial-state';
+import { committedDesignReceiptDetails } from '@/lib/design-canvas-sync';
 import { recordSessionRenderTrace, shortTraceId } from '@/lib/session-render-trace';
 /* Relative, not `@/providers/*`: the Electron web tsconfig maps only an
    allowlist of `@/` subpaths and has no `@/providers/*` entry, so the alias
@@ -185,8 +188,8 @@ import {
 } from '@/lib/session-file-provider-open-result';
 import { canOpenHistoricalSessionDiffs } from '@/lib/session-file-provider';
 import { useSessionDoc, useSessionDocSyncState } from '@/hooks/use-session-doc';
-import { useAgentBrowserAutoReveal } from '@/hooks/use-agent-browser-auto-reveal';
-import { useConversationTail } from '@/hooks/use-conversation-view';
+import { useSidebarFollowAgent } from '@/hooks/use-sidebar-follow-agent';
+import { useConversationIndexRows, useConversationTail } from '@/hooks/use-conversation-view';
 import { useDelayedFlag } from '@/hooks/use-delayed-flag';
 import { isSyncingRoomSyncState } from '@/lib/room-sync-state';
 import {
@@ -576,13 +579,6 @@ const SessionDetail = ({
   const activeSession = session ?? null;
   const designElementFocus = useAtomValue(designElementFocusAtom);
   const seenDesignElementFocus = useRef(designElementFocus);
-  useEffect(() => {
-    if (!designElementFocus || designElementFocus === seenDesignElementFocus.current) return;
-    seenDesignElementFocus.current = designElementFocus;
-    if (!activeSession?.design) return;
-    revealRightSidebar();
-    activateSidebarTab('design');
-  }, [activateSidebarTab, activeSession?.design, designElementFocus, revealRightSidebar]);
   const activeSessionLiveStatus = useAtomValue(
     sessionLiveStatusAtomFamily((activeSession?.id ?? '__no_session__') as SessionId)
   );
@@ -1952,8 +1948,96 @@ const SessionDetail = ({
     [fileDiffsByTurn]
   );
 
+  const sidebarFollowSession =
+    activeBrowserSession?.id === activeSessionTabId ? activeBrowserSession : null;
+  const sidebarFollowDesignSession =
+    activeSession?.design &&
+    sidebarFollowSession?.design?.artworkId === activeSession.design.artworkId
+      ? sidebarFollowSession
+      : null;
+  const { history: sidebarFollowHistory } = useSessionDoc(sidebarFollowDesignSession?.id ?? sessionId, {
+    enabled: Boolean(sidebarFollowDesignSession),
+  });
+  const sidebarFollowDesignHistory = useConversationIndexRows(sidebarFollowHistory);
+  const sidebarFollowHistoryProcessingTurn = sidebarFollowDesignHistory.findLast(
+    (entry) =>
+      entry.role === 'user' &&
+      entry.status === 'processing' &&
+      entry.id !== sidebarFollowDesignSession?.lastHandledUserMsgId &&
+      entry.id !== sidebarFollowDesignSession?.settledActivationUserMsgId &&
+      entry.id !== sidebarFollowDesignSession?.lastMissingHistoryUserMsgId
+  );
+  const sidebarFollowAcceptedTurn = sidebarFollowDesignHistory.findLast(
+    (entry) =>
+      entry.role === 'user' &&
+      (isSessionHistoryPendingForDispatch(entry) || entry.status === 'pending_apply') &&
+      entry.id !== sidebarFollowDesignSession?.lastHandledUserMsgId &&
+      entry.id !== sidebarFollowDesignSession?.settledActivationUserMsgId &&
+      entry.id !== sidebarFollowDesignSession?.lastMissingHistoryUserMsgId
+  );
+  const sidebarFollowPendingTurnId = sidebarFollowDesignSession
+    ? getPendingUserTurnActivationId(sidebarFollowDesignSession)
+    : undefined;
+  const sidebarFollowClaimedTurnId = sidebarFollowHistoryProcessingTurn?.id ?? null;
+  const sidebarFollowAcceptedTurnIndex = sidebarFollowAcceptedTurn
+    ? sidebarFollowDesignHistory.findLastIndex((entry) => entry.id === sidebarFollowAcceptedTurn.id)
+    : -1;
+  const sidebarFollowPendingTurnIndex = sidebarFollowPendingTurnId
+    ? sidebarFollowDesignHistory.findIndex((entry) => entry.id === sidebarFollowPendingTurnId)
+    : -1;
+  const sidebarFollowRunningTurnId =
+    sidebarFollowClaimedTurnId ??
+    (sidebarFollowPendingTurnId &&
+    (sidebarFollowAcceptedTurnIndex < 0 ||
+      sidebarFollowPendingTurnIndex < 0 ||
+      sidebarFollowPendingTurnIndex > sidebarFollowAcceptedTurnIndex)
+      ? sidebarFollowPendingTurnId
+      : (sidebarFollowAcceptedTurn?.id ?? sidebarFollowPendingTurnId ?? null));
+  const sidebarFollowReceipts =
+    sidebarFollowDesignSession && activeSession
+      ? committedDesignReceiptDetails(
+          sidebarFollowDesignHistory,
+          activeSession.design?.artworkId ?? activeSession.id
+        )
+      : undefined;
+  const handleSidebarFollowReveal = useCallback(
+    (tab: SidebarTab, exitZen: boolean) => {
+      if (!isSidebarOpen) setSidebarRestoreSeq((seq) => seq + 1);
+      if (exitZen) revealRightSidebar();
+      else setIsSidebarOpen(true);
+      activateSidebarTab(tab);
+    },
+    [activateSidebarTab, isSidebarOpen, revealRightSidebar]
+  );
+  const { noteManualSidebarInteraction } = useSidebarFollowAgent({
+    browserId: sidebarFollowSession ? `session-browser-${sidebarFollowSession.id}` : null,
+    sessionId: sidebarFollowDesignSession?.id ?? null,
+    historySessionId: sidebarFollowHistory?.sessionId ?? null,
+    turnId: sidebarFollowSession
+      ? (sidebarFollowRunningTurnId ??
+        sidebarFollowAcceptedTurn?.id ??
+        sidebarFollowSession.latestUserMsgId ??
+        null)
+      : null,
+    runningTurnId: sidebarFollowRunningTurnId,
+    canvasHostId: activeSession?.design ? activeSession.id : null,
+    committedReceipts: sidebarFollowReceipts,
+    suppressed: isZenLayoutMode,
+    onReveal: handleSidebarFollowReveal,
+  });
+
+  useEffect(() => {
+    if (!designElementFocus || designElementFocus === seenDesignElementFocus.current) return;
+    seenDesignElementFocus.current = designElementFocus;
+    if (!activeSession?.design) return;
+    noteManualSidebarInteraction();
+    revealRightSidebar();
+    activateSidebarTab('design');
+  }, [activateSidebarTab, activeSession?.design, designElementFocus, noteManualSidebarInteraction, revealRightSidebar]);
+
   const upsertViewerTab = useCallback(
     (tab: ViewerTab) => {
+      noteManualSidebarInteraction();
       setViewerTabs((prev) => {
         const idx = prev.findIndex((item) => item.id === tab.id);
         if (idx === -1) {
@@ -1973,7 +2057,7 @@ const SessionDetail = ({
       selectSidePanelTab(tab.id);
       revealRightSidebar();
     },
-    [revealRightSidebar, selectSidePanelTab]
+    [noteManualSidebarInteraction, revealRightSidebar, selectSidePanelTab]
   );
 
   const nextFocusRequestSeq = useCallback(() => {
@@ -2056,6 +2140,7 @@ const SessionDetail = ({
 
   const handleOpenBrowser = useCallback(
     (tabSessionId?: SessionId, navigateCandidate = false) => {
+      noteManualSidebarInteraction();
       const browserSessionId = tabSessionId ?? activeBrowserSession?.id;
       if (tabSessionId) {
         navigateToSessionTab(tabSessionId, { push: true });
@@ -2070,21 +2155,14 @@ const SessionDetail = ({
       revealRightSidebar();
       activateSidebarTab('browser');
     },
-    [activeBrowserSession?.id, activateSidebarTab, navigateToSessionTab, revealRightSidebar]
+    [
+      activeBrowserSession?.id,
+      activateSidebarTab,
+      navigateToSessionTab,
+      noteManualSidebarInteraction,
+      revealRightSidebar,
+    ]
   );
-
-  const revealAgentBrowser = useCallback(() => {
-    revealRightSidebar();
-    activateSidebarTab('browser');
-  }, [activateSidebarTab, revealRightSidebar]);
-  useAgentBrowserAutoReveal({
-    browserId: activeBrowserSession ? `session-browser-${activeBrowserSession.id}` : null,
-    turnId: activeBrowserSession
-      ? (activeBrowserSession.processingUserMsgId ?? activeBrowserSession.latestUserMsgId ?? null)
-      : null,
-    suppressed: isZenLayoutMode,
-    onReveal: revealAgentBrowser,
-  });
 
   const handleBrowserCandidateNavigationRequestHandled = useCallback((requestId: number) => {
     setBrowserCandidateNavigationRequest((current) => (current?.id === requestId ? null : current));
@@ -2106,10 +2184,12 @@ const SessionDetail = ({
         const resolution = await resolveSessionFileProviderOpenPath(
           activeSessionFileProvider,
           target.filePath
-        ).catch((): SessionFileProviderOpenPathResolution => ({
-          path: target.filePath,
-          redirected: false,
-        }));
+        ).catch(
+          (): SessionFileProviderOpenPathResolution => ({
+            path: target.filePath,
+            redirected: false,
+          })
+        );
         const resolvedFilePath = resolution.path;
 
         const requestSeq = nextFocusRequestSeq();
@@ -2173,10 +2253,12 @@ const SessionDetail = ({
           const resolution = await resolveSessionFileProviderOpenPath(
             activeSessionFileProvider,
             tab.filePath
-          ).catch((): SessionFileProviderOpenPathResolution => ({
-            path: tab.filePath,
-            redirected: false,
-          }));
+          ).catch(
+            (): SessionFileProviderOpenPathResolution => ({
+              path: tab.filePath,
+              redirected: false,
+            })
+          );
           if (!resolution.redirected || resolution.path === tab.filePath) {
             return { tab, next: tab };
           }
@@ -2270,6 +2352,7 @@ const SessionDetail = ({
 
   const handleForkedConversationPrepared = useCallback(
     (sourceSessionId: string, targetSessionId: SessionId) => {
+      noteManualSidebarInteraction();
       const taken = takePendingFork(sourceSessionId, targetSessionId);
       if (!taken) return;
       if (taken.placement === 'side-panel') {
@@ -2290,6 +2373,7 @@ const SessionDetail = ({
     },
     [
       handleSessionTabSelect,
+      noteManualSidebarInteraction,
       revealRightSidebar,
       router,
       selectSidePanelTab,
@@ -2327,18 +2411,20 @@ const SessionDetail = ({
   // When a viewer tab is selected, activate the viewer surface for the current session.
   const handleViewerTabSelect = useCallback(
     (tabId: string) => {
+      noteManualSidebarInteraction();
       selectSidePanelTab(tabId);
       revealRightSidebar();
     },
-    [revealRightSidebar, selectSidePanelTab]
+    [noteManualSidebarInteraction, revealRightSidebar, selectSidePanelTab]
   );
 
   const handleSidebarTabSelect = useCallback(
     (tabId: SidebarTab) => {
+      noteManualSidebarInteraction();
       desktopTabFocusRegionRef.current = 'side-panel';
       activateSidebarTab(tabId);
     },
-    [activateSidebarTab]
+    [activateSidebarTab, noteManualSidebarInteraction]
   );
 
   // Fixed panels are persistable side-panel tabs; Side Chat is an action that
@@ -2437,18 +2523,22 @@ const SessionDetail = ({
     });
     return [
       ...fixedTabs,
-      ...visibleSideSessions.map((sideSession): SessionSidePanelTabItem => ({
-        id: getSideSessionPanelTabId(sideSession.id),
-        label: sideSession.title?.trim() || t('sessions.detailTabs.sideSession', 'Side Chat'),
-        kind: 'session',
-        closeable: true,
-        pending: closingSideSessionIds.has(sideSession.id),
-      })),
-      ...viewerTabItems.map((tab): SessionSidePanelTabItem => ({
-        ...tab,
-        kind: tab.type,
-        closeable: true,
-      })),
+      ...visibleSideSessions.map(
+        (sideSession): SessionSidePanelTabItem => ({
+          id: getSideSessionPanelTabId(sideSession.id),
+          label: sideSession.title?.trim() || t('sessions.detailTabs.sideSession', 'Side Chat'),
+          kind: 'session',
+          closeable: true,
+          pending: closingSideSessionIds.has(sideSession.id),
+        })
+      ),
+      ...viewerTabItems.map(
+        (tab): SessionSidePanelTabItem => ({
+          ...tab,
+          kind: tab.type,
+          closeable: true,
+        })
+      ),
     ];
   }, [
     closingSideSessionIds,
@@ -2519,13 +2609,14 @@ const SessionDetail = ({
   );
 
   const handleToggleSidebar = useCallback(() => {
+    noteManualSidebarInteraction();
     const next = getZenAwarePanelToggleState({
       zenMode: isZenLayoutMode,
       panelOpen: isSidebarOpen,
     });
     setZenLayoutMode(next.zenMode);
     setIsSidebarOpen(next.panelOpen);
-  }, [isSidebarOpen, isZenLayoutMode, setZenLayoutMode]);
+  }, [isSidebarOpen, isZenLayoutMode, noteManualSidebarInteraction, setZenLayoutMode]);
 
   const handleCloseViewerTab = useCallback(
     (tabId: string) => {
@@ -2907,16 +2998,23 @@ const SessionDetail = ({
     (tabId: string) => {
       desktopTabFocusRegionRef.current = 'side-panel';
       if (isViewerTabId(tabId)) {
+        noteManualSidebarInteraction();
         handleViewerTabSelect(tabId);
         return;
       }
       if (parseSideSessionPanelTabId(tabId)) {
+        noteManualSidebarInteraction();
         selectSidePanelTab(tabId);
         return;
       }
       handleSidebarTabSelect(tabId as SidebarTab);
     },
-    [handleSidebarTabSelect, handleViewerTabSelect, selectSidePanelTab]
+    [
+      handleSidebarTabSelect,
+      handleViewerTabSelect,
+      noteManualSidebarInteraction,
+      selectSidePanelTab,
+    ]
   );
 
   /* The ordinary current-artwork action reveals this session's design
@@ -2928,6 +3026,7 @@ const SessionDetail = ({
 
   const handleSidePanelTabClose = useCallback(
     (tabId: string) => {
+      noteManualSidebarInteraction();
       const sideSessionId = parseSideSessionPanelTabId(tabId) as SessionId | null;
       if (sideSessionId) {
         void handleCloseSideSession(sideSessionId);
@@ -2948,7 +3047,13 @@ const SessionDetail = ({
       }
       handleCloseSidebarTab(tabId as SidebarTab);
     },
-    [sessionId, handleCloseSideSession, handleCloseSidebarTab, handleCloseViewerTab]
+    [
+      sessionId,
+      handleCloseSideSession,
+      handleCloseSidebarTab,
+      handleCloseViewerTab,
+      noteManualSidebarInteraction,
+    ]
   );
 
   const activeSidePanelTabId =
@@ -3490,6 +3595,8 @@ const SessionDetail = ({
             sessionId={activeSession.id}
             artworkId={activeSession.design?.artworkId ?? activeSession.id}
             workspaceSlug={workspaceSlug ?? ''}
+            followExecution={!isZenLayoutMode && Boolean(sidebarFollowRunningTurnId)}
+            receiptSessionId={sidebarFollowDesignSession?.id ?? activeSession.id}
             active={
               activeSidebarTab === 'design' &&
               isSidebarVisible &&

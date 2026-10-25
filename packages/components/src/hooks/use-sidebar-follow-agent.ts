@@ -41,6 +41,9 @@ type SidebarReceiptState = {
   initialRequest: number;
   initialPending: boolean;
   historyBaselineSynced: boolean;
+  hasObservedCanvas: boolean;
+  observedRevision: string | undefined;
+  observedTurnId: string | undefined;
   activityRevision: string | undefined;
   activityTurnId: string | undefined;
   activityTurnIds: Set<string>;
@@ -175,6 +178,9 @@ export function useSidebarFollowAgent({
     initialRequest: 0,
     initialPending: false,
     historyBaselineSynced: historySessionId === sessionId && historySynced,
+    hasObservedCanvas: false,
+    observedRevision: undefined,
+    observedTurnId: undefined,
     activityRevision: undefined,
     activityTurnId: undefined,
     activityTurnIds: new Set(),
@@ -196,6 +202,9 @@ export function useSidebarFollowAgent({
       initialRequest: 0,
       initialPending: false,
       historyBaselineSynced: historySessionId === sessionId && historySynced,
+      hasObservedCanvas: false,
+      observedRevision: undefined,
+      observedTurnId: undefined,
       activityRevision: undefined,
       activityTurnId: undefined,
       activityTurnIds: new Set(),
@@ -220,8 +229,27 @@ export function useSidebarFollowAgent({
     )
       return;
     const state = receiptStateRef.current;
-    if (state.initialPending || state.activityPending) return;
     const receipt = latest.committedReceipt;
+    const candidateTurnIds = [
+      ...state.activityTurnIds,
+      latest.turnId,
+      latest.acceptedTurnId,
+      latest.runningTurnId,
+    ];
+    if (
+      receipt &&
+      state.initialReceipt === undefined &&
+      candidateTurnIds.some(Boolean) &&
+      !candidateTurnIds.some(
+        (candidate) => candidate && userTurnId(candidate) === receiptTurn(receipt)
+      )
+    ) {
+      state.initialReceipt = receipt;
+      state.historyBaselineSynced = true;
+      handledReceipts.set(`${latest.sessionId}:${receipt}`, true);
+      return;
+    }
+    if (state.initialPending || state.activityPending) return;
     if (!receipt) {
       if (latest.historySynced && latest.historySessionId === latest.sessionId) {
         state.historyBaselineSynced = true;
@@ -308,6 +336,10 @@ export function useSidebarFollowAgent({
     let active = true;
     const state = receiptStateRef.current;
     const service = getIpcServices()?.design;
+    const recordActivityTurn = (activityTurn: string) => {
+      state.activityTurnIds.add(activityTurn);
+      state.activityCanvasTurnIds.add(userTurnId(activityTurn));
+    };
     if (service) {
       const request = ++state.initialRequest;
       state.initialPending = true;
@@ -316,8 +348,19 @@ export function useSidebarFollowAgent({
         .then((canvasState) => {
           if (!active || state.initialRequest !== request) return;
           state.initialPending = false;
+          if (
+            state.hasObservedCanvas &&
+            state.observedTurnId &&
+            (state.observedRevision !== canvasState.revisionId ||
+              state.observedTurnId !== canvasState.turnId)
+          ) {
+            recordActivityTurn(state.observedTurnId);
+          }
           state.initialRevision = canvasState.revisionId;
           state.initialTurnId = canvasState.turnId;
+          state.hasObservedCanvas = true;
+          state.observedRevision = canvasState.revisionId;
+          state.observedTurnId = canvasState.turnId;
           attemptCommittedReceipt();
         })
         .catch(() => {
@@ -342,12 +385,16 @@ export function useSidebarFollowAgent({
         .then((canvasState) => {
           if (!active || state.activityRequest !== request) return;
           state.activityPending = false;
+          const changed =
+            state.hasObservedCanvas &&
+            (state.observedRevision !== canvasState.revisionId ||
+              state.observedTurnId !== canvasState.turnId);
           state.activityRevision = canvasState.revisionId;
           state.activityTurnId = canvasState.turnId;
-          if (canvasState.turnId) {
-            state.activityTurnIds.add(canvasState.turnId);
-            state.activityCanvasTurnIds.add(userTurnId(canvasState.turnId));
-          }
+          if (changed && canvasState.turnId) recordActivityTurn(canvasState.turnId);
+          state.hasObservedCanvas = true;
+          state.observedRevision = canvasState.revisionId;
+          state.observedTurnId = canvasState.turnId;
           attemptCommittedReceipt();
         })
         .catch(() => {

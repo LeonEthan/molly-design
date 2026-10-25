@@ -109,11 +109,18 @@ describe('useSidebarFollowAgent', () => {
       }
     });
   };
-  const emitDesignState = async (artworkId: string, revisionId: string, turnId?: string) => {
+  const emitDesignState = async (
+    artworkId: string,
+    revisionId: string,
+    turnId?: string,
+    globalEvent = false
+  ) => {
     revisions[artworkId] = revisionId;
     canvasTurnIds[artworkId] = turnId;
     await act(async () => {
-      for (const handler of handlers['design.state'] ?? []) handler({ artworkId });
+      for (const handler of handlers['design.state'] ?? []) {
+        handler(globalEvent ? {} : { artworkId });
+      }
     });
   };
   const finishBrowsingSegment = () => {
@@ -850,6 +857,43 @@ describe('useSidebarFollowAgent', () => {
     expect(activeTab()).toBe('browser');
   });
 
+  it.each(['history-first', 'release-first'] as const)(
+    'does not replay an old receipt after unchanged global canvas activity (%s)',
+    async (order) => {
+      revisions['session-a'] = 'revision-1';
+      canvasTurnIds['session-a'] = 'assistant:turn-a';
+      const props = {
+        browserId: 'session-browser-a',
+        sessionId: 'session-a',
+        historySessionId: null,
+        turnId: 'turn-a',
+        runningTurnId: 'turn-a',
+        canvasHostId: 'session-a',
+        historyReady: false,
+        initialPanel: { open: false, tab: 'browser' } satisfies Panel,
+      };
+      renderHarness(props);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const showReceipt = () =>
+        renderHarness({
+          ...props,
+          historySessionId: 'session-a',
+          historyReady: true,
+          committedReceipt: 'turn-a:revision-1',
+        });
+
+      if (order === 'history-first') showReceipt();
+      await emitDesignState('session-a', 'revision-1', 'assistant:turn-a', true);
+      await emitDesignState('session-a', 'revision-1', undefined, true);
+      if (order === 'release-first') showReceipt();
+
+      expect(attribute('data-open')).toBe('false');
+      expect(activeTab()).toBe('browser');
+    }
+  );
+
   it('reveals a new turn at the same revision as an idle mount', async () => {
     revisions['session-a'] = 'revision-1';
     const props = {
@@ -902,6 +946,13 @@ describe('useSidebarFollowAgent', () => {
       ...props,
       historySessionId: 'session-a',
       historyReady: true,
+      historySynced: true,
+    });
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      historySynced: true,
       committedReceipt: 'turn-a:revision-1',
     });
     await emitDesignState('session-a', 'revision-1', 'assistant:turn-a');
@@ -1006,6 +1057,46 @@ describe('useSidebarFollowAgent', () => {
       historyReady: true,
       historySynced: true,
       committedReceipt: 'turn-new:revision-1',
+    });
+
+    expect(attribute('data-open')).toBe('true');
+    expect(activeTab()).toBe('design');
+  });
+
+  it('preserves an older receipt baseline until the initial canvas query resolves', async () => {
+    revisions['session-a'] = 'revision-1';
+    canvasTurnIds['session-a'] = 'assistant:turn-new';
+    deferDesignState = true;
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: null,
+      turnId: 'turn-new',
+      runningTurnId: 'turn-new',
+      canvasHostId: 'session-a',
+      historyReady: false,
+      historySynced: false,
+      initialPanel: { open: false, tab: null } satisfies Panel,
+    };
+    renderHarness(props);
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      committedReceipt: 'turn-old:revision-1',
+    });
+    expect(attribute('data-open')).toBe('false');
+
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      historySynced: true,
+      committedReceipt: 'turn-new:revision-1',
+    });
+    await act(async () => {
+      if (!resumeDesignState) throw new Error('Expected a pending initial design.state query');
+      resumeDesignState();
     });
 
     expect(attribute('data-open')).toBe('true');

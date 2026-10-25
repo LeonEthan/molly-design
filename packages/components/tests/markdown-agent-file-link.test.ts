@@ -15,6 +15,15 @@ describe('parseMarkdownAgentImageHref', () => {
     ['C:\\work\\draft.png', 'C:/work/draft.png'],
     ['file:///workspace/media/draft%20one.png', '/workspace/media/draft%20one.png'],
     ['file:///C:/work/draft.png', 'C:/work/draft.png'],
+    // Markdown normalization percent-encodes backslashes; the drive path must
+    // still classify as local (raw spelling preserved for the later decode).
+    ['C:%5Cwork%5Cdraft.png', 'C:%5Cwork%5Cdraft.png'],
+    // Real-world Windows form: Markdown also resolved the `\.p` escape
+    // (`user\.project` → `user.project`) before encoding; still local.
+    [
+      'C:%5CUsers%5Cagent.project%5Cmedia%5Coption-a.png',
+      'C:%5CUsers%5Cagent.project%5Cmedia%5Coption-a.png',
+    ],
   ])('recognizes %s without decoding its path twice', (src, expected) => {
     expect(parseMarkdownAgentImageHref(src)).toBe(expected);
   });
@@ -23,6 +32,7 @@ describe('parseMarkdownAgentImageHref', () => {
     undefined,
     '',
     'https://example.com/a.png',
+    'https%3A%2F%2Fexample.com%2Fa.png',
     '//example.com/a.png',
     'sandbox://example.com/a.png',
     'sandbox:relative.png',

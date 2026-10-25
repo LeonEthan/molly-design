@@ -112,9 +112,12 @@ this page is the full text of the rules summarised there.
   Agent browsing segment reveals Browser, coalescing per-command human transitions.
   A new ready `design.preview` reveals Design; a new committed receipt reveals and
   opens Design once even after manual action. Manual tab selection, explicit panel
-  opening, closing or collapse suppresses browser/live follow for that Turn, not
-  commits. Acceptance of a pending Turn transfers that suppression without carrying
-  it into the next Turn. Initial canvas state baselines late history, and snapshot
+  opening, closing or collapse, including reopening a collapsed panel, suppresses
+  browser/live follow for the current claimed user message, not commits. Identity
+  comes from history processing, the shared pending activation resolver and history
+  order, never timestamp migration; a queued next Turn starts clear. Initial canvas
+  revision/turn and actual canvas turns baseline late history in either release
+  order, while accepted/steer candidates survive pending receipt queries. Snapshot
   identity deduplicates across conversation re-subscription. Other Sessions or
   same-artwork tabs and receipts already present at mount never trigger it. In-place
   navigation does not release preview ownership; a full document navigation still

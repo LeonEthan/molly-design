@@ -22,7 +22,6 @@ type HarnessProps = {
   sessionId?: string | null;
   historySessionId?: string | null;
   acceptedTurnId?: string | null;
-  acceptedTurnTimestamp?: string | null;
   runningTurnId?: string | null;
   canvasHostId?: string | null;
   artworkId?: string | null;
@@ -223,7 +222,6 @@ describe('useSidebarFollowAgent', () => {
       browserId: 'session-browser-a',
       turnId: 'turn-new',
       acceptedTurnId: 'turn-new',
-      acceptedTurnTimestamp: '2026-10-23T23:59:59.000Z',
       runningTurnId: 'turn-new',
       canvasHostId: 'session-a',
     });
@@ -234,7 +232,6 @@ describe('useSidebarFollowAgent', () => {
       browserId: 'session-browser-a',
       turnId: 'turn-next',
       acceptedTurnId: 'turn-next',
-      acceptedTurnTimestamp: '2026-10-24T00:00:01.000Z',
       runningTurnId: 'turn-next',
       canvasHostId: 'session-a',
     });
@@ -744,6 +741,138 @@ describe('useSidebarFollowAgent', () => {
     await act(async () => {
       if (!resumeDesignState) throw new Error('Expected a pending design.state query');
       resumeDesignState();
+    });
+
+    expect(attribute('data-open')).toBe('true');
+    expect(activeTab()).toBe('design');
+  });
+
+  it('binds manual suppression to the claimed turn instead of migrating by timestamp', () => {
+    const props = {
+      browserId: 'session-browser-a',
+      turnId: 'turn-a',
+      acceptedTurnId: 'turn-b',
+      runningTurnId: 'turn-b',
+      canvasHostId: 'session-a',
+    };
+    renderHarness(props);
+    act(() => {
+      noteManualSidebarInteraction();
+      setPanel({ open: true, tab: 'browser' });
+    });
+
+    renderHarness({ ...props, turnId: 'turn-b' });
+    emitPreview('session-a', 'snapshot-b');
+
+    expect(activeTab()).toBe('browser');
+  });
+
+  it('does not carry suppression into a queued turn accepted before the interaction', () => {
+    const props = {
+      browserId: 'session-browser-a',
+      turnId: 'turn-a',
+      acceptedTurnId: 'turn-a',
+      runningTurnId: 'turn-a',
+      canvasHostId: 'session-a',
+    };
+    renderHarness(props);
+    act(() => {
+      noteManualSidebarInteraction();
+      setPanel({ open: true, tab: 'browser' });
+    });
+
+    renderHarness({
+      ...props,
+      turnId: 'turn-c',
+      acceptedTurnId: 'turn-c',
+      runningTurnId: 'turn-c',
+    });
+    emitPreview('session-a', 'snapshot-c');
+
+    expect(activeTab()).toBe('design');
+  });
+
+  it('baselines a committed receipt whose processing pointer has not cleared', async () => {
+    revisions['session-a'] = 'revision-1';
+    canvasTurnIds['session-a'] = 'assistant:turn-a';
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: null,
+      turnId: 'turn-a',
+      runningTurnId: 'turn-a',
+      canvasHostId: 'session-a',
+      historyReady: false,
+      initialPanel: { open: true, tab: 'browser' } satisfies Panel,
+    };
+    renderHarness(props);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      committedReceipt: 'turn-a:revision-1',
+    });
+
+    await emitDesignState('session-a', 'revision-1');
+
+    expect(activeTab()).toBe('browser');
+  });
+
+  it('baselines an old processing receipt when canvas release precedes history', async () => {
+    revisions['session-a'] = 'revision-1';
+    canvasTurnIds['session-a'] = 'assistant:turn-a';
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: null,
+      turnId: 'turn-a',
+      runningTurnId: 'turn-a',
+      canvasHostId: 'session-a',
+      historyReady: false,
+      initialPanel: { open: true, tab: 'browser' } satisfies Panel,
+    };
+    renderHarness(props);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await emitDesignState('session-a', 'revision-1');
+
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      committedReceipt: 'turn-a:revision-1',
+    });
+
+    expect(activeTab()).toBe('browser');
+  });
+
+  it('reveals a new turn at the same revision as an idle mount', async () => {
+    revisions['session-a'] = 'revision-1';
+    const props = {
+      browserId: 'session-browser-a',
+      sessionId: 'session-a',
+      historySessionId: null,
+      turnId: 'turn-new',
+      runningTurnId: 'turn-new',
+      canvasHostId: 'session-a',
+      historyReady: false,
+      initialPanel: { open: false, tab: null } satisfies Panel,
+    };
+    renderHarness(props);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await emitDesignState('session-a', 'revision-1', 'assistant:turn-new');
+
+    renderHarness({
+      ...props,
+      historySessionId: 'session-a',
+      historyReady: true,
+      committedReceipt: 'turn-new:revision-1',
     });
 
     expect(attribute('data-open')).toBe('true');

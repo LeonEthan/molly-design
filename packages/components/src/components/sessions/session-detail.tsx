@@ -12,6 +12,8 @@ import {
   getServerNow,
   getSessionRoomId,
   getAcpCapabilityCacheEntryAuthority,
+  getPendingUserTurnActivationId,
+  isSessionHistoryPendingForDispatch,
   resolveProjectGitHubRepo,
   SessionForkOperationSchema,
   type CommentReferencePayload,
@@ -1961,15 +1963,40 @@ const SessionDetail = ({
     enabled: Boolean(sidebarFollowDesignSession),
   });
   const sidebarFollowDesignHistory = useConversationIndexRows(sidebarFollowHistory);
-  const sidebarFollowAcceptedTurn = sidebarFollowDesignHistory.findLast(
-    (entry) => entry.role === 'user'
+  const sidebarFollowHistoryProcessingTurn = sidebarFollowDesignHistory.findLast(
+    (entry) =>
+      entry.role === 'user' &&
+      entry.status === 'processing' &&
+      entry.id !== sidebarFollowDesignSession?.lastHandledUserMsgId &&
+      entry.id !== sidebarFollowDesignSession?.settledActivationUserMsgId &&
+      entry.id !== sidebarFollowDesignSession?.lastMissingHistoryUserMsgId
   );
+  const sidebarFollowAcceptedTurn = sidebarFollowDesignHistory.findLast(
+    (entry) =>
+      entry.role === 'user' &&
+      (isSessionHistoryPendingForDispatch(entry) || entry.status === 'pending_apply') &&
+      entry.id !== sidebarFollowDesignSession?.lastHandledUserMsgId &&
+      entry.id !== sidebarFollowDesignSession?.settledActivationUserMsgId &&
+      entry.id !== sidebarFollowDesignSession?.lastMissingHistoryUserMsgId
+  );
+  const sidebarFollowPendingTurnId = sidebarFollowDesignSession
+    ? getPendingUserTurnActivationId(sidebarFollowDesignSession)
+    : undefined;
+  const sidebarFollowClaimedTurnId = sidebarFollowHistoryProcessingTurn?.id ?? null;
+  const sidebarFollowAcceptedTurnIndex = sidebarFollowAcceptedTurn
+    ? sidebarFollowDesignHistory.findLastIndex((entry) => entry.id === sidebarFollowAcceptedTurn.id)
+    : -1;
+  const sidebarFollowPendingTurnIndex = sidebarFollowPendingTurnId
+    ? sidebarFollowDesignHistory.findIndex((entry) => entry.id === sidebarFollowPendingTurnId)
+    : -1;
   const sidebarFollowRunningTurnId =
-    sidebarFollowDesignSession?.processingUserMsgId ??
-    (sidebarFollowAcceptedTurn &&
-    sidebarFollowAcceptedTurn.id !== sidebarFollowDesignSession?.lastHandledUserMsgId
-      ? sidebarFollowAcceptedTurn.id
-      : null);
+    sidebarFollowClaimedTurnId ??
+    (sidebarFollowPendingTurnId &&
+    (sidebarFollowAcceptedTurnIndex < 0 ||
+      sidebarFollowPendingTurnIndex < 0 ||
+      sidebarFollowPendingTurnIndex > sidebarFollowAcceptedTurnIndex)
+      ? sidebarFollowPendingTurnId
+      : (sidebarFollowAcceptedTurn?.id ?? sidebarFollowPendingTurnId ?? null));
   const sidebarFollowReceipt =
     sidebarFollowDesignSession && activeSession
       ? latestCommittedDesignReceiptDetails(
@@ -1991,11 +2018,10 @@ const SessionDetail = ({
     sessionId: sidebarFollowDesignSession?.id ?? null,
     historySessionId: sidebarFollowHistory?.sessionId ?? null,
     acceptedTurnId: sidebarFollowAcceptedTurn?.id ?? null,
-    acceptedTurnTimestamp: sidebarFollowAcceptedTurn?.timestamp ?? null,
     turnId: sidebarFollowSession
-      ? (sidebarFollowSession.processingUserMsgId ??
-        sidebarFollowSession.latestUserMsgId ??
+      ? (sidebarFollowRunningTurnId ??
         sidebarFollowAcceptedTurn?.id ??
+        sidebarFollowSession.latestUserMsgId ??
         null)
       : null,
     runningTurnId: sidebarFollowRunningTurnId,
@@ -2591,20 +2617,14 @@ const SessionDetail = ({
   );
 
   const handleToggleSidebar = useCallback(() => {
-    if (isSidebarVisible) noteManualSidebarInteraction();
+    noteManualSidebarInteraction();
     const next = getZenAwarePanelToggleState({
       zenMode: isZenLayoutMode,
       panelOpen: isSidebarOpen,
     });
     setZenLayoutMode(next.zenMode);
     setIsSidebarOpen(next.panelOpen);
-  }, [
-    isSidebarOpen,
-    isSidebarVisible,
-    isZenLayoutMode,
-    noteManualSidebarInteraction,
-    setZenLayoutMode,
-  ]);
+  }, [isSidebarOpen, isZenLayoutMode, noteManualSidebarInteraction, setZenLayoutMode]);
 
   const handleCloseViewerTab = useCallback(
     (tabId: string) => {

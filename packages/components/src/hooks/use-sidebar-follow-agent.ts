@@ -5,7 +5,7 @@ import { LRUCache } from '@/lib/lru-cache';
 
 const MAX_REMEMBERED_KEYS = 100;
 const BROWSER_SEGMENT_IDLE_MS = 500;
-const manualTurns = new LRUCache<string, { at: number }>(MAX_REMEMBERED_KEYS);
+const manualTurns = new LRUCache<string, true>(MAX_REMEMBERED_KEYS);
 const handledReceipts = new LRUCache<string, true>(MAX_REMEMBERED_KEYS);
 const handledPreviews = new LRUCache<string, true>(MAX_REMEMBERED_KEYS);
 
@@ -22,7 +22,6 @@ type SidebarFollowAgentOptions = {
   sessionId: string | null;
   historySessionId?: string | null;
   acceptedTurnId?: string | null;
-  acceptedTurnTimestamp?: string | null;
   turnId: string | null;
   runningTurnId: string | null;
   canvasHostId: string | null;
@@ -44,6 +43,7 @@ type SidebarReceiptState = {
   activityRevision: string | undefined;
   activityTurnId: string | undefined;
   activityTurnIds: Set<string>;
+  activityCanvasTurnIds: Set<string>;
   activityRequest: number;
   activityPending: boolean;
 };
@@ -58,7 +58,6 @@ export function useSidebarFollowAgent({
   sessionId,
   historySessionId,
   acceptedTurnId,
-  acceptedTurnTimestamp,
   turnId,
   runningTurnId,
   canvasHostId,
@@ -72,6 +71,7 @@ export function useSidebarFollowAgent({
   const latestRef = useRef({
     sessionId,
     historySessionId,
+    acceptedTurnId,
     turnId,
     runningTurnId,
     committedReceipt,
@@ -84,6 +84,7 @@ export function useSidebarFollowAgent({
     latestRef.current = {
       sessionId,
       historySessionId,
+      acceptedTurnId,
       turnId,
       runningTurnId,
       committedReceipt,
@@ -94,27 +95,10 @@ export function useSidebarFollowAgent({
     };
   });
 
-  const lastManualInteractionRef = useRef<{ browserId: string; key: string; at: number } | null>(
-    null
-  );
   const noteManualSidebarInteraction = useCallback(() => {
     if (!browserId) return;
-    const key = `${browserId}:${turnId ?? ''}`;
-    const at = Date.now();
-    lastManualInteractionRef.current = { browserId, key, at };
-    manualTurns.set(key, { at });
-  }, [browserId, turnId]);
-
-  useEffect(() => {
-    if (!browserId || !acceptedTurnId || !acceptedTurnTimestamp) return;
-    const acceptedAt = Date.parse(acceptedTurnTimestamp);
-    const latest = lastManualInteractionRef.current;
-    if (!latest || latest.browserId !== browserId || latest.at < acceptedAt) return;
-    const acceptedKey = `${browserId}:${acceptedTurnId}`;
-    manualTurns.set(acceptedKey, { at: latest.at });
-    if (latest.key !== acceptedKey) manualTurns.delete(latest.key);
-    lastManualInteractionRef.current = { ...latest, key: acceptedKey };
-  }, [browserId, acceptedTurnId, acceptedTurnTimestamp]);
+    manualTurns.set(`${browserId}:${runningTurnId ?? turnId ?? ''}`, true);
+  }, [browserId, runningTurnId, turnId]);
 
   useEffect(() => {
     if (!browserId && !canvasHostId) return undefined;
@@ -135,7 +119,7 @@ export function useSidebarFollowAgent({
         ? bridge.onState((state) => {
             if (state.browserId !== browserId) return;
             const latest = latestRef.current;
-            const nextKey = `${browserId}:${latest.turnId ?? ''}`;
+            const nextKey = `${browserId}:${latest.runningTurnId ?? latest.turnId ?? ''}`;
             if (key !== nextKey) {
               endBrowsingSegment();
               key = nextKey;
@@ -169,7 +153,7 @@ export function useSidebarFollowAgent({
       const latest = latestRef.current;
       if (!latest.runningTurnId) return;
       endBrowsingSegment();
-      const manualKey = `${browserId ?? ''}:${latest.turnId ?? ''}`;
+      const manualKey = `${browserId ?? ''}:${latest.runningTurnId ?? latest.turnId ?? ''}`;
       if (!latest.suppressed && !manualTurns.has(manualKey)) latest.onReveal('design', true);
     });
     return () => {
@@ -192,6 +176,7 @@ export function useSidebarFollowAgent({
     activityRevision: undefined,
     activityTurnId: undefined,
     activityTurnIds: new Set(),
+    activityCanvasTurnIds: new Set(),
     activityRequest: 0,
     activityPending: false,
   });
@@ -211,6 +196,7 @@ export function useSidebarFollowAgent({
       activityRevision: undefined,
       activityTurnId: undefined,
       activityTurnIds: new Set(),
+    activityCanvasTurnIds: new Set(),
       activityRequest: 0,
       activityPending: false,
     };
@@ -219,7 +205,8 @@ export function useSidebarFollowAgent({
     if (!runningTurnId) return;
     receiptStateRef.current.activityTurnIds.add(runningTurnId);
     if (turnId) receiptStateRef.current.activityTurnIds.add(turnId);
-  }, [turnId, runningTurnId]);
+    if (acceptedTurnId) receiptStateRef.current.activityTurnIds.add(acceptedTurnId);
+  }, [acceptedTurnId, turnId, runningTurnId]);
 
   const attemptCommittedReceipt = useCallback(() => {
     const latest = latestRef.current;
@@ -238,14 +225,13 @@ export function useSidebarFollowAgent({
       handledReceipts.set(key, true);
       return;
     }
-    if (state.initialReceipt === undefined && state.activityRevision === undefined) {
-      if (state.initialRevision !== receiptRevision(receipt)) return;
+    if (state.initialReceipt === undefined && state.initialRevision === receiptRevision(receipt)) {
       const initialTurnId = state.initialTurnId && userTurnId(state.initialTurnId);
-      const running = latest.runningTurnId && userTurnId(latest.runningTurnId);
-      if (
-        running !== receiptTurn(receipt) &&
-        (!initialTurnId || initialTurnId === receiptTurn(receipt))
-      ) {
+      const receiptTurnId = receiptTurn(receipt);
+      const existing = initialTurnId
+        ? initialTurnId === receiptTurnId
+        : !state.activityCanvasTurnIds.has(receiptTurnId);
+      if (existing) {
         state.initialReceipt = receipt;
         handledReceipts.set(key, true);
         return;
@@ -322,7 +308,10 @@ export function useSidebarFollowAgent({
           state.activityPending = false;
           state.activityRevision = canvasState.revisionId;
           state.activityTurnId = canvasState.turnId;
-          if (canvasState.turnId) state.activityTurnIds.add(canvasState.turnId);
+          if (canvasState.turnId) {
+            state.activityTurnIds.add(canvasState.turnId);
+            state.activityCanvasTurnIds.add(userTurnId(canvasState.turnId));
+          }
           attemptCommittedReceipt();
         })
         .catch(() => {

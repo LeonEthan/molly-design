@@ -63,16 +63,46 @@ Lody, Bento, upstream themes/fonts/icons, native reader licenses and pi-acp
 attributions retain their existing licenses. Historical notes, old changelogs
 and optional vendor submodules were excluded from current-license rewriting.
 
-Two ambiguous scopes were recorded without changing them:
+The initial sweep recorded two ambiguous scopes without changing them; the owner
+decisions below now resolve both:
 
-- Both design packages' `source-manifest.json` files use
+- Both design packages' `source-manifest.json` files then used
   `adapterLicense.spdx: Apache-2.0` beside the 2026-09-20 authorization, while
-  the current package license and README say FSL. Whether that field denotes
-  the historical grant or current distribution is unspecified; neither manifest
+  the package license and README already said FSL. The field's historical-grant
+  versus current-distribution meaning was unspecified; neither manifest
   is an input to the legal-resource staging map.
 - `apps/electron/native/agent-browser/NOTICE.txt` calls the downstream build
   Apache-2.0 without separately scoping Molly's Rust patch. Its existing native
   resource notices were preserved rather than assigning the patch a new scope.
+
+## Owner decisions on adapter metadata and agent-browser
+
+The owner confirmed that `adapterLicense.spdx` denotes current distribution.
+Both design manifests now use `FSL-1.1-ALv2`; `authorization` retains the
+2026-09-20 Apache-2.0 grant and explicitly distinguishes the current FSL
+distribution under the root LICENSE. `scope`, `notice`, source pins and file
+hashes remain unchanged. Both package READMEs explain the two fields. Repository
+search found no validator or test reading `adapterLicense`, so no executable
+consumer needed adaptation or a new validation mechanism.
+
+The owner also confirmed that the whole agent-browser binary is distributed as
+a modified Apache-2.0 work. Its NOTICE and native-resource licenses remain
+unchanged; the earlier question about separately scoping the Rust patch is
+resolved without a notice edit.
+
+The build flow reads the design manifests for pins, copies selected sources,
+and emits selected build metadata; it does not stage either manifest. Inspection
+of the existing review-corrected app's ASAR and unpacked resources found no
+`source-manifest.json`. This metadata/documentation follow-up therefore does not
+rebuild the package. The artifact evidence below records the review-fix source
+at `f5acb394`; subsequent attribution regeneration changes only timestamps.
+
+The owner-decision follow-up passed `pnpm check`, `pnpm format`, and
+`pnpm run docs check` (zero errors, 18 size warnings, no registered SHA topics).
+Two attribution regenerations differ only in timestamp from each other and
+the pre-change source. A manifest audit verified that only `spdx` and
+`authorization` changed in each JSON file, and that agent-browser's NOTICE
+remains byte-identical. The full check retains the existing six skipped tests.
 
 ## Verification and limits
 

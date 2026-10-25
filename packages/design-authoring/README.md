@@ -12,10 +12,11 @@ Sources: remaining intake runtime files come from the private repository
 `agentic-listing-design` (not publicly distributed), pinned at
 `7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12` (Bento
 `813c71fff72491e6898f5e55a20da44a562be586`, MIT). The pinned original repository has no root license file. Rights holder LeonEthan
-authorized its migrated, self-owned adapter code under Apache-2.0 on 2026-09-20;
-see [NOTICE](../../NOTICE) and the manifest’s `adapterLicense`. This package is
-distributed with Molly Design under FSL-1.1-ALv2 (see the repository
-[LICENSE](../../LICENSE)). Versions released up to and including v0.1.2 remain
+authorized its migrated, self-owned adapter code under Apache-2.0 on 2026-09-20.
+The manifest’s `adapterLicense.authorization` preserves that historical grant;
+`adapterLicense.spdx` records the current FSL-1.1-ALv2 distribution under the
+repository [LICENSE](../../LICENSE). See [NOTICE](../../NOTICE) for provenance.
+Versions released up to and including v0.1.2 remain
 available under Apache-2.0. Third-party
 components retain their individual licenses. `source-manifest.json` records live pins with upstream path,
 derivation (`verbatim` / `adapted` / `ported`), and hashes; rewritten skills and

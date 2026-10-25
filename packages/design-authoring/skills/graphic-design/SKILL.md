@@ -123,7 +123,9 @@ Write in the user's language and size the reply to the request.
 - **Design options:** copy each option you show to a short name in `media/`
   (`option-a.png`, `option-b.png`) and embed it with Markdown image syntax and
   its absolute path, for example `![A](/abs/media/option-a.png)`; never retype
-  a hashed file name. Wrap paths containing spaces in angle brackets. Label
+  a hashed file name. Always write embedded paths with forward slashes
+  (`C:/Users/...` on Windows): backslashes act as Markdown escapes and break
+  the embed. Wrap paths containing spaces in angle brackets. Label
   them A, B, C with one line each on the idea, say which you recommend and why
   in one line, name the inspected source-page URLs, or the saved inspiration
   image paths when a page has no usable URL (a user-supplied reference by its

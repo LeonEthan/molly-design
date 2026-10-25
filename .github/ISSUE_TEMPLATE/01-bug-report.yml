@@ -1,5 +1,5 @@
 name: Bug report
-description: Report reproducible incorrect behavior in Molly's open-source components
+description: Report reproducible incorrect behavior in a component in this repository
 title: '[Bug] '
 labels:
   - bug
@@ -20,7 +20,7 @@ body:
     id: area
     attributes:
       label: Affected area
-      description: Which open-source part of Molly is affected?
+      description: Which component in this repository is affected?
       options:
         - Desktop app
         - Embedded local service
@@ -29,7 +29,7 @@ body:
         - GitHub / code review
         - Build / packaging
         - Documentation
-        - Other open-source component
+        - Other component in this repository
     validations:
       required: true
 
@@ -130,7 +130,7 @@ body:
       options:
         - label: I searched the existing issues and did not find a duplicate.
           required: true
-        - label: This report concerns an open-source component in this repository, not a hosted service, Web or mobile app, account, or billing issue.
+        - label: This report concerns a component in this repository, not a hosted service, Web or mobile app, account, or billing issue.
           required: true
         - label: This is not a security vulnerability; security reports follow the repository's security policy.
           required: true

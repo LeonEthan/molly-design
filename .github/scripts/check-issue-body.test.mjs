@@ -63,6 +63,35 @@ The workflow becomes easier.
 `;
 
 void describe('Issue body validation', () => {
+  for (const [title, body, kind] of [
+    ['[Bug] Component failure', bugBody, 'report'],
+    ['[Feature Request] Component improvement', featureBody, 'request'],
+  ]) {
+    for (const wording of ['an open-source component', 'a component']) {
+      const confirmation = `This ${kind} concerns ${wording} in this repository, not a hosted service, Web or mobile app, account, or billing issue.`;
+      const renderedBody = body.replace('an open-source component', wording);
+
+      void it(`accepts ${kind} confirmation with ${wording} wording`, () => {
+        assert.equal(checkIssueBody({ title, body: renderedBody }).ok, true);
+      });
+
+      for (const replacement of ['', `- [ ] ${confirmation}`]) {
+        void it(`rejects ${kind} with ${wording} confirmation ${replacement ? 'unchecked' : 'missing'}`, () => {
+          const result = checkIssueBody({
+            title,
+            body: renderedBody.replace(`- [x] ${confirmation}`, replacement),
+          });
+          assert.equal(result.ok, false);
+          assert.ok(
+            result.findings.some((finding) =>
+              finding.includes('confirmation is missing or unchecked: This')
+            )
+          );
+        });
+      }
+    }
+  }
+
   void it('does not require maintainer agreement for bug reports', () => {
     const result = checkIssueBody({ title: '[Bug] Command failure', body: bugBody });
     assert.equal(result.ok, true);

@@ -15,7 +15,10 @@ const ISSUE_FORMS = [
     ],
     requiredConfirmations: [
       'I searched the existing issues and did not find a duplicate.',
-      'This report concerns an open-source component in this repository, not a hosted service, Web or mobile app, account, or billing issue.',
+      [
+        'This report concerns a component in this repository, not a hosted service, Web or mobile app, account, or billing issue.',
+        'This report concerns an open-source component in this repository, not a hosted service, Web or mobile app, account, or billing issue.',
+      ],
       "This is not a security vulnerability; security reports follow the repository's security policy.",
       'I removed credentials, private source, conversations, prompts, personal data, and other sensitive information.',
     ],
@@ -31,7 +34,10 @@ const ISSUE_FORMS = [
     ],
     requiredConfirmations: [
       'I searched the existing issues and did not find a duplicate request.',
-      'This request concerns an open-source component in this repository, not a hosted service, Web or mobile app, account, or billing issue.',
+      [
+        'This request concerns a component in this repository, not a hosted service, Web or mobile app, account, or billing issue.',
+        'This request concerns an open-source component in this repository, not a hosted service, Web or mobile app, account, or billing issue.',
+      ],
       'I removed credentials, private source, conversations, prompts, personal data, and other sensitive information.',
     ],
   }),
@@ -112,8 +118,9 @@ export function checkIssueBody(issue) {
 
   const confirmations = sectionBody(body, '### Before submitting');
   for (const confirmation of form.requiredConfirmations) {
-    if (!hasCheckedConfirmation(confirmations, confirmation)) {
-      findings.push(`Required confirmation is missing or unchecked: ${confirmation}`);
+    const alternatives = Array.isArray(confirmation) ? confirmation : [confirmation];
+    if (!alternatives.some((text) => hasCheckedConfirmation(confirmations, text))) {
+      findings.push(`Required confirmation is missing or unchecked: ${alternatives[0]}`);
     }
   }
 

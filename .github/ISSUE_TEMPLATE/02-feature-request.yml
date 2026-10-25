@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose an improvement to Molly's open-source components
+description: Propose an improvement to a component in this repository
 title: '[Feature Request] '
 labels:
   - enhancement
@@ -18,7 +18,7 @@ body:
     id: area
     attributes:
       label: Affected area
-      description: Which open-source part of Molly would this improve?
+      description: Which component in this repository would this improve?
       options:
         - Desktop app
         - Embedded local service
@@ -27,7 +27,7 @@ body:
         - GitHub / code review
         - Build / packaging
         - Documentation
-        - Other open-source component
+        - Other component in this repository
     validations:
       required: true
 
@@ -79,7 +79,7 @@ body:
       options:
         - label: I searched the existing issues and did not find a duplicate request.
           required: true
-        - label: This request concerns an open-source component in this repository, not a hosted service, Web or mobile app, account, or billing issue.
+        - label: This request concerns a component in this repository, not a hosted service, Web or mobile app, account, or billing issue.
           required: true
         - label: I removed credentials, private source, conversations, prompts, personal data, and other sensitive information.
           required: true

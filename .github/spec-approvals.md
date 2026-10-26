@@ -156,3 +156,56 @@ with the same design-run capabilities as New design, introduced on
 Concurrent edits keep the existing pre-dispatch save, read-only and
 conflict re-read mechanisms. This approves that revision only; the Spec's other
 draft revisions remain unapproved, so its status stays draft.
+
+## 2026-10-26 whole-image delivery and layout-first path
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-26. This covers the
+whole-image delivery revision merged in
+[PR #247](https://github.com/LeonEthan/molly-design/pull/247) (commit
+`0b9a06dd`), in which the user chooses editable layers (the default) or one
+covering image in the options reply, and the layout-first path introduced on
+[PR #248](https://github.com/LeonEthan/molly-design/pull/248) at commit
+`6a106d88`. On that path the Agent asks about style, researches, draws an
+editable labelled layout and ends the turn; after the user confirms it, one
+design is generated from the rendered layout and reproduced in editable layers
+with position and size taken from the layout. Entry is trigger wording, not a
+mode switch or slash command. Approval records intent only; no Agent run has
+verified either path yet.
+
+## 2026-10-26 MOSS-Image layout alignment
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-26, introduced on
+[PR #248](https://github.com/LeonEthan/molly-design/pull/248) at commit
+`8922e639`. Layout-first conventions align with MOSS-Image layout input:
+unrotated region boxes, one scene-and-style summary label, and object and text
+items. At generation a bundled helper derives MOSS layout JSON (centred `yxyx`
+pixel boxes, size scaled to multiples of 16) from the current artwork for the
+prompt; the JSON is a derived view and is not stored. A MOSS-Image image
+connection remains out of scope. Approval records intent only; no Agent run has
+verified the path yet.
+
+## 2026-10-26 inspiration images in replies and layout generation
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-26, introduced on
+[PR #248](https://github.com/LeonEthan/molly-design/pull/248) at commit
+`138fce2b`. Whenever research kept inspiration images, the reply that ends the
+turn shows them with their source pages: design options, the layout draft and
+the you-choose path. Layout-first generation passes the inspiration images as
+design options do, naming each one's quality and forbidding its objects, text
+and logos. Approval records intent only; no Agent run has verified it yet.
+
+## 2026-10-26 layout structure from design research
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-26, introduced on
+[PR #248](https://github.com/LeonEthan/molly-design/pull/248) at commit
+`a8a48be2`. Layout structure (grid, hierarchy, headline and subject placement
+and scale, white space) is the quality design research most needs to borrow:
+at least one kept reference is chosen for it, and the layout-first path bases
+its layout on that reference and names it. References still never lend their
+objects, text or logos, and no single reference's finished image is copied
+whole. This applies to all new designs. Approval records intent only; no Agent
+run has verified it yet.

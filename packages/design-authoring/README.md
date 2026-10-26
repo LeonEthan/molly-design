@@ -71,7 +71,8 @@ core entry — definition, task branches, required workflow, reporting and
 boundaries — with the format reference (`references/artwork-format.md`) and the
 artwork-level helpers. `skills/design-research/` owns new-direction work
 (intent, bounded website research, image-model design options with the recipe
-in `references/design-options.md`, design defaults,
+in `references/design-options.md`, the layout-first path in
+`references/layout-first.md`, design defaults,
 rejection handling). `skills/design-replication/` owns faithful reproduction of
 a chosen design or reference as editable layers, the bundled examples and the
 reference-pack helpers. `skills/design-text/` owns copy representation: native
@@ -88,6 +89,10 @@ bundled example, and optional helpers describe the YAML snapshot entry:
 - `graphic-design/scripts/format.mjs` — prints the `molly-canvas/1` admission table (root
   fields, per-kind fields, explicit exclusions) derived from the same validator
   intake runs. A lookup helper for agents, never a gate.
+- `graphic-design/scripts/layout-json.mjs` — derives MOSS-Image layout JSON (`summary`,
+  `object`/`text` items, centred `yxyx` pixel boxes at a size in multiples of 16) from a
+  layout-first artwork through the same bundled validator. A derived view for prompts,
+  never a gate; it does not change the project.
 - `design-text/scripts/font-prepare.mjs` — optional explicit pinned FontTools setup in an
   isolated Python environment outside the collected artwork, face listing and
   complete-font WOFF compression. It preserves source/glyphs/metrics, checks the

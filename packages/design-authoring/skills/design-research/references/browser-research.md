@@ -45,7 +45,7 @@ or term.
 
 ## Inspect and keep sources
 
-Judge results from the grid screenshot first and look at picks through their saved files; the gate says what counts as inspection. Open a detail page only when a thumbnail leaves a real doubt. A directly opened
+Judge results from the grid screenshot first and look at picks through their saved files; the gate says what counts as inspection. Judge thumbnails for layout structure first, then palette and type. Open a detail page only when a thumbnail leaves a real doubt. A directly opened
 and inspected image can provide evidence even when its source page is
 unavailable. Report that provenance gap and follow the `graphic-design` skill's
 Reporting section for inspected URLs and confirmed saved paths.

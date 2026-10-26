@@ -21,7 +21,9 @@ Every raster layer comes from the chosen design's own pixels through
 layer for an element the design already shows. A layer the model re-imagined is
 a failed layer: re-extract it or report the departure. When no image-editing
 tool is available, use tight crops from the design and report the holes and
-merged objects this leaves.
+merged objects this leaves. On the layout-first path, position and size come
+from the confirmed layout, not the generated design
+([layout-first](../design-research/references/layout-first.md)).
 
 Plan layers by what a person would edit independently: usually a background
 plate, the main subject, a few secondary objects and the copy. Make the plate

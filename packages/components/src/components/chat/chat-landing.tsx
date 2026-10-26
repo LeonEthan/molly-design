@@ -1965,7 +1965,7 @@ function WorkspaceChatLanding({
         })),
     [homeGalleryDateFormatter, t, visibleActiveSessions]
   );
-  const homeIdeas = [1, 2, 3, 4].map((index) => ({
+  const homeIdeas = [1, 2, 3, 4, 5].map((index) => ({
     label: t(`home.idea${index}.label`),
     prompt: t(`home.idea${index}.prompt`),
   }));

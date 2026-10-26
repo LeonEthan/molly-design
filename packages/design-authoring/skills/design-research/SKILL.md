@@ -1,6 +1,6 @@
 ---
 name: design-research
-description: 'Use when a Molly design task sets a new visual direction: researching design sites for inspiration, offering image-model design options for the user to choose, composition judgment, or responding when the user rejects a direction. Not needed for prescribed templates, reconstructions, or bounded edits that keep the current design.'
+description: 'Use when a Molly design task sets a new visual direction: researching design sites for inspiration, offering image-model design options for the user to choose or drawing a layout first, composition judgment, or responding when the user rejects a direction. Not needed for prescribed templates, reconstructions, or bounded edits that keep the current design.'
 metadata:
   short-description: Research, design options and direction handling for new designs
 ---
@@ -77,7 +77,7 @@ new designs, reconstructions and edits.
      **Extend.** When the first search shows a promising thread (a strong thumbnail, a recurring designer, style or term), spend the next search following it — the site's related or "more like this" results, that designer, or the term you saw — instead of rephrasing the original query. On a site without a working search, one search is one tag, mood, category or designer page; extend by opening the tag, mood or designer page that a strong thumbnail belongs to. Extending counts as one of the three searches.
   2. **Pick.** Save at most **three** picked images with `save_image` in one `codemode` script, then look at them together with `molly_view_image` `paths` (one contact sheet). Use `path` with `region`, or open one detail page, only for a pick whose thumbnail left a real doubt.
      Do not write scripts that fetch pages in loops, call `curl`/`fetch` on a site, read sitemaps, category listings or API endpoints, or repeat a search that already answered the direction;
-- you kept two or three of the saved images as references, each with one named quality (palette, type, crop and light, layout structure) and none taken as literal objects or finished layout. If `save_image` cannot save a pick (including a rejected format), use an equivalent available visual tool to persist the same image to a local path the options can use. When the budget yields fewer than two relevant ones, keep the ones you saved and looked at (at least one) and name the shortfall in the options report; never pad with images you did not look at.
+- you kept two or three of the saved images as references, each with one named quality (layout structure, palette, type, crop and light); at least one is kept for its layout structure — grid, hierarchy, headline and subject placement and scale, margins — which is the quality graphic-design research most needs. Borrow structure, never a reference's objects, text or logos, and never copy one reference whole. If `save_image` cannot save a pick (including a rejected format), use an equivalent available visual tool to persist the same image to a local path the options can use. When the budget yields fewer than two relevant ones, keep the ones you saved and looked at (at least one) and name the shortfall in the options report; never pad with images you did not look at.
 
 Stop researching as soon as two kept references answer the direction words, even if budget remains; more browsing does not improve the options. If `molly_view_image` is absent, read each saved image with the image-reading tool you have instead.
 
@@ -118,6 +118,15 @@ for the delivery form, as the `graphic-design` skill's Delivery form describes.
 Do not write or change `design.yaml` in that turn. Continue in the turn where
 the user names an option; reproduce it with the `design-replication` skill, or
 place it whole when the user chose one whole image. **You-choose path.** When the user tells you to decide or not to stop for a choice ("just pick one", "you choose", "do not ask me to choose", "你来定"), create exactly **one** design option — your recommendation — judge it against the design defaults, regenerate it at most once if it fails, and continue in the same turn by delivering it in the delivery form the `graphic-design` skill sets for this path. Create no alternative options on this path.
+
+**Layout-first path.** When the brief asks for the layout first ("先排版",
+"先出布局", "layout first, then generate"), create no design options. Always
+ask about style direction with `ask_user_question` (offer candidate direction
+words; include any other direction gap in the same call), research as above,
+then draw the layout and end the turn as
+[references/layout-first.md](references/layout-first.md) describes. In the turn
+where the user confirms the layout, generate exactly one design from it and
+continue to the editable version in that turn.
 
 For a template, reconstruction or bounded edit, the prescribed artwork is the
 chosen design; do not offer options.

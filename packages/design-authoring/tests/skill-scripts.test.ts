@@ -1111,3 +1111,110 @@ describe('reference-pack.mjs layer helpers', () => {
     expect(mismatch.stderr).toContain('same-size');
   });
 });
+
+describe('layout-json.mjs', () => {
+  const textElement = (id: string, bounds: string, text: string, extra = '') => `  - id: ${id}
+    kind: text
+    bounds: ${bounds}${extra}
+    text:
+      fontSize: 24
+      color: '#111111'
+      paragraphs:
+        - runs:
+            - text: '${text}'
+              bold: true
+`;
+  const layoutProject = (size: string, withSummary = true) =>
+    `format: molly-canvas/1
+title: Layout
+size: ${size}
+elements:
+${withSummary ? textElement('layout-summary', '[10, 10, 300, 40]', 'A sunny café scene') : ''}  - id: layout-robot
+    kind: shape
+    groupId: robot
+    bounds: [100, 200, 300, 400]
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#3B82F626'
+${textElement('layout-robot-label', '[104, 204, 200, 30]', '蓝色机器人', '\n    groupId: robot')}${textElement('headline', '[500, 100, 400, 80]', 'Layout Control')}  - id: logo
+    kind: image
+    bounds: [800, 600, 100, 100]
+    src: media/logo.png
+    fit: contain
+`;
+  const layoutDir = (size: string, withSummary = true): string => {
+    const dir = workdir();
+    mkdirSync(path.join(dir, 'media'), { recursive: true });
+    writeFileSync(path.join(dir, 'media', 'logo.png'), syntheticPng(8, 8, [20, 20, 200]));
+    writeFileSync(path.join(dir, 'design.yaml'), layoutProject(size, withSummary));
+    return dir;
+  };
+  type LayoutOutput = {
+    width: number;
+    height: number;
+    layout: {
+      summary: { caption: string };
+      items: { label: string; caption: string; text?: string; bbox: number[] }[];
+      bbox_format: string;
+      bbox_coord_space: string;
+    };
+  };
+  const parse = (stdout: string) => JSON.parse(stdout) as LayoutOutput;
+
+  it('converts bounds to centred yxyx pixels at the requested size', () => {
+    const dir = layoutDir('[1000, 1000]');
+    const result = run('layout-json.mjs', [path.join(dir, 'design.yaml'), '--size', '1024x1024']);
+    expect(result.status, result.stderr).toBe(0);
+    const output = parse(result.stdout);
+    expect(output.width).toBe(1024);
+    expect(output.layout.bbox_format).toBe('yxyx');
+    expect(output.layout.bbox_coord_space).toBe('abs_centralized');
+    expect(output.layout.summary.caption).toBe('A sunny café scene');
+    expect(output.layout.items[0]!.bbox).toEqual([-307, -410, 102, -102]);
+  });
+
+  it('defaults to multiples of 16 at the canvas ratio', () => {
+    const dir = layoutDir('[1200, 800]');
+    const result = run('layout-json.mjs', [path.join(dir, 'design.yaml')]);
+    expect(result.status, result.stderr).toBe(0);
+    const { width, height } = parse(result.stdout);
+    expect(width % 16).toBe(0);
+    expect(height % 16).toBe(0);
+    expect(width / height).toBeCloseTo(1.5, 1);
+  });
+
+  it('captions objects from their group label and keeps copy wording', () => {
+    const dir = layoutDir('[1000, 1000]');
+    const out = path.join(workdir(), 'layout.json');
+    const result = run('layout-json.mjs', [path.join(dir, 'design.yaml'), '--out', out]);
+    expect(result.status, result.stderr).toBe(0);
+    const { items } = parse(readFileSync(out, 'utf8')).layout;
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ label: 'object', caption: '蓝色机器人' });
+    expect(items[1]).toMatchObject({ label: 'text', text: 'Layout Control' });
+    expect(items[1]!.caption).toContain('bold');
+  });
+
+  it('reports delivery images as skipped instead of items', () => {
+    const dir = layoutDir('[1000, 1000]');
+    const result = run('layout-json.mjs', [path.join(dir, 'design.yaml')]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toContain('skipped: logo (image)');
+    expect(JSON.stringify(parse(result.stdout).layout.items)).not.toContain('logo');
+  });
+
+  it('fails without a layout-summary element', () => {
+    const dir = layoutDir('[1000, 1000]', false);
+    const result = run('layout-json.mjs', [path.join(dir, 'design.yaml')]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('layout-summary');
+  });
+
+  it('rejects a size that is not a multiple of 16', () => {
+    const dir = layoutDir('[1000, 1000]');
+    const result = run('layout-json.mjs', [path.join(dir, 'design.yaml'), '--size', '1000x1000']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('multiples of 16');
+  });
+});

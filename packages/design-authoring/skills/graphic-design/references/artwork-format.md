@@ -201,5 +201,9 @@ All run from the skill directory and are optional.
   does not render an image; `molly_render_preview` does.
 - `node scripts/migrate-two-file.mjs <old-draft> <new-output>` converts an
   inherited old two-file draft into a fresh directory and keeps the source.
+- `node scripts/layout-json.mjs <project>/design.yaml [--size WxH] [--out file]`
+  derives MOSS-Image layout JSON from a layout-first artwork (see the
+  `design-research` layout-first reference). It reads the same validated
+  document as intake and never changes the project.
 
 None of these renders, reviews or saves the artwork.

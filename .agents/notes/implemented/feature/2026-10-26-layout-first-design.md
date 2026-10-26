@@ -37,6 +37,29 @@ Some users want to control where things sit before paying for an image, as layou
 
 The workflow Spec (both languages), the `graphic-design`, `design-research` and `design-replication` SKILL.md files, the new `design-research/references/layout-first.md`, `chat-landing.tsx` and the `en`/`zh_CN` locales.
 
+"## MOSS alignment
+
+Owner request 2026-10-26: the canvas layout should match MOSS-Image layout input
+so a MOSS connection can be added later. Source: the official
+[USERGUIDE](https://github.com/OpenMOSS/MOSS-Image/blob/main/USERGUIDE.md):
+`{summary: {caption}, items: [{label, caption, text?, bbox}], bbox_format: "yxyx",
+bbox_coord_space: "abs_centralized"}`, absolute pixels with the canvas centre as
+origin, x right and y down; the JSON is passed as the prompt string for
+text-to-image.
+
+- `graphic-design/scripts/layout-json.mjs` derives it from `design.yaml` through the
+  bundled `validate()`; the JSON is a derived view, never stored.
+- `layout-summary` text → `summary.caption` (required); `layout-` shapes → `object`
+  items captioned by the label in the same `groupId`; other `text` → `text` items with
+  a font/weight/color caption and the exact wording; other elements are reported as
+  skipped; rotated elements use unrotated bounds with a warning.
+- Size defaults to about 1,048,576 pixels at the canvas ratio, both sides multiples of
+  16, or `--size WxH`; `bbox = round([y·s − H/2, x·s − W/2, (y+h)·s − H/2, (x+w)·s − W/2])`.
+- The Agent may rewrite `caption` values; `text` and `bbox` are never edited.
+- Unverified: the full `label` vocabulary (only `text` and `object` are documented),
+  item and text limits, and the hosted API at platform.mosi.cn. A MOSS-Image image
+  connection is follow-up work.
+
 ## Limits
 
 Unverified: no Agent run has exercised the path, and an end-to-end run is owed. A full run needs roughly four to six image calls (one generation plus plate and object extraction), which may exceed the default budget of five and needs the owner's approval. Whether five idea chips fit the home row needs a visual check.

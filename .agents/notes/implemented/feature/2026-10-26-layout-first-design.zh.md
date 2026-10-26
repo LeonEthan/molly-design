@@ -37,6 +37,25 @@ Translation: current
 
 工作流 Spec（中英文）、`graphic-design`、`design-research` 和 `design-replication` 的 SKILL.md、新增的 `design-research/references/layout-first.md`、`chat-landing.tsx` 以及 `en`/`zh_CN` 语言文件。
 
+"## MOSS 对齐
+
+2026-10-26 owner 要求画布布局对齐 MOSS-Image 的布局输入，便于后续接入 MOSS。
+依据为官方 [USERGUIDE](https://github.com/OpenMOSS/MOSS-Image/blob/main/USERGUIDE.md)：
+`{summary: {caption}, items: [{label, caption, text?, bbox}], bbox_format: "yxyx",
+bbox_coord_space: "abs_centralized"}`，绝对像素坐标，原点在画布中心，x 向右、y 向下；
+JSON 作为文生图的 prompt 字符串传入。
+
+- `graphic-design/scripts/layout-json.mjs` 通过随包的 `validate()` 从 `design.yaml`
+  现算该 JSON；它是派生视图，不另行保存。
+- `layout-summary` 文本 → `summary.caption`（必需）；`layout-` 形状 → `object` 条目，
+  caption 取同一 `groupId` 中的标签；其他 `text` → `text` 条目，caption 为字体、粗细、
+  颜色摘要，text 为原文；其他元素列为 skipped；旋转元素按未旋转的 bounds 输出并警告。
+- 尺寸默认按画布比例缩放到约 1,048,576 像素，两边为 16 的倍数，或用 `--size WxH`；
+  `bbox = round([y·s − H/2, x·s − W/2, (y+h)·s − H/2, (x+w)·s − W/2])`。
+- Agent 可以改写 `caption`；`text` 和 `bbox` 不得修改。
+- 未确认：`label` 的完整取值（文档只出现 `text` 与 `object`）、条目与文字上限，以及
+  platform.mosi.cn 的托管 API。MOSS-Image 图片连接属于后续工作。
+
 ## 局限
 
 未验证：尚无 Agent 运行走过该路径，仍需端到端运行。一次完整运行大约需要四到六次图片调用（一次生成加上底图和物体分离），可能超过默认的五次额度，需要负责人批准。首页一行能否放下五个示例需要目视检查。

@@ -156,3 +156,19 @@ with the same design-run capabilities as New design, introduced on
 Concurrent edits keep the existing pre-dispatch save, read-only and
 conflict re-read mechanisms. This approves that revision only; the Spec's other
 draft revisions remain unapproved, so its status stays draft.
+
+## 2026-10-26 whole-image delivery and layout-first path
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-26. This covers the
+whole-image delivery revision merged in
+[PR #247](https://github.com/LeonEthan/molly-design/pull/247) (commit
+`0b9a06dd`), in which the user chooses editable layers (the default) or one
+covering image in the options reply, and the layout-first path introduced on
+[PR #248](https://github.com/LeonEthan/molly-design/pull/248) at commit
+`6a106d88`. On that path the Agent asks about style, researches, draws an
+editable labelled layout and ends the turn; after the user confirms it, one
+design is generated from the rendered layout and reproduced in editable layers
+with position and size taken from the layout. Entry is trigger wording, not a
+mode switch or slash command. Approval records intent only; no Agent run has
+verified either path yet.

@@ -1,6 +1,7 @@
 # 生成式分层设计：任务与方案
 
-Status: draft
+Status: approved
+Approval: [2026-10-26 whole-image and layout-first approval](../.github/spec-approvals.md#2026-10-26-whole-image-delivery-and-layout-first-path)
 Previous approval: [2026-10-21 two-step research approval](../.github/spec-approvals.md#2026-10-21-two-step-research-and-you-choose-path)
 Previous approval: [2026-10-09 user-chosen designs approval](../.github/spec-approvals.md#2026-10-09-user-chosen-designs)
 Previous approval: [2026-10-09 owner approval](../.github/spec-approvals.md#2026-10-09-graphic-design-skill-refresh)

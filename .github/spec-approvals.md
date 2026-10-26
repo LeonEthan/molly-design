@@ -172,3 +172,16 @@ design is generated from the rendered layout and reproduced in editable layers
 with position and size taken from the layout. Entry is trigger wording, not a
 mode switch or slash command. Approval records intent only; no Agent run has
 verified either path yet.
+
+## 2026-10-26 MOSS-Image layout alignment
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-26, introduced on
+[PR #248](https://github.com/LeonEthan/molly-design/pull/248) at commit
+`8922e639`. Layout-first conventions align with MOSS-Image layout input:
+unrotated region boxes, one scene-and-style summary label, and object and text
+items. At generation a bundled helper derives MOSS layout JSON (centred `yxyx`
+pixel boxes, size scaled to multiples of 16) from the current artwork for the
+prompt; the JSON is a derived view and is not stored. A MOSS-Image image
+connection remains out of scope. Approval records intent only; no Agent run has
+verified the path yet.

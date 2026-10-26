@@ -27,12 +27,13 @@ Pick the branch; it decides how much process the task needs. Match effort to
 the request: a bounded edit can reach a first preview in one write and one
 render, while an open brief earns research and user-chosen options.
 
-| Task                                       | Design and layer baseline                                                                                                                                                            |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| New design from an open brief              | Read the `design-research` skill, offer three design options and stop for the user's choice — or one option and no stop when the user tells you to choose; reproduce the chosen one. |
-| Redesign of a supplied or open artwork     | A new design: the source supplies content, copy and delivery assets, not the composition. Offer options as for an open brief.                                                        |
-| User-prescribed template or reconstruction | Inspect the specified reference and use it as the chosen design; reproduce the needed editable elements.                                                                             |
-| Bounded edit to an existing artwork        | Read the prescribed current artwork, preserve unaffected elements and use it as the design and layer baseline. Only named, local changes qualify.                                    |
+| Task                                       | Design and layer baseline                                                                                                                                                                                                                                   |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New design from an open brief              | Read the `design-research` skill, offer three design options and stop for the user's choice — or one option and no stop when the user tells you to choose; reproduce the chosen one.                                                                        |
+| Layout-first new design                    | The brief asks for the layout first ("先排版", "先出布局", "layout first"). Follow the `design-research` layout-first path: draw an editable layout, stop for the user's adjustments, then generate one design from it and reproduce it in editable layers. |
+| Redesign of a supplied or open artwork     | A new design: the source supplies content, copy and delivery assets, not the composition. Offer options as for an open brief.                                                                                                                               |
+| User-prescribed template or reconstruction | Inspect the specified reference and use it as the chosen design; reproduce the needed editable elements.                                                                                                                                                    |
+| Bounded edit to an existing artwork        | Read the prescribed current artwork, preserve unaffected elements and use it as the design and layer baseline. Only named, local changes qualify.                                                                                                           |
 
 "Redesign", "optimize" or "重新设计" asks for new options even when the user
 also asks to keep a face, a product, the colors or the size; those are delivery
@@ -50,8 +51,8 @@ baseline; an edit with a clear brief needs no direction words and no
 of two forms: **editable layers** (the default) or **one whole image**. Ask
 which in the design options reply, together with the choice of option, unless
 the brief already names a form; use the default when the user does not answer.
-On the you-choose path, deliver editable layers unless the brief asks for a
-whole image. Prescribed templates, reconstructions and bounded edits always
+On the you-choose and layout-first paths, deliver editable layers unless the
+brief asks for a whole image, and do not ask. Prescribed templates, reconstructions and bounded edits always
 work in editable layers and are not asked. A whole image is the chosen option
 placed as a single `image` element covering the canvas; it skips
 `design-replication`, and its copy and layout cannot be edited afterwards.
@@ -95,7 +96,8 @@ are optional methods, never gates.
    `design.yaml` for an edit, the prescribed reference for a reconstruction.
    Only for a new direction, write a short direction note and do the research
    and options pass in `design-research`, ending that turn for the user's
-   choice unless the user told you to choose.
+   choice unless the user told you to choose. On the layout-first path the
+   layout takes the place of the options.
 2. **Layers.** Edit or reproduce toward the baseline. New raster layers and
    faithful extraction follow `design-replication`; a bounded edit reuses
    existing layers and changes only what was named. For a whole-image
@@ -144,8 +146,13 @@ Write in the user's language and size the reply to the request.
   attachment) (a search-results URL alone does not count), and ask the user to
   choose, together with the delivery form when Delivery form calls for it. Note copy the image model drew wrong;
   it will be exact in the editable version.
+- **Layout draft:** two or three sentences: the canvas size, what a region
+  holds when its label does not already say it, the inspected source-page URLs
+  as for design options, and that the user can move, resize, add, delete or
+  relabel regions on the canvas and say when to generate ("布局好了，生图").
 - **Editable version of the chosen design:** one or two sentences, plus what
-  differs from the chosen design and why, naming each raster layer that visibly
+  differs from the chosen design (on the layout-first path, from the confirmed
+  layout) and why, naming each raster layer that visibly
   departs from it.
 - **Whole-image delivery:** one sentence, plus every copy line the image draws
   wrong or leaves out; say that its wording and layout are not editable and

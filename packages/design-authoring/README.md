@@ -71,7 +71,8 @@ core entry — definition, task branches, required workflow, reporting and
 boundaries — with the format reference (`references/artwork-format.md`) and the
 artwork-level helpers. `skills/design-research/` owns new-direction work
 (intent, bounded website research, image-model design options with the recipe
-in `references/design-options.md`, design defaults,
+in `references/design-options.md`, the layout-first path in
+`references/layout-first.md`, design defaults,
 rejection handling). `skills/design-replication/` owns faithful reproduction of
 a chosen design or reference as editable layers, the bundled examples and the
 reference-pack helpers. `skills/design-text/` owns copy representation: native

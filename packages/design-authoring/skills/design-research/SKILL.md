@@ -1,6 +1,6 @@
 ---
 name: design-research
-description: 'Use when a Molly design task sets a new visual direction: researching design sites for inspiration, offering image-model design options for the user to choose, composition judgment, or responding when the user rejects a direction. Not needed for prescribed templates, reconstructions, or bounded edits that keep the current design.'
+description: 'Use when a Molly design task sets a new visual direction: researching design sites for inspiration, offering image-model design options for the user to choose or drawing a layout first, composition judgment, or responding when the user rejects a direction. Not needed for prescribed templates, reconstructions, or bounded edits that keep the current design.'
 metadata:
   short-description: Research, design options and direction handling for new designs
 ---
@@ -118,6 +118,15 @@ for the delivery form, as the `graphic-design` skill's Delivery form describes.
 Do not write or change `design.yaml` in that turn. Continue in the turn where
 the user names an option; reproduce it with the `design-replication` skill, or
 place it whole when the user chose one whole image. **You-choose path.** When the user tells you to decide or not to stop for a choice ("just pick one", "you choose", "do not ask me to choose", "你来定"), create exactly **one** design option — your recommendation — judge it against the design defaults, regenerate it at most once if it fails, and continue in the same turn by delivering it in the delivery form the `graphic-design` skill sets for this path. Create no alternative options on this path.
+
+**Layout-first path.** When the brief asks for the layout first ("先排版",
+"先出布局", "layout first, then generate"), create no design options. Always
+ask about style direction with `ask_user_question` (offer candidate direction
+words; include any other direction gap in the same call), research as above,
+then draw the layout and end the turn as
+[references/layout-first.md](references/layout-first.md) describes. In the turn
+where the user confirms the layout, generate exactly one design from it and
+continue to the editable version in that turn.
 
 For a template, reconstruction or bounded edit, the prescribed artwork is the
 chosen design; do not offer options.

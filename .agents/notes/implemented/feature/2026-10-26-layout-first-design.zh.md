@@ -19,7 +19,7 @@ Translation: current
 
 1. **几何取布局，外观取生成图。** 文字元素保留布局中的位置、尺寸和文案；分离出的物体缩放放入各自的区域框；底图取自生成图。物体移动后背景光影可能对不上，接受这一代价。
 2. **确认后只生成一张。** 本路径不提供方案；"再生成一张"复用保存的布局引导图，再调用一次 edit。
-3. **触发语入口。** Skill 分支识别"先排版""先出布局""layout first"等说法；首页第五个示例填入这样的提示词。模式状态存在画稿里（`layout-` 元素 id），不另设标志。
+3. **触发语入口。** Skill 分支识别"先排版""先出布局""layout first"等说法；首页第五个示例填入这样的提示词。模式状态存在画稿里（`layout-` 元素分组），不另设标志。
 4. **先问风格，画布局前先调研。** 本路径总是先就风格方向提问，再按不变的调研规则调研，然后画布局；保留的灵感图用于生成回合。
 5. **交付。** 除非需求要求整张图，否则交付可编辑图层，且不询问交付形式。`layout-` 框和标签在交付前删除，确认过的布局保留在设计历史中。
 
@@ -47,8 +47,10 @@ JSON 作为文生图的 prompt 字符串传入。
 
 - `graphic-design/scripts/layout-json.mjs` 通过随包的 `validate()` 从 `design.yaml`
   现算该 JSON；它是派生视图，不另行保存。
-- `layout-summary` 文本 → `summary.caption`（必需）；`layout-` 形状 → `object` 条目，
-  caption 取同一 `groupId` 中的标签；其他 `text` → `text` 条目，caption 为字体、粗细、
+- `layout-summary` 文本 → `summary.caption`（必需）；属于 `layout-` 分组（或 id 以
+  `layout-` 开头）的形状 → `object` 条目，caption 取位于其框内的布局标签（多个框包含时取最小的框）。
+  按 `groupId` 判断，是因为 Bento 复制粘贴和复制元素会给新 id 但保留分组
+  （`editor/clipboard.ts:171`、`editor/canvas.ts:945`）；其他 `text` → `text` 条目，caption 为字体、粗细、
   颜色摘要，text 为原文；其他元素列为 skipped；旋转元素按未旋转的 bounds 输出并警告。
 - 尺寸默认按画布比例缩放到约 1,048,576 像素，两边为 16 的倍数，或用 `--size WxH`；
   `bbox = round([y·s − H/2, x·s − W/2, (y+h)·s − H/2, (x+w)·s − W/2])`。

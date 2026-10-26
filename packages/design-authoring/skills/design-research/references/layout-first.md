@@ -16,8 +16,9 @@ and how large — adapted to the brief's content and canvas ratio, and write
   subject, an object, a scene area — with a translucent fill (`#RRGGBB26`) and
   a 2 px border of the same color, plus a `text` label inside its top-left
   corner naming the content in the user's language ("蓝色机器人"). Give the
-  pair one `groupId` and ids starting with `layout-` (`layout-robot`,
-  `layout-robot-label`). Use a few distinct colors so neighbouring regions
+  pair one `groupId` starting with `layout-` (`layout-robot`); ids may also
+  start with `layout-`. The group is what marks a layout element, because
+  copies made in the editor keep it but get new ids. Use a few distinct colors so neighbouring regions
   read apart. Keep region boxes unrotated.
 - **Summary.** One `text` element `layout-summary`, placed in a corner,
   describing the whole scene and style in one or two sentences (backdrop,
@@ -42,14 +43,15 @@ the turn again.
 
 Read the current `design.yaml` first: the user may have moved, resized,
 added, deleted or relabelled regions and edited copy. A duplicated box keeps
-a `layout-` id; read its label.
+its `layout-` group but gets a new id; the helper pairs each label with the
+box that contains it.
 
 1. Render the artwork as it stands and keep a copy of the render in the
    session workspace as the layout guide.
 2. Derive the layout JSON from the `graphic-design` skill directory:
    `node scripts/layout-json.mjs <project>/design.yaml --out <workspace>/layout.json`. It follows MOSS-Image's layout input:
    `summary.caption` from `layout-summary`, one `object` item per `layout-`
-   box captioned by its label, one `text` item per copy element, and `yxyx`
+   group box captioned by its label, one `text` item per copy element, and `yxyx`
    pixel boxes centred on the canvas at the `width` × `height` it reports.
    You may rewrite `caption` values in the file; never edit `text` or `bbox`.
    Fix what it reports as missing before generating; skipped elements such as
@@ -75,9 +77,11 @@ a `layout-` id; read its label.
    the generated design without objects and text; each extracted object is
    scaled to fit its region's box, keeping its proportions; copy elements keep
    their layout bounds and wording and may take color, weight or font from the
-   generated design. Delete every `layout-` element before the final render.
+   generated design. Delete every element in a `layout-` group (and
+   `layout-summary`) before the final render.
 6. For a whole-image delivery, place the generated design as one covering
-   `image` and delete the `layout-` elements and the copy elements it draws.
+   `image` and delete the `layout-` group elements and the copy elements it
+   draws.
 
 Keep the layout guide and `layout.json` in the session workspace: "generate
 again" reuses them with one new `edit` call. The confirmed layout also stays

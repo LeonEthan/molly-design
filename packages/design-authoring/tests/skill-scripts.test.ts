@@ -1217,4 +1217,91 @@ ${textElement('layout-robot-label', '[104, 204, 200, 30]', '蓝色机器人', '\
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('multiples of 16');
   });
+
+  const regionShape = (id: string, groupId: string, bounds: string) => `  - id: ${id}
+    kind: shape
+    groupId: ${groupId}
+    bounds: ${bounds}
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#3B82F626'
+`;
+  const regionDir = (body: string): string => {
+    const dir = workdir();
+    writeFileSync(
+      path.join(dir, 'design.yaml'),
+      `format: molly-canvas/1
+title: Layout
+size: [1000, 1000]
+elements:
+${textElement('layout-summary', '[10, 10, 300, 40]', 'A sunny café scene')}${body}`
+    );
+    return dir;
+  };
+
+  it('keeps a duplicated region whose copy has new ids but the same layout group', () => {
+    const dir = regionDir(
+      regionShape('layout-robot', 'layout-robot', '[100, 200, 300, 400]') +
+        textElement(
+          'layout-robot-label',
+          '[104, 204, 200, 30]',
+          '蓝色机器人',
+          '\n    groupId: layout-robot'
+        ) +
+        regionShape('s-abc', 'layout-robot', '[600, 200, 300, 400]') +
+        textElement('t-abc', '[604, 204, 200, 30]', '橙色方块', '\n    groupId: layout-robot')
+    );
+    const result = run('layout-json.mjs', [path.join(dir, 'design.yaml')]);
+    expect(result.status, result.stderr).toBe(0);
+    const { items } = parse(result.stdout).layout;
+    expect(items).toHaveLength(2);
+    expect(items.map((item) => [item.label, item.caption])).toEqual([
+      ['object', '蓝色机器人'],
+      ['object', '橙色方块'],
+    ]);
+    expect(result.stderr).not.toContain('skipped');
+  });
+
+  it('gives each region in a shared group its own label', () => {
+    const dir = regionDir(
+      regionShape('layout-a', 'layout-pair', '[50, 100, 300, 300]') +
+        regionShape('layout-b', 'layout-pair', '[500, 500, 300, 300]') +
+        textElement(
+          'layout-b-label',
+          '[510, 510, 200, 30]',
+          'plant',
+          '\n    groupId: layout-pair'
+        ) +
+        textElement('layout-a-label', '[60, 110, 200, 30]', 'robot', '\n    groupId: layout-pair')
+    );
+    const result = run('layout-json.mjs', [path.join(dir, 'design.yaml')]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(parse(result.stdout).layout.items.map((item) => item.caption)).toEqual([
+      'robot',
+      'plant',
+    ]);
+  });
+
+  it('warns when the requested size changes the canvas ratio', () => {
+    const dir = layoutDir('[1000, 1000]');
+    const result = run('layout-json.mjs', [path.join(dir, 'design.yaml'), '--size', '1024x512']);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toContain('differs from canvas ratio');
+  });
+
+  it('rejects a size side above 4096', () => {
+    const dir = layoutDir('[1000, 1000]');
+    const result = run('layout-json.mjs', [path.join(dir, 'design.yaml'), '--size', '8192x8192']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('at most 4096');
+  });
+
+  it('accepts an uppercase X in the size', () => {
+    const dir = layoutDir('[1000, 1000]');
+    const result = run('layout-json.mjs', [path.join(dir, 'design.yaml'), '--size', '1024X1024']);
+    expect(result.status, result.stderr).toBe(0);
+    expect(parse(result.stdout).width).toBe(1024);
+    expect(result.stderr).not.toContain('differs');
+  });
 });

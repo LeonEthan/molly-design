@@ -19,7 +19,7 @@ Some users want to control where things sit before paying for an image, as layou
 
 1. **Geometry from the layout, appearance from the image.** Copy elements keep their layout bounds and wording; extracted objects are scaled into their region boxes; the plate comes from the generated design. Background lighting may not line up with moved objects; this is accepted.
 2. **One image after confirmation.** No options on this path; "generate again" reuses the saved layout guide with one new edit call.
-3. **Trigger-phrase entry.** The Skill branch matches wording such as "先排版", "先出布局" or "layout first"; a fifth home idea chip fills in such a prompt. Mode state lives in the artwork (`layout-` element ids), not in a flag.
+3. **Trigger-phrase entry.** The Skill branch matches wording such as "先排版", "先出布局" or "layout first"; a fifth home idea chip fills in such a prompt. Mode state lives in the artwork (`layout-` element groups), not in a flag.
 4. **Ask style first, research before drawing.** The Agent always asks about style direction on this path, then researches under the unchanged research rule, then draws the layout; the kept inspiration images feed the generation turn.
 5. **Delivery.** Editable layers unless the brief asks for a whole image; the form is not asked. `layout-` boxes and labels are deleted before delivery, and the confirmed layout remains in design history.
 
@@ -49,8 +49,11 @@ text-to-image.
 
 - `graphic-design/scripts/layout-json.mjs` derives it from `design.yaml` through the
   bundled `validate()`; the JSON is a derived view, never stored.
-- `layout-summary` text → `summary.caption` (required); `layout-` shapes → `object`
-  items captioned by the label in the same `groupId`; other `text` → `text` items with
+- `layout-summary` text → `summary.caption` (required); shapes in a `layout-` group
+  (or with a `layout-` id) → `object` items captioned by the layout label(s) inside
+  their bounds, smallest containing box first. Classification uses the `groupId`
+  because Bento copy/paste and duplicate give new ids but keep the group
+  (`editor/clipboard.ts:171`, `editor/canvas.ts:945`). Other `text` → `text` items with
   a font/weight/color caption and the exact wording; other elements are reported as
   skipped; rotated elements use unrotated bounds with a warning.
 - Size defaults to about 1,048,576 pixels at the canvas ratio, both sides multiples of

@@ -6,16 +6,23 @@
 // Usage (from this skill's directory):
 //   node scripts/layout-json.mjs <project>/design.yaml [--size WxH] [--out file]
 //
+// A layout element has a `groupId` (or, for older drafts, an id) starting
+// `layout-`. Molly's editor gives copies a new id but keeps the groupId, so
+// the group is what marks a region.
+//
 // Mapping:
-//   text `layout-summary`             -> summary.caption (required)
-//   shape whose id starts `layout-`   -> object item, caption = the `layout-`
-//                                        text label sharing its groupId
-//   text whose id does not start `layout-` -> text item, caption = style summary
+//   text `layout-summary` (id or group) -> summary.caption (required)
+//   layout shape                      -> object item, caption = the layout
+//                                        text label(s) inside its bounds
+//   other layout text                 -> label of the smallest layout shape
+//                                        containing it (centre as fallback)
+//   any other text                    -> text item, caption = style summary
 //   anything else                     -> skipped (listed on stderr)
 // Boxes are `yxyx` pixels with the canvas centre as origin
 // (`abs_centralized`), scaled to the output size. By default the output keeps
 // the canvas ratio at about 1,048,576 pixels with both sides multiples of 16;
-// `--size` must name multiples of 16. Rotated elements use their unrotated
+// `--size` must name multiples of 16 up to 4096, and a ratio that differs
+// from the canvas by more than 2% is warned about. Rotated elements use their unrotated
 // bounds, with a warning. Captions may be rewritten afterwards; `text` and
 // `bbox` may not.
 //
@@ -30,6 +37,8 @@ const USAGE = 'usage: node layout-json.mjs <project>/design.yaml [--size WxH] [-
 const TARGET_PIXELS = 1_048_576;
 const LAYOUT_PREFIX = 'layout-';
 const SUMMARY_ID = 'layout-summary';
+const MAX_SIDE = 4096;
+const RATIO_TOLERANCE = 0.02;
 
 const fail = (message, code) => {
   console.error(`layout-json: ${message}`);
@@ -81,12 +90,14 @@ const roundTo16 = (value) => Math.max(16, Math.round(value / 16) * 16);
 let width;
 let height;
 if (sizeArg !== undefined) {
-  const match = /^(\d+)x(\d+)$/.exec(sizeArg);
+  const match = /^(\d+)[xX](\d+)$/.exec(sizeArg);
   if (!match) fail(`--size must be WxH, got "${sizeArg}"`, 1);
   width = Number(match[1]);
   height = Number(match[2]);
   if (width <= 0 || height <= 0 || width % 16 !== 0 || height % 16 !== 0)
     fail(`--size sides must be positive multiples of 16, got ${sizeArg}`, 1);
+  if (width > MAX_SIDE || height > MAX_SIDE)
+    fail(`--size sides must be at most ${MAX_SIDE}, got ${sizeArg}`, 1);
 } else {
   const scale = Math.sqrt(TARGET_PIXELS / (canvasW * canvasH));
   width = roundTo16(canvasW * scale);
@@ -117,35 +128,61 @@ const styleCaption = (element) => {
   return parts.join(' ');
 };
 
-const elements = artwork.elements;
-const summary = elements.find((element) => element.id === SUMMARY_ID && element.kind === 'text');
-if (!summary) fail(`no text element "${SUMMARY_ID}"; add the scene and style summary`, 1);
-
-const isLayout = (element) => element.id.startsWith(LAYOUT_PREFIX);
-const labelFor = (shape) => {
-  if (shape.groupId === undefined) return undefined;
-  const label = elements.find(
-    (element) =>
-      element !== shape &&
-      element.kind === 'text' &&
-      isLayout(element) &&
-      element.id !== SUMMARY_ID &&
-      element.groupId === shape.groupId
+const warnings = [];
+const canvasRatio = canvasW / canvasH;
+const outputRatio = width / height;
+if (Math.abs(outputRatio / canvasRatio - 1) > RATIO_TOLERANCE)
+  warnings.push(
+    `output ratio ${outputRatio.toFixed(3)} differs from canvas ratio ${canvasRatio.toFixed(3)}; boxes are stretched`
   );
-  return label ? textOf(label).trim() : undefined;
-};
+
+const elements = artwork.elements;
+const isLayout = (element) =>
+  element.id.startsWith(LAYOUT_PREFIX) || (element.groupId ?? '').startsWith(LAYOUT_PREFIX);
+const isSummary = (element) =>
+  element.kind === 'text' && (element.id === SUMMARY_ID || element.groupId === SUMMARY_ID);
+const summaries = elements.filter(isSummary);
+if (summaries.length === 0)
+  fail(`no text element "${SUMMARY_ID}"; add the scene and style summary`, 1);
+const summary = summaries[0];
+if (summaries.length > 1) warnings.push(`${summaries.length} summary texts; using ${summary.id}`);
+
+const shapes = elements.filter((element) => element.kind === 'shape' && isLayout(element));
+const contains = ([x, y, w, h], [lx, ly, lw, lh]) =>
+  lx >= x && ly >= y && lx + lw <= x + w && ly + lh <= y + h;
+const containsPoint = ([x, y, w, h], px, py) => px >= x && py >= y && px <= x + w && py <= y + h;
+const area = ([, , w, h]) => w * h;
+const smallest = (candidates) =>
+  candidates.reduce(
+    (best, shape) => (!best || area(shape.bounds) < area(best.bounds) ? shape : best),
+    undefined
+  );
+
+const labelsByShape = new Map(shapes.map((shape) => [shape, []]));
+for (const element of elements) {
+  if (element.kind !== 'text' || !isLayout(element) || isSummary(element)) continue;
+  const [lx, ly, lw, lh] = element.bounds;
+  const owner =
+    smallest(shapes.filter((shape) => contains(shape.bounds, element.bounds))) ??
+    smallest(shapes.filter((shape) => containsPoint(shape.bounds, lx + lw / 2, ly + lh / 2)));
+  if (!owner) {
+    warnings.push(`label ${element.id} is not inside any layout box; ignored`);
+    continue;
+  }
+  const label = textOf(element).trim();
+  if (label) labelsByShape.get(owner).push(label);
+}
 
 const items = [];
 const skipped = [];
-const warnings = [];
 for (const element of elements) {
-  if (element === summary) continue;
+  if (isSummary(element)) continue;
   if (element.kind === 'text' && isLayout(element)) continue;
   let item;
   if (element.kind === 'shape' && isLayout(element)) {
-    const caption = labelFor(element);
-    if (!caption) warnings.push(`${element.id} has no label in its group; caption left empty`);
-    item = { label: 'object', caption: caption ?? '', bbox: bboxOf(element.bounds) };
+    const caption = labelsByShape.get(element).join('; ');
+    if (!caption) warnings.push(`${element.id} has no label inside it; caption left empty`);
+    item = { label: 'object', caption, bbox: bboxOf(element.bounds) };
   } else if (element.kind === 'text') {
     item = {
       label: 'text',

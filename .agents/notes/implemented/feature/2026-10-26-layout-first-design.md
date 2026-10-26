@@ -73,6 +73,21 @@ every delivery asset and at least one inspiration image, and reports what was le
 out. MOSS-Image documents no image input, so a future MOSS connection would carry
 inspiration qualities in `summary.caption`; that is decided when it is added.
 
+## Layout references
+
+Owner case 2026-10-26: for the brief "设计一个长沙为背景的万圣节海报，先出布局", the
+Agent labelled its kept reference "配色与光感参考" and drew a layout of its own
+instead of borrowing the reference's structure. Root cause: Spec stage 3 and
+`design-research` told the Agent to take one quality from each reference "rather
+than its objects or layout" and never a finished layout, and layout-first turn 1
+did not tie the layout to the research. Fix: layout structure (grid, hierarchy,
+headline and subject placement and scale, white space) is the quality graphic
+design research most needs; at least one kept reference is chosen for it, the
+layout-first layout is based on that reference's structure, and the reply names
+which reference the layout follows. The anti-copy rule now covers only objects,
+text and logos, and copying one reference whole. This applies to all new designs,
+including the three-option path.
+
 ## Limits
 
 Unverified: no Agent run has exercised the path, and an end-to-end run is owed. A full run needs roughly four to six image calls (one generation plus plate and object extraction), which may exceed the default budget of five and needs the owner's approval. Whether five idea chips fit the home row needs a visual check.

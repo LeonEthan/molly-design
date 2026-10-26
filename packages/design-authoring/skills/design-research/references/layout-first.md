@@ -7,8 +7,10 @@ elements in `design.yaml`; there is no separate layout format.
 
 ## Turn 1: draw the layout
 
-After the style question and research, write `design.yaml` at the final
-canvas size:
+After the style question and research, base the layout on the structure of the
+reference kept for layout — where the headline, subject and secondary copy sit
+and how large — adapted to the brief's content and canvas ratio, and write
+`design.yaml` at the final canvas size:
 
 - **Image regions.** One `shape` (`rect`) per thing the image will show — a
   subject, an object, a scene area — with a translucent fill (`#RRGGBB26`) and

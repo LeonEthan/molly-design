@@ -137,7 +137,7 @@ Write in the user's language and size the reply to the request.
 - **Inspiration images:** whenever research in this turn kept inspiration
   images, embed each kept image in the reply with Markdown image syntax and its
   absolute path from `save_image` (forward slashes, angle brackets around paths
-  with spaces), each with one line on the quality it contributes and its
+  with spaces), each with one line on the quality it contributes (say which one the layout follows) and its
   inspected source-page URL (a search-results URL alone does not count). Name a
   user-supplied reference by its attachment instead of embedding it again.
   This applies to every reply that ends a researched turn: design options, the

@@ -77,7 +77,17 @@ export function parseMarkdownAgentImageHref(src: string | undefined): string | n
     .trim()
     .replace(/^sandbox:(?=\/(?!\/))/iu, '')
     .replace(/^file:\/\/\/?(?=[a-z]:[\\/]|\/)/iu, '');
-  if (/^[a-z][a-z\d+.-]*:/iu.test(path) && !WINDOWS_ABSOLUTE_PATH_PATTERN.test(path)) {
+  // Markdown-destination normalization percent-encodes Windows backslashes
+  // (`C:\Users\…` reaches here as `C:%5CUsers\…`), hiding the drive separator
+  // from both the scheme test and WINDOWS_ABSOLUTE_PATH_PATTERN, which would
+  // misroute a local image to the remote <img> fallback. Classify on the
+  // decoded spelling but return the raw path, so the single decode in
+  // normalizeMarkdownAgentFilePath still owns decoding.
+  const classificationPath = decodeMarkdownFilePath(path);
+  if (
+    /^[a-z][a-z\d+.-]*:/iu.test(classificationPath) &&
+    !WINDOWS_ABSOLUTE_PATH_PATTERN.test(classificationPath)
+  ) {
     return null;
   }
   return parseMarkdownAgentFileHref(path)?.filePath ?? null;

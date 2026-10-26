@@ -185,3 +185,14 @@ pixel boxes, size scaled to multiples of 16) from the current artwork for the
 prompt; the JSON is a derived view and is not stored. A MOSS-Image image
 connection remains out of scope. Approval records intent only; no Agent run has
 verified the path yet.
+
+## 2026-10-26 inspiration images in replies and layout generation
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-26, introduced on
+[PR #248](https://github.com/LeonEthan/molly-design/pull/248) at commit
+`138fce2b`. Whenever research kept inspiration images, the reply that ends the
+turn shows them with their source pages: design options, the layout draft and
+the you-choose path. Layout-first generation passes the inspiration images as
+design options do, naming each one's quality and forbidding its objects, text
+and logos. Approval records intent only; no Agent run has verified it yet.

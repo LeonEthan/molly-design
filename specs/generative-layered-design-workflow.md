@@ -1,6 +1,7 @@
 # Generative layered design: task and plan
 
-Status: draft
+Status: approved
+Approval: [2026-10-26 inspiration images approval](../.github/spec-approvals.md#2026-10-26-inspiration-images-in-replies-and-layout-generation)
 Previous approval: [2026-10-26 MOSS layout alignment approval](../.github/spec-approvals.md#2026-10-26-moss-image-layout-alignment)
 Previous approval: [2026-10-26 whole-image and layout-first approval](../.github/spec-approvals.md#2026-10-26-whole-image-delivery-and-layout-first-path)
 Previous approval: [2026-10-21 two-step research approval](../.github/spec-approvals.md#2026-10-21-two-step-research-and-you-choose-path)

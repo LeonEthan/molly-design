@@ -10,7 +10,6 @@ SITE = 'https://molly-design.pages.dev'
 DMG_FALLBACK = 'https://github.com/LeonEthan/molly-design/releases/download/v0.1.1/MollyDesign-0.1.1-arm64.dmg'
 DMG = DMG_FALLBACK
 GH = 'https://github.com/LeonEthan/molly-design'
-DOWNLOAD = GH + '/releases/latest'
 RELEASES = GH + '/releases'
 MAN = json.loads((SRC / 'manifest.json').read_text())
 CFG = {}
@@ -257,7 +256,7 @@ def head():
             'applicationCategory': 'DesignApplication',
             'operatingSystem': 'macOS',
             'url': SITE + '/',
-            'downloadUrl': DOWNLOAD,
+            'downloadUrl': DMG,
             'image': SITE + '/og.png',
             'description': desc_en,
             'offers': {'@type': 'Offer', 'price': '0', 'priceCurrency': 'USD'},
@@ -400,7 +399,7 @@ def body():
     </div>
     </div>
     </div>
-    <a class="btn accent nav-dl" href="{DOWNLOAD}">{CTA}</a>
+    <a class="btn accent nav-dl" href="{DMG}" download>{CTA}</a>
     <a class="btn ic nav-github" href="{GH}" target="_blank" rel="noopener noreferrer" aria-label="{GITHUB_LABEL}" title="{GITHUB_LABEL}">{GITHUB_MARK}</a>
     <button type="button" class="menu" aria-controls="nav" aria-expanded="false" aria-label="菜单 / Menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   </div>
@@ -497,7 +496,7 @@ def body():
       <h2 class="serif" id="final-h">[[从<em>下一份需求</em>开始。||Start with your <em>next brief.</em>]]</h2>
       <p>{S('final_p')}</p>
       <div class="cta-row">
-        <a class="btn accent" href="{DOWNLOAD}">{DL}{CTA}</a>
+        <a class="btn accent" href="{DMG}" download>{DL}{CTA}</a>
         <a class="btn ghost" href="{GH}" target="_blank" rel="noopener noreferrer">{CTA_GH}</a>
       </div>
     </div>
@@ -551,13 +550,14 @@ def build():
 
     nf = (HERE / '404.html').read_text()
     nf = re.sub(r'@@A:([^@]+)@@', lambda m: amap.get(m.group(1)) or sys.exit('404 uses unshipped ' + m.group(1)), nf)
-    nf = nf.replace('@@LATEST@@', DOWNLOAD)
+    nf = nf.replace('@@DMG@@', DMG)
     (SITE_DIR / '404.html').write_text(nf, encoding='utf-8')
     (SITE_DIR / 'robots.txt').write_text('User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n' % SITE)
     (SITE_DIR / 'sitemap.xml').write_text(
         '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>%s/</loc></url>\n</urlset>\n' % SITE
     )
     shutil.copyfile(HERE / '_headers', SITE_DIR / '_headers')
+    print('download', DMG + (' (offline fallback)' if DMG == DMG_FALLBACK else ''))
     print('dist/index.html', len(s.encode()), 'sha256', hashlib.sha256(s.encode()).hexdigest(), 'assets', len(used))
 
 

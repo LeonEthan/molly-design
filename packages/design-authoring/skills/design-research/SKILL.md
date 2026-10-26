@@ -113,9 +113,11 @@ when words are not enough. Prompting and option techniques are in [references/de
 
 Show the options and **end the turn** so the user can choose, as the
 `graphic-design` Reporting section describes. Never ask for the choice with
-`ask_user_question`; the reply shows the options at full size. Do not write or
-change `design.yaml` in that turn. Continue in the turn where the user names an
-option; reproduce it with the `design-replication` skill. **You-choose path.** When the user tells you to decide or not to stop for a choice ("just pick one", "you choose", "do not ask me to choose", "你来定"), create exactly **one** design option — your recommendation — judge it against the design defaults, regenerate it at most once if it fails, and continue in the same turn by reproducing it. Create no alternative options on this path.
+`ask_user_question`; the reply shows the options at full size and also asks
+for the delivery form, as the `graphic-design` skill's Delivery form describes.
+Do not write or change `design.yaml` in that turn. Continue in the turn where
+the user names an option; reproduce it with the `design-replication` skill, or
+place it whole when the user chose one whole image. **You-choose path.** When the user tells you to decide or not to stop for a choice ("just pick one", "you choose", "do not ask me to choose", "你来定"), create exactly **one** design option — your recommendation — judge it against the design defaults, regenerate it at most once if it fails, and continue in the same turn by delivering it in the delivery form the `graphic-design` skill sets for this path. Create no alternative options on this path.
 
 For a template, reconstruction or bounded edit, the prescribed artwork is the
 chosen design; do not offer options.

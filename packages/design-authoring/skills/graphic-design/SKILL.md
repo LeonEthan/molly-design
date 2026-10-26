@@ -46,6 +46,16 @@ reconstructions and bounded edits skip them and go straight to reproducing the
 baseline; an edit with a clear brief needs no direction words and no
 `ask_user_question` round trip.
 
+**Delivery form.** A new design or redesign delivers the chosen design in one
+of two forms: **editable layers** (the default) or **one whole image**. Ask
+which in the design options reply, together with the choice of option, unless
+the brief already names a form; use the default when the user does not answer.
+On the you-choose path, deliver editable layers unless the brief asks for a
+whole image. Prescribed templates, reconstructions and bounded edits always
+work in editable layers and are not asked. A whole image is the chosen option
+placed as a single `image` element covering the canvas; it skips
+`design-replication`, and its copy and layout cannot be edited afterwards.
+
 Sibling skills to read when the task reaches their ground — only then:
 
 - `design-research` — website research, inspiration images, image-model design
@@ -88,7 +98,9 @@ are optional methods, never gates.
    choice unless the user told you to choose.
 2. **Layers.** Edit or reproduce toward the baseline. New raster layers and
    faithful extraction follow `design-replication`; a bounded edit reuses
-   existing layers and changes only what was named.
+   existing layers and changes only what was named. For a whole-image
+   delivery, copy the chosen option into `media/` as the only layer, and check
+   its copy letter by letter against the brief.
 3. **Compose.** Read
    [references/artwork-format.md](references/artwork-format.md) before writing;
    it lists the admitted fields and what each element kind leaves editable.
@@ -130,11 +142,14 @@ Write in the user's language and size the reply to the request.
   in one line, name the inspected source-page URLs, or the saved inspiration
   image paths when a page has no usable URL (a user-supplied reference by its
   attachment) (a search-results URL alone does not count), and ask the user to
-  choose. Note copy the image model drew wrong; it will be exact in the
-  editable version.
+  choose, together with the delivery form when Delivery form calls for it. Note copy the image model drew wrong;
+  it will be exact in the editable version.
 - **Editable version of the chosen design:** one or two sentences, plus what
   differs from the chosen design and why, naming each raster layer that visibly
   departs from it.
+- **Whole-image delivery:** one sentence, plus every copy line the image draws
+  wrong or leaves out; say that its wording and layout are not editable and
+  that it can be split into editable layers on request.
 - **Always report**, proportionately: unmet requirements, material assumptions,
   blocked steps, departures from the design defaults, flattened or otherwise
   non-editable content (including image lettering, whose wording changes only

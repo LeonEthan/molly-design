@@ -127,7 +127,9 @@ is the method the skills recommend for open briefs: at least three image-model
 design options made from the source image and a few chosen inspiration images,
 which the user chooses between before the chosen design is reproduced faithfully
 in editable form (copy from the source, lettering a font cannot match as image
-layers). Research and options are conditional on the branch — prescribed
+layers). With the option choice the user also picks the delivery form: editable
+layers (the default) or one whole image placed as a single `image` element,
+which skips layer reproduction and leaves its copy uneditable. Research and options are conditional on the branch — prescribed
 templates, reconstructions and bounded edits skip them — and review,
 consistency and polish are one render-and-read pass. Design defaults (breakable
 starting points that double as the review checklist) and the rejected-direction

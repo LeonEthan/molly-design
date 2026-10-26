@@ -196,3 +196,16 @@ turn shows them with their source pages: design options, the layout draft and
 the you-choose path. Layout-first generation passes the inspiration images as
 design options do, naming each one's quality and forbidding its objects, text
 and logos. Approval records intent only; no Agent run has verified it yet.
+
+## 2026-10-26 layout structure from design research
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-26, introduced on
+[PR #248](https://github.com/LeonEthan/molly-design/pull/248) at commit
+`a8a48be2`. Layout structure (grid, hierarchy, headline and subject placement
+and scale, white space) is the quality design research most needs to borrow:
+at least one kept reference is chosen for it, and the layout-first path bases
+its layout on that reference and names it. References still never lend their
+objects, text or logos, and no single reference's finished image is copied
+whole. This applies to all new designs. Approval records intent only; no Agent
+run has verified it yet.

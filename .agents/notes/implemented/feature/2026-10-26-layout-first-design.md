@@ -37,7 +37,7 @@ Some users want to control where things sit before paying for an image, as layou
 
 The workflow Spec (both languages), the `graphic-design`, `design-research` and `design-replication` SKILL.md files, the new `design-research/references/layout-first.md`, `chat-landing.tsx` and the `en`/`zh_CN` locales.
 
-"## MOSS alignment
+## MOSS alignment
 
 Owner request 2026-10-26: the canvas layout should match MOSS-Image layout input
 so a MOSS connection can be added later. Source: the official
@@ -59,6 +59,19 @@ text-to-image.
 - Unverified: the full `label` vocabulary (only `text` and `object` are documented),
   item and text limits, and the hosted API at platform.mosi.cn. A MOSS-Image image
   connection is follow-up work.
+
+## Inspiration images
+
+Owner request 2026-10-26: showing inspiration images is a general reporting rule.
+Whenever research kept inspiration images, the reply that ends the turn embeds each
+one from `media/` with the quality it contributes and its source page: design
+options, the layout draft and the you-choose path. Layout generation passes them
+as design options do (layout guide, delivery assets, then the inspiration images
+shown with the layout), naming each one's quality and forbidding its objects, text
+and logos. When the connection's input limit is tight, it keeps the layout guide,
+every delivery asset and at least one inspiration image, and reports what was left
+out. MOSS-Image documents no image input, so a future MOSS connection would carry
+inspiration qualities in `summary.caption`; that is decided when it is added.
 
 ## Limits
 

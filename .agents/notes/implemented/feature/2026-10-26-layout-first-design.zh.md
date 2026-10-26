@@ -37,7 +37,7 @@ Translation: current
 
 工作流 Spec（中英文）、`graphic-design`、`design-research` 和 `design-replication` 的 SKILL.md、新增的 `design-research/references/layout-first.md`、`chat-landing.tsx` 以及 `en`/`zh_CN` 语言文件。
 
-"## MOSS 对齐
+## MOSS 对齐
 
 2026-10-26 owner 要求画布布局对齐 MOSS-Image 的布局输入，便于后续接入 MOSS。
 依据为官方 [USERGUIDE](https://github.com/OpenMOSS/MOSS-Image/blob/main/USERGUIDE.md)：
@@ -55,6 +55,15 @@ JSON 作为文生图的 prompt 字符串传入。
 - Agent 可以改写 `caption`；`text` 和 `bbox` 不得修改。
 - 未确认：`label` 的完整取值（文档只出现 `text` 与 `object`）、条目与文字上限，以及
   platform.mosi.cn 的托管 API。MOSS-Image 图片连接属于后续工作。
+
+## 灵感图
+
+2026-10-26 owner 要求：展示灵感图是通用的汇报规则。只要调研保留了灵感图，结束该回合的回复
+就从 `media/` 嵌入每张图，并写明它贡献的特质和来源页；适用于设计方案、布局回复和 Agent
+自行决定的路径。布局生图时像生成设计方案一样传入灵感图（布局渲染图、交付素材，再加布局
+回复中展示的灵感图），写明每张图的特质并禁止照搬其物体、文字和标志。连接的图片数量受限时，
+保留布局渲染图、全部交付素材和至少一张灵感图，并在回复中说明省略了什么。MOSS-Image 文档
+没有图片输入，以后接入 MOSS 时需要把灵感图的特质写进 `summary.caption`，具体到接入时再定。
 
 ## 局限
 

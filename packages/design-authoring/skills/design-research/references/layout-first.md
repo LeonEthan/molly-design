@@ -30,8 +30,9 @@ canvas size:
 
 Render it, check that labels are legible and regions follow the design
 defaults, report the layout draft as the `graphic-design` Reporting section
-describes, and end the turn. Make no `molly_image` call in this turn. Copy the
-kept inspiration images into the session workspace for the next turn. When
+describes, and end the turn. Make no `molly_image` call in this turn. Keep the
+saved inspiration images in `media/`; the next turn passes them to the image
+model. When
 the user replies with layout changes rather than a go-ahead, make them and end
 the turn again.
 
@@ -51,15 +52,19 @@ a `layout-` id; read its label.
    You may rewrite `caption` values in the file; never edit `text` or `bbox`.
    Fix what it reports as missing before generating; skipped elements such as
    delivery assets stay out of the JSON and go in as input images.
-3. Call `molly_image` `edit` once at the canvas ratio: the layout guide first,
-   then delivery assets, then one or two inspiration images within the
-   connection's input limit (drop inspiration first). Paste the `layout` object from
+3. Call `molly_image` `edit` once at the canvas ratio, with images and text as
+   for design options: the layout guide first, then delivery assets, then the
+   one or two inspiration images shown with the layout draft. When the
+   connection's input limit cannot take them all, keep the layout guide,
+   every delivery asset and one inspiration image, and say in the reply what
+   was left out. Paste the `layout` object from
    `layout.json` into the prompt, saying its coordinates are pixels on a
    `width` × `height` canvas with the centre as origin, and ask for a finished
    poster in the direction words where each item fills its box, the copy is
    drawn in its boxes, the scene follows the summary, and no boxes, outlines
    or labels appear. Name what each
-   inspiration image contributes, as for design options.
+   inspiration image contributes and that its objects, text and logos are not
+   to be copied, as for design options.
 4. View the result beside the layout guide in one `molly_view_image` `paths`
    call. Regenerate once when a region's content is missing or clearly outside
    its box; otherwise continue and report the departure.

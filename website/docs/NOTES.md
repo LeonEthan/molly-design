@@ -29,9 +29,8 @@ Trimmed from the v7 working notes (rounds v7 → v7i, 2026-10-17). This file kee
 
 ## Downloads
 
-- The download button, closing, and `404.html` link to `DOWNLOAD` (`…/releases/latest`). Nav and footer Releases link to the GitHub releases index. JSON-LD `downloadUrl` uses `DOWNLOAD`. The hero has no download button.
-- FAQ install and update answers (`@@DMG@@` in `slots.json`) use the `.dmg` `fetch_github()` selects: the newest stable release that actually has one. Drafts and prereleases are skipped, and a newer release without a DMG does not stop the scan. `DMG_FALLBACK` (the v0.1.1 asset) is used only when the API is unavailable.
-- GitHub serves a release asset with `Content-Disposition: attachment`. `releases/latest` is an HTML page, so those buttons are not direct file downloads.
+- The nav download button, closing, `404.html` (`@@DMG@@`), FAQ install and update answers (`@@DMG@@` in `slots.json`) and JSON-LD `downloadUrl` all use the `.dmg` `fetch_github()` selects: the newest stable release that actually has one. Drafts and prereleases are skipped, and a newer release without a DMG does not stop the scan. `DMG_FALLBACK` (the v0.1.1 asset) is used only when the API is unavailable; the build then prints `(offline fallback)` and that build must not be deployed. Nav and footer Releases link to the GitHub releases index. The hero has no download button.
+- GitHub serves a release asset with `Content-Disposition: attachment` after a redirect to its CDN, so these links start a download without a GitHub page (#245). `releases/latest` is an HTML page and is not used for download buttons. `releases/latest/download/<name>` is not used either: asset names carry the version.
 - A normal app release needs no edit to `build.py`. See README, "Release".
 
 ## Asset provenance

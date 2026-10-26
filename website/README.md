@@ -23,7 +23,7 @@ This folder is not part of the pnpm workspace. It has its own `package.json` and
 python3 website/build.py
 ```
 
-The build writes `website/dist/` and prints the sha256 of `dist/index.html`. It needs network access: it reads GitHub Releases to fill the FAQ DMG link. The sha can differ between builds when that response changes. If the API is unavailable, the build uses `DMG_FALLBACK` in `build.py`. The build fails on placeholder markup or a missing asset.
+The build writes `website/dist/`, prints the DMG URL every download link uses, and prints the sha256 of `dist/index.html`. It needs network access: it reads GitHub Releases to fill the DMG download links. The sha can differ between builds when that response changes. If the API is unavailable, the build uses `DMG_FALLBACK` in `build.py`. The build fails on placeholder markup or a missing asset.
 
 ## QA
 
@@ -76,12 +76,12 @@ Compare it to the sha of the build you deployed. A later build can print a diffe
 
 Publishing a GitHub Release is enough. The site does not keep a hand-edited DMG URL.
 
-- Nav and footer "Releases" link to `https://github.com/LeonEthan/molly-design/releases`. Closing and the 404 page link to `https://github.com/LeonEthan/molly-design/releases/latest`.
-- FAQ install and update answers link to a `.dmg` chosen at build time. `fetch_github()` reads up to 100 releases, skips drafts and prereleases, and uses the first `.dmg` it finds, so a newer non-app release does not leave the FAQ on an older installer. `DMG_FALLBACK` is only the offline fallback. Do not edit it for a normal release.
+- Nav and footer "Releases" link to `https://github.com/LeonEthan/molly-design/releases`.
+- The nav download button, closing, FAQ install and update answers, and the 404 page link to a `.dmg` chosen at build time, so a click starts the download. `fetch_github()` reads up to 100 releases, skips drafts and prereleases, and uses the first `.dmg` it finds, so a newer non-app release does not leave the FAQ on an older installer. `DMG_FALLBACK` is only the offline fallback. Do not edit it for a normal release.
 - Version numbers stay out of visible text.
 
 1. Publish the app release with the arm64 DMG attached, and do not mark it a draft or a prerelease if it should appear on the site.
-2. Rebuild with network access and run QA. Confirm the FAQ href.
+2. Rebuild with network access and run QA. Confirm the `download` line the build prints names the new DMG and does not say `(offline fallback)`.
 3. Deploy that build. The sha you confirm is the sha of this build, not a permanent fingerprint of the source.
 
 ## Assets

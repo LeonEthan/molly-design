@@ -17,12 +17,13 @@
 - Follow the claims rules in NOTES: never call the DMG signed; no visible
   frame captions or hero eyebrow labels (#175). Version numbers stay out of
   visible text.
-- The download button, closing, and `404.html` link to `DOWNLOAD`
-  (`…/releases/latest`). Nav and footer Releases link to the releases index. FAQ
-  `@@DMG@@` links use the newest stable GitHub release that has a `.dmg`
-  (drafts and prereleases skipped; later releases are scanned), falling back
-  to the pinned v0.1.1 URL when the API is unavailable. The HTML sha depends
-  on that network response and can differ between builds.
+- Every download link (nav button, closing, FAQ, `404.html`, JSON-LD) is the
+  `.dmg` asset URL `DMG`, never a GitHub HTML page (#245): the newest stable
+  release that has a `.dmg` (drafts and prereleases skipped; later releases are
+  scanned), falling back to the pinned v0.1.1 URL when the API is unavailable.
+  Never deploy a build that printed `(offline fallback)`. Nav and footer
+  Releases link to the releases index. The HTML sha depends on that network
+  response and can differ between builds.
 - Commit web-ready derivatives only: WebP images (PNG only for `og.png` and
   icons), no raw captures or masters, each file under 1 MB. Record provenance in
   `assets/manifest.json`.

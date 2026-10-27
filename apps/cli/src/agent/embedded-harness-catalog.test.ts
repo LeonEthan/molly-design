@@ -153,6 +153,14 @@ it('clean-install Kimi All offers every catalog model with its thinking ladder',
         contextWindow: 262_144,
         thinking: ['off', 'minimal', 'low', 'medium', 'high'],
       },
+      {
+        providerPresetId: 'kimi-coding',
+        modelId: 'k3.1-pro',
+        name: 'Kimi K3.1 Pro',
+        input: ['text', 'image'],
+        contextWindow: 1_048_576,
+        thinking: ['low', 'high', 'max'],
+      },
     ],
   };
   // All (no connection.models) must project the full native catalog — the
@@ -161,8 +169,9 @@ it('clean-install Kimi All offers every catalog model with its thinking ladder',
   const all = projectEmbeddedHarnessCatalog(kimiCatalog, [connection]);
   expect(
     all.models.slice(1).map((model) => decodeMollyModelOption(model.modelId)?.modelId)
-  ).toEqual(['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed']);
+  ).toEqual(['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed', 'k3.1-pro']);
   expect(all.modelReasoningEfforts[all.models[1]!.modelId]).toEqual(['low', 'high', 'max']);
+  expect(all.modelReasoningEfforts[all.models[5]!.modelId]).toEqual(['low', 'high', 'max']);
   const restricted = projectEmbeddedHarnessCatalog(kimiCatalog, [
     { ...connection, models: ['k3'] },
   ]);

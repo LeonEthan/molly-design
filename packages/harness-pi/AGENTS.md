@@ -6,6 +6,7 @@ Read [README](README.md) before changing session construction, packages or the b
   vendor Pi or a package; add a package by pinning it in catalog `pi`, listing it in
   shared `MOLLY_PI_PACKAGES` and giving it settings copy. Record known upstream defects
   instead of working around them.
+- Refresh native catalogs only at build time through Pi. Seal only `kimi-coding/k3.1-pro`, validated and checksummed; never override existing models or add highspeed. UI/workers restore that overlay in memory with network off. Reuse only a valid same-engine overlay on refresh failure; otherwise fail the build. No runtime catalog RPC/cache or user credential.
 - Each runtime epoch has its own Molly `PI_CODING_AGENT_DIR`, derived identically at
   launch and before SDK import. Never reuse another epoch's auth or model files or open
   the user's `~/.pi/agent`. Keep native discovery, skills, context files and hooks; Molly owns
@@ -32,7 +33,7 @@ Read [README](README.md) before changing session construction, packages or the b
   Compatible Responses/Gemini reuse shared URL normalization and native Pi adapters;
   their explicit Settings check must verify the selected model response.
   Their native stream/streamSimple options refuse redirects; complete/extraction inherit
-  that policy. Pi 1.3.0 resolves scoped Google SDK 2.23.0 for its public fetch hook;
+  that policy. Pi 1.4.0 resolves scoped Google SDK 2.23.0 for its public fetch hook;
   update the override and staging version assertion together when reviewing compatibility.
   Compatible endpoints request streaming usage only when explicitly declared; preserve
   saved `usageInStreaming` values and default unknown support to false.

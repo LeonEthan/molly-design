@@ -24,6 +24,7 @@ import { createWorkerEnvironment } from '../../src/environment';
 import { fixture } from './adapter';
 import { writeProfileSettings } from '../../src/profile-settings';
 import type { HostTimeSource } from '../../src/host-time';
+import type { NativeModelOverlay } from '../../src/native-model-overlay';
 
 const providerId = MOLLY_PROVIDER_IDS['openai-compatible'];
 export async function managed(
@@ -36,6 +37,7 @@ export async function managed(
     providerToolCall?: (call: number) => ToolCall | undefined;
     productionProfile?: boolean;
     nativeTransport?: boolean;
+    nativeModelOverlay?: NativeModelOverlay;
     memoryResponse?: string;
     config?: Partial<WorkerConfig>;
     initialize?: boolean;
@@ -101,7 +103,13 @@ export async function managed(
       await options.peer?.sessionUpdate?.(update);
     },
   };
-  const host = new PiAcpHost(config, new PrivateControlPipe(pipe), peer, options.time);
+  const host = new PiAcpHost(
+    config,
+    new PrivateControlPipe(pipe),
+    peer,
+    options.nativeModelOverlay,
+    options.time
+  );
   const observed: string[] = [];
   let selectedRuntime!: ModelRuntime;
   const create = ModelRuntime.create.bind(ModelRuntime);

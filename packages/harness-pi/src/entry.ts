@@ -8,18 +8,25 @@ import { PrivateControlPipe } from './private-control-pipe';
 import { prepareProfile } from './profile';
 import { writeProfileSettings } from './profile-settings';
 import { acquireWorkerTemporaryDirectory } from './worker-temp';
+import {
+  createNativeModelRuntime,
+  NATIVE_OVERLAY_MODEL_ID,
+  NATIVE_OVERLAY_PROVIDER_ID,
+  readNativeModelOverlay,
+} from './native-model-overlay';
 
-/** Packaging check: the sealed SDK and every Pi package resolve, without a profile or key. */
+/** Packaging check: the sealed SDK, model catalog and every Pi package resolve without a key. */
 async function probe() {
-  const { ModelRuntime, VERSION } = await import('@earendil-works/pi-coding-agent');
-  const { InMemoryCredentialStore } = await import('@earendil-works/pi-ai');
+  const { VERSION } = await import('@earendil-works/pi-coding-agent');
   const { createProfileSettings } = await import('./profile-settings');
-  const runtime = await ModelRuntime.create({
-    credentials: new InMemoryCredentialStore(),
-    modelsPath: null,
-    refreshOnCreate: false,
-    allowModelNetwork: false,
-  });
+  const resourceDirectory = new URL('./', import.meta.url);
+  const manifest = JSON.parse(
+    await readFile(new URL('./runtime-manifest.json', resourceDirectory), 'utf8')
+  );
+  const overlay = await readNativeModelOverlay(manifest, resourceDirectory);
+  const runtime = await createNativeModelRuntime(overlay);
+  if (!runtime.getModel(NATIVE_OVERLAY_PROVIDER_ID, NATIVE_OVERLAY_MODEL_ID))
+    throw new Error('harness_native_model_overlay_required_model_missing');
   return {
     schemaVersion: 1,
     engineVersion: VERSION,
@@ -58,6 +65,10 @@ async function main(): Promise<void> {
       manifest.protocolVersion !== config.harness.protocolVersion
     )
       throw new Error('harness_build_mismatch');
+    const nativeModelOverlay = await readNativeModelOverlay(
+      manifest,
+      new URL('./', import.meta.url)
+    );
     const environment = createWorkerEnvironment(process.env, config);
     const temporary = await acquireWorkerTemporaryDirectory(environment.TMPDIR!);
     for (const key of Object.keys(process.env)) delete process.env[key];
@@ -81,7 +92,10 @@ async function main(): Promise<void> {
       const { PiAcpHost } = await import('./host');
       const connection = new AgentSideConnection(
         (peer) => {
-          agent = new PiAcpAgent(peer, { agentDir, host: new PiAcpHost(config, control, peer) });
+          agent = new PiAcpAgent(peer, {
+            agentDir,
+            host: new PiAcpHost(config, control, peer, nativeModelOverlay),
+          });
           return agent;
         },
         ndJsonStream(

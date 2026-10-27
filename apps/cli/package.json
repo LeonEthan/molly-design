@@ -10,7 +10,7 @@
     "dev:build": "node scripts/dev-build.mjs --clean",
     "build": "pnpm run clean && pnpm run prepare:acp-adapters && pnpm run prepare:design-authoring && pnpm run typecheck && pnpm run build:bundle && pnpm run copy:design-skills && pnpm run check:published-bundle-imports && pnpm run copy:wasm",
     "build:watch": "vite build --watch",
-    "build:bundle": "vite build && node scripts/build-embedded-harness.mjs",
+    "build:bundle": "node scripts/build-embedded-harness.mjs --with-vite",
     "prepare:acp-adapters": "corepack pnpm --dir ../.. --filter acp-extension-core build",
     "prepare:design-authoring": "corepack pnpm --dir ../.. --filter @molly/design-authoring build",
     "check:published-bundle-imports": "node scripts/check-published-bundle-imports.js",

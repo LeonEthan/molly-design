@@ -1,7 +1,7 @@
 # Molly embedded Pi
 
 This package is Molly's Agent engine: the public Pi SDK (`@earendil-works/pi-coding-agent`
-1.3.0) plus unmodified published Pi packages, behind an ACP adapter. The CLI host owns
+1.4.0) plus unmodified published Pi packages, behind an ACP adapter. The CLI host owns
 dispatch, credentials, design transactions and session history policy; Pi owns the model
 loop, tools, resource discovery and native conversation history.
 Intent: [embedded harness Spec](../../specs/molly-embedded-pi-harness.md).
@@ -64,7 +64,7 @@ not execute tool calls from an errored response. The main host's public
 `session_before_compact` hook still cancels overflow/truncation recovery when Pi would
 repeat inference; ordinary compaction remains available.
 
-Known Pi limits, observed on 1.0.4 and not listed as fixed in the 1.3.0 changelog: partial text already streamed before a failure remains visible
+Known Pi limits, observed on 1.0.4 and still present in the pinned 1.4.0 retry classifier/backoff: partial text already streamed before a failure remains visible
 beside the retried answer because ACP has no retraction. A bare `529` or `ECONNRESET`
 without accompanying overload/connection-error text is not matched by Pi's retry
 classifier. Retry-After values are not honored; backoff is fixed. Ordinary compaction
@@ -84,7 +84,7 @@ widgets, footers and autocomplete are unavailable.
 
 ## Request-level image retention
 
-The managed host uses Pi 1.3.0's public `context` hook to replace older tool-result
+The managed host uses Pi's public `context` hook to replace older tool-result
 images with stable text placeholders for each model request ([#199](https://github.com/LeonEthan/molly-design/issues/199)).
 Up to eight tool images pass through unchanged. Above eight, the boundary advances
 in batches of four, retaining the latest four to seven tool images. User images
@@ -122,6 +122,10 @@ is not proof that a detached process exited. Upgrade only after old tasks have e
 when that cannot be established, defer the upgrade. The new build does not kill unrelated
 processes, revoke old provider keys or erase old profiles. Detached-process settlement has
 not been validated by this retirement's synthetic checks.
+
+**Build-time native catalog additions.** Pi 1.4.0 predates Kimi K3.1 Pro in its offline catalog, so the build uses the SDK's native `ModelRuntime.refresh()` for only `kimi-coding`, with an in-memory synthetic credential and no user key. It seals only the native `k3.1-pro` `ModelsStoreEntry` model in `native-model-overlay.json`; `k3.1-pro-highspeed`, other additions and every remote override of an existing model are excluded. Strict checks pin the model ID, Chat Completions protocol, default Kimi endpoint, 1M/131072 token limits, text/image input, `low/high/max` map and Kimi reasoning compatibility fields, including `requiresReasoningContentOnAssistantMessages`. The build verifies that offline restoration adds exactly this one model and leaves all previous definitions unchanged. A future SDK that already ships the target skips this refresh. If refresh fails, only a checksum-valid overlay for the same engine from the previous output may be reused; otherwise the build fails rather than silently omitting the model. The production bundle coordinator reads that candidate before Vite empties `dist`, so the fallback also works on the ordinary `build:bundle` path. There is no runtime refresh RPC, Settings refresh button or user-level catalog cache.
+
+The overlay and the UI's `model-catalog.json` are resources in the ordinary manifest and build ID. [native-model-overlay.ts](src/native-model-overlay.ts) restores the entry into an `InMemoryModelsStore`, refreshes only with `allowNetwork: false`, and supplies both the build-time picker projection and each worker's runtime. The worker and probe verify the sealed checksum and engine before credentials or inference. Existing connection `models` lists still narrow the picker, default endpoints still avoid provider overrides, and native API-key/OAuth authentication remains owned by Pi. Runtime model traffic goes only to the selected connection; catalog traffic never reads user credentials or `~/.pi/agent`.
 
 [model-connection.ts](src/model-connection.ts) registers the selected connection in memory,
 including declared compatible models for Anthropic Messages, OpenAI Chat Completions,
@@ -164,14 +168,15 @@ payload callback, preserves its replacement, then forces the same policy through
 Completion helpers, native compaction and personal-memory extraction use these same
 registered methods. Existing protocols and native presets retain their transport.
 
-Pi remains 1.3.0. The exact pnpm override
-`@earendil-works/pi-ai@1.3.0>@google/genai: 2.23.0` supplies Google's published public
+Pi remains 1.4.0. The exact pnpm override
+`@earendil-works/pi-ai@1.4.0>@google/genai: 2.23.0` supplies Google's published public
 fetch hook; mem0ai's Google 1.52.0 graph is unchanged. Molly owns compatibility of
 this override: changes require native streaming/tool/reasoning/cancel and redirect
 regressions, Pi-relative resolution in the staged closure, manifest/hash verification
 and the existing packaged synthetic smoke. `build-embedded-harness.mjs` asserts the
 staged Pi-relative Google version; update that assertion with the reviewed override.
 There is no SDK patch, global fetch replacement or worker dispatcher policy.
+Electron's direct `ws` range is `^8.22.0` so Pi 1.4.0's `openai@7.19.0` optional peer is satisfied; other CLI/Loro `ws` resolutions remain unchanged.
 
 ## ACP adapter
 
@@ -309,7 +314,7 @@ the repaired protocol. History files and their partition layout are unchanged.
 Pi and every package dependency into the sealed `harness/` closure with a checksummed
 manifest. `molly-pi-agent.js --probe` reports the engine and package count without a key.
 The workspace, CLI install/startup checks and bundle require Node `>=22.19.0 <23 || >=23.6.0`
-with Node-API 10, matching Pi 1.3.0 and the SQLite binding.
+with Node-API 10, matching Pi 1.4.0 and the SQLite binding.
 The Settings capability reader verifies the staged question package's `package.json`
 and `LICENSE` against that manifest and exposes only public package metadata.
 `apps/cli/scripts/smoke-embedded-harness.mjs <cli-output> [node]` starts the bundled worker

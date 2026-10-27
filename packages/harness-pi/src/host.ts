@@ -6,7 +6,7 @@ import {
 import type * as acp from '@agentclientprotocol/sdk';
 import { RequestError } from '@agentclientprotocol/sdk';
 import { ModelRuntime, VERSION, type InlineExtension } from '@earendil-works/pi-coding-agent';
-import { InMemoryCredentialStore, InMemoryModelsStore } from '@earendil-works/pi-ai';
+import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import {
   HarnessSessionBindingSchema,
   MOLLY_BUILTIN_MCP_CONNECTION,
@@ -48,6 +48,7 @@ import {
 import { z } from 'zod';
 import { generateSessionTitle } from './session-title';
 import { retainRecentToolImages } from './image-retention';
+import { createNativeModelRuntime, type NativeModelOverlay } from './native-model-overlay';
 
 const NativeCompletionSchema = z.object({
   execution: z.literal('inference'),
@@ -96,6 +97,7 @@ export class PiAcpHost {
     config: WorkerConfig,
     private readonly control: PrivateControlPipe,
     private readonly peer: AdapterPeer,
+    private readonly nativeModelOverlay?: NativeModelOverlay,
     private readonly time?: HostTimeSource
   ) {
     this.config = WorkerConfigSchema.parse(config);
@@ -154,13 +156,7 @@ export class PiAcpHost {
     if ((await realpath(agentDir)) !== (await realpath(profile)))
       throw new Error('pi_acp_host_profile_mismatch');
     const credentialStore = new InMemoryCredentialStore();
-    const runtime = await ModelRuntime.create({
-      credentials: credentialStore,
-      modelsStore: new InMemoryModelsStore(),
-      modelsPath: null,
-      allowModelNetwork: false,
-      refreshOnCreate: false,
-    });
+    const runtime = await createNativeModelRuntime(this.nativeModelOverlay, credentialStore);
     const { providerId, baseUrl } = configureModelConnection(
       runtime,
       this.config.connection,

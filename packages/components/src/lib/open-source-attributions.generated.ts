@@ -4,7 +4,7 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-25T13:42:59.881Z",
+  "generatedAt": "2026-10-27T04:44:22.339Z",
   "entries": [
     {
       "id": "molly-design-adapters",
@@ -1578,7 +1578,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "General-purpose agent with transport abstraction, state management, and attachment support",
       "versions": [
-        "1.3.0"
+        "1.4.0"
       ]
     },
     {
@@ -1591,7 +1591,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Unified LLM API with automatic model discovery and provider configuration",
       "versions": [
-        "1.3.0"
+        "1.4.0"
       ]
     },
     {
@@ -1604,7 +1604,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Earendil Works",
       "description": "Sandboxed JavaScript execution where the only capability is calling injected tools",
       "versions": [
-        "1.3.0"
+        "1.4.0"
       ]
     },
     {
@@ -1617,7 +1617,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Coding agent CLI with read, bash, edit, write tools and session management",
       "versions": [
-        "1.3.0"
+        "1.4.0"
       ]
     },
     {
@@ -1630,7 +1630,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Earendil Works",
       "description": "Standalone Model Context Protocol client for pi and other applications",
       "versions": [
-        "1.3.0"
+        "1.4.0"
       ]
     },
     {
@@ -1643,7 +1643,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Vendor-neutral telemetry contracts and typed schema utilities for pi",
       "versions": [
-        "1.3.0"
+        "1.4.0"
       ]
     },
     {
@@ -1656,7 +1656,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Terminal User Interface library with differential rendering for efficient text-based applications",
       "versions": [
-        "1.3.0"
+        "1.4.0"
       ]
     },
     {
@@ -10286,6 +10286,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-marked-cjk-friendly-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "marked-cjk-friendly",
+      "license": "MIT",
+      "homepage": "https://github.com/tats-u/markdown-cjk-friendly#readme",
+      "author": "Tatsunori Uchino",
+      "description": "Marked.js extension to make Markdown emphasis (`**`) in CommonMark more friendly with Chinese, Japanese, and Korean (CJK)",
+      "versions": [
+        "0.1.2"
+      ]
+    },
+    {
       "id": "pkg-math-intrinsics-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -14530,7 +14543,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "An HTTP/1.1 client, written from scratch for Node.js",
       "versions": [
         "7.30.0",
-        "8.10.0",
         "8.10.2"
       ]
     },
@@ -15222,7 +15234,8 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Simple to use, blazing fast and thoroughly tested websocket client and server for Node.js",
       "versions": [
         "8.18.0",
-        "8.19.0"
+        "8.19.0",
+        "8.22.0"
       ]
     },
     {

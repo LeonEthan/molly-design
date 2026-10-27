@@ -1624,7 +1624,7 @@ describe('session system prompt toolset fingerprint', () => {
     }
   );
 
-  it('opens a genuine Pi 1.0.4-written v1 session and rebuilds once on 1.3.0', async () => {
+  it('opens a genuine Pi 1.0.4-written v1 session and rebuilds once on 1.4.0', async () => {
     const { state, options } = reloadOptions();
     const id = randomUUID();
     const f = await managed({
@@ -1672,6 +1672,57 @@ describe('session system prompt toolset fingerprint', () => {
     const next = await worker(options, false, f.config, id);
     expect(await next.turn('reopened')).toBe(rebuilt);
     expect((await savedEntries(file)).map((entry) => entry.data.version)).toEqual([1, 2]);
+    await next.close();
+  });
+
+  it('opens a genuine Pi 1.3.0-written v2 session and rebuilds once on 1.4.0', async () => {
+    const { state, options } = reloadOptions();
+    const id = randomUUID();
+    const f = await managed({
+      ...options,
+      extensions: [toolExtension(false)],
+      config: { nativeSessionId: id, personalMemory: true },
+    });
+    const baseline = JSON.parse(
+      await readFile(new URL('./fixtures/pi-1.3.0-session.json', import.meta.url), 'utf8')
+    );
+    expect(baseline.writtenBy.version).toBe('1.3.0');
+    const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+    const directory = join(
+      f.root,
+      'sessions',
+      digest(f.config.connection.id),
+      digest(f.config.productSessionId)
+    );
+    await mkdir(directory, { recursive: true });
+    const file = join(directory, `2026-10-21T12-00-00-000Z_${id}.jsonl`);
+    const original =
+      [
+        JSON.stringify({ ...baseline.header, id, cwd: f.cwd }),
+        ...baseline.entries.map((entry: unknown) => JSON.stringify(entry)),
+      ].join('\n') + '\n';
+    await writeFile(file, original);
+    const session = await f.open();
+    expect(await readFile(file, 'utf8')).toBe(original);
+    f.grant(session.snapshot);
+    await session.prompt();
+    const rebuilt = systemText(f.observed[0]!);
+    expect(rebuilt).not.toContain('Synthetic Pi 1.3.0 frozen host prompt.');
+    expect(rebuilt).toContain('Likes muted color');
+    expect(f.updates).toContainEqual(
+      expect.objectContaining({
+        update: {
+          sessionUpdate: 'user_message_chunk',
+          content: { type: 'text', text: 'Synthetic Pi 1.3.0 greeting.' },
+        },
+      })
+    );
+    await f.agent.dispose();
+    vi.restoreAllMocks();
+    state.instant = new Date('2026-10-19T00:00:00.000Z');
+    const next = await worker(options, false, f.config, id);
+    expect(await next.turn('reopened')).toBe(rebuilt);
+    expect((await savedEntries(file)).map((entry) => entry.data.version)).toEqual([2, 2]);
     await next.close();
   });
 

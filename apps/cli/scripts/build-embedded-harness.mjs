@@ -7,9 +7,7 @@ import { build } from 'esbuild';
 
 const cliRoot = fileURLToPath(new URL('..', import.meta.url));
 const harnessRoot = path.resolve(cliRoot, '../../packages/harness-pi');
-const harnessManifest = JSON.parse(
-  fs.readFileSync(path.join(harnessRoot, 'package.json'), 'utf8')
-);
+const harnessManifest = JSON.parse(fs.readFileSync(path.join(harnessRoot, 'package.json'), 'utf8'));
 // The worker bundle inlines its own code and protocol libraries. Pi, its peers and every
 // unmodified Pi package stay ordinary staged packages, resolved through the lockfile.
 const bundled = ['@agentclientprotocol/sdk', '@molly/shared', 'acp-extension-core', 'zod'];
@@ -119,10 +117,22 @@ function fileDigests(root, directory = root) {
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
-export async function buildEmbeddedHarness(outputName = 'dist') {
+function previousOverlayResource(directory) {
+  try {
+    return {
+      manifest: JSON.parse(fs.readFileSync(path.join(directory, 'runtime-manifest.json'), 'utf8')),
+      bytes: fs.readFileSync(path.join(directory, 'native-model-overlay.json'), 'utf8'),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+export async function buildEmbeddedHarness(outputName = 'dist', preservedOverlay) {
   if (!['dist', 'dist-dev'].includes(outputName)) throw new Error('Invalid owned output directory');
   const output = path.join(cliRoot, outputName);
   const directory = path.join(output, 'harness');
+  const previousOverlay = preservedOverlay ?? previousOverlayResource(directory);
   fs.rmSync(directory, { recursive: true, force: true });
   fs.mkdirSync(directory, { recursive: true });
   await build({
@@ -157,12 +167,27 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
     path.join(harnessRoot, 'src/LICENSE.pi-acp'),
     path.join(directory, 'LICENSE.pi-acp')
   );
-  const { createBundledModelCatalog } = await import(
-    pathToFileURL(path.join(directory, 'model-catalog.js')).href
-  );
+  const { createBundledModelCatalog, parseNativeModelOverlay, resolveNativeModelOverlay } =
+    await import(pathToFileURL(path.join(directory, 'model-catalog.js')).href);
+  let fallback;
+  try {
+    fallback = previousOverlay
+      ? parseNativeModelOverlay(previousOverlay.bytes, previousOverlay.manifest)
+      : undefined;
+  } catch {
+    fallback = undefined;
+  }
+  const resolved = await resolveNativeModelOverlay({ fallback });
+  if (resolved.source === 'cached')
+    console.warn('Pi catalog refresh failed; reusing the verified previous native model overlay');
+  if (resolved.overlay)
+    fs.writeFileSync(
+      path.join(directory, 'native-model-overlay.json'),
+      `${JSON.stringify(resolved.overlay)}\n`
+    );
   fs.writeFileSync(
     path.join(directory, 'model-catalog.json'),
-    `${JSON.stringify(await createBundledModelCatalog())}\n`
+    `${JSON.stringify(await createBundledModelCatalog(resolved.overlay))}\n`
   );
   const { createModelMetadataSnapshot } = await import(
     pathToFileURL(path.join(cliRoot, 'scripts/build-model-metadata-snapshot.mjs')).href
@@ -211,15 +236,20 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
     path.join(directory, 'runtime-manifest.json'),
     `${JSON.stringify(manifest, null, 2)}\n`
   );
-  fs.writeFileSync(
-    path.join(output, 'molly-pi-agent.js'),
-    "await import('./harness/entry.js');\n"
-  );
+  fs.writeFileSync(path.join(output, 'molly-pi-agent.js'), "await import('./harness/entry.js');\n");
   console.log(
     `Embedded Pi ${manifest.engineVersion}: ${packages.length} locked packages, ${files.length} resources (${outputName})`
   );
 }
 
+export async function buildCliBundle() {
+  const previousOverlay = previousOverlayResource(path.join(cliRoot, 'dist', 'harness'));
+  const { build: viteBuild } = await import('vite');
+  await viteBuild({ root: cliRoot, configFile: path.join(cliRoot, 'vite.config.ts') });
+  await buildEmbeddedHarness('dist', previousOverlay);
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  await buildEmbeddedHarness(process.argv[2] ?? 'dist');
+  if (process.argv[2] === '--with-vite') await buildCliBundle();
+  else await buildEmbeddedHarness(process.argv[2] ?? 'dist');
 }

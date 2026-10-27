@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Builds the Molly Design website into dist/ (Cloudflare Pages deploy folder)."""
-import hashlib, json, pathlib, re, shutil, sys, urllib.request
+import hashlib, json, pathlib, re, shutil, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent
 SRC = ROOT / 'assets'
 SITE_DIR = ROOT / 'dist'
 HERE = ROOT / 'src'
 SITE = 'https://molly-design.pages.dev'
-DMG_FALLBACK = 'https://github.com/LeonEthan/molly-design/releases/download/v0.1.1/MollyDesign-0.1.1-arm64.dmg'
-DMG = DMG_FALLBACK
 GH = 'https://github.com/LeonEthan/molly-design'
+DOWNLOAD = GH + '/releases/latest/download/MollyDesign-arm64.dmg'
+DMG = DOWNLOAD
 RELEASES = GH + '/releases'
 MAN = json.loads((SRC / 'manifest.json').read_text())
 CFG = {}
@@ -80,50 +80,8 @@ def S(name):
     return '[[%s||%s]]' % (v[0], v[1])
 
 
-def stable_releases(rows):
-    """Published releases only. Drafts and prereleases are not site content."""
-    stable = []
-    for row in rows:
-        if row.get('draft') or row.get('prerelease'):
-            continue
-        if not row.get('tag_name') or not row.get('published_at'):
-            continue
-        stable.append(row)
-    return stable
-
-
-def dmg_asset(row):
-    for asset in row.get('assets') or []:
-        url = asset.get('browser_download_url') or ''
-        name = asset.get('name') or ''
-        if name.endswith('.dmg') and url:
-            return url
-    return ''
-
-
-def fetch_github():
-    """Newest stable app DMG. Falls back offline.
-
-    Scans the release list, not only the newest entry, so a draft,
-    prerelease, or non-app release does not hide the current installer.
-    """
-    global DMG, CFG
-    dmg = DMG_FALLBACK
-    try:
-        req = urllib.request.Request(
-            'https://api.github.com/repos/LeonEthan/molly-design/releases?per_page=100',
-            headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'molly-design-website-build'},
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
-        for row in stable_releases(data):
-            found = dmg_asset(row)
-            if found:
-                dmg = found
-                break
-    except Exception:
-        pass
-    DMG = dmg
+def load_site_config():
+    global CFG
     CFG = json.loads((HERE / 'slots.json').read_text().replace('@@DMG@@', DMG))
 
 
@@ -520,7 +478,7 @@ def body():
 
 
 def build():
-    fetch_github()
+    load_site_config()
     html = pairs(head() + body())
     if re.search(r'ph-tag|ph-block|placeholder|占位', html, re.I):
         sys.exit('placeholder markup left in page')
@@ -557,7 +515,7 @@ def build():
         '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>%s/</loc></url>\n</urlset>\n' % SITE
     )
     shutil.copyfile(HERE / '_headers', SITE_DIR / '_headers')
-    print('download', DMG + (' (offline fallback)' if DMG == DMG_FALLBACK else ''))
+    print('download', DMG)
     print('dist/index.html', len(s.encode()), 'sha256', hashlib.sha256(s.encode()).hexdigest(), 'assets', len(used))
 
 

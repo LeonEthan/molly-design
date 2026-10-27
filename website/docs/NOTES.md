@@ -5,7 +5,7 @@ Trimmed from the v7 working notes (rounds v7 → v7i, 2026-10-17). This file kee
 ## Status
 
 - Live at `https://molly-design.pages.dev` (Cloudflare Pages project `molly-design`), deployed manually.
-- #175 changed the page, and `build.py` reads GitHub Releases while it builds so the FAQ can link to the newest DMG. `dist/index.html` therefore depends on network access, and its sha256 can differ between builds. Offline, the build uses `DMG_FALLBACK`.
+- #175 changed the page; #250 pins every download link to `releases/latest/download/MollyDesign-arm64.dmg`. The build no longer calls the GitHub Releases API for the DMG URL, so `dist/index.html` is stable offline.
 - Bringing the source into the repository was a migration only: no design, copy or animation change. The redesign after that migration is #175.
 
 ## Build pipeline
@@ -15,7 +15,7 @@ Trimmed from the v7 working notes (rounds v7 → v7i, 2026-10-17). This file kee
 - WebP derivatives carry `srcset`/`sizes` and explicit width/height. AVIF was not added: every browser that can run the macOS download (Safari 14+) supports WebP, and Lighthouse reports no image-format opportunity.
 - Video: H.264 MP4, faststart, no audio, poster frame, `preload="none"`.
 - Fonts on the page are self-hosted Inter (variable, latin), Instrument Serif (regular and italic, latin), and JetBrains Mono. Chinese text uses system fonts. Geist remains in `assets/fonts/` but the page does not request it.
-- Build guards (`sys.exit`): placeholder markup (`ph-tag`, `ph-block`, `placeholder`, `占位`), a missing asset, or 404 referencing an unshipped asset. `releases/latest` is a real closing and 404 link. Nav and footer "Releases" go to the GitHub releases index.
+- Build guards (`sys.exit`): placeholder markup (`ph-tag`, `ph-block`, `placeholder`, `占位`), a missing asset, or 404 referencing an unshipped asset. Nav and footer "Releases" go to the GitHub releases index.
 
 ## Claims and honesty rules
 
@@ -29,9 +29,9 @@ Trimmed from the v7 working notes (rounds v7 → v7i, 2026-10-17). This file kee
 
 ## Downloads
 
-- The nav download button, closing, `404.html` (`@@DMG@@`), FAQ install and update answers (`@@DMG@@` in `slots.json`) and JSON-LD `downloadUrl` all use the `.dmg` `fetch_github()` selects: the newest stable release that actually has one. Drafts and prereleases are skipped, and a newer release without a DMG does not stop the scan. `DMG_FALLBACK` (the v0.1.1 asset) is used only when the API is unavailable; the build then prints `(offline fallback)` and that build must not be deployed. Nav and footer Releases link to the GitHub releases index. The hero has no download button.
-- GitHub serves a release asset with `Content-Disposition: attachment` after a redirect to its CDN, so these links start a download without a GitHub page (#245). `releases/latest` is an HTML page and is not used for download buttons. `releases/latest/download/<name>` is not used either: asset names carry the version.
-- A normal app release needs no edit to `build.py`. See README, "Release".
+- The nav download button, closing, `404.html` (`@@DMG@@`), FAQ install and update answers (`@@DMG@@` in `slots.json`) and JSON-LD `downloadUrl` all use `DOWNLOAD` in `build.py`: `https://github.com/LeonEthan/molly-design/releases/latest/download/MollyDesign-arm64.dmg`. Release CI uploads that stable filename alongside the versioned arm64 DMG (#250). Nav and footer Releases link to the GitHub releases index. The hero has no download button.
+- GitHub serves a release asset with `Content-Disposition: attachment` after a redirect to its CDN, so these links start a download without a GitHub HTML page (#245). Use `releases/latest/download/<name>`, not the `releases/latest` HTML page.
+- A normal app release needs no website rebuild for the DMG URL. See README, "Release".
 
 ## Asset provenance
 

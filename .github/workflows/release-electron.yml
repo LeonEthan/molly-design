@@ -228,6 +228,14 @@ jobs:
             echo "No release assets were produced"
             exit 1
           fi
+
+          versioned_dmg="release-assets/MollyDesign-${MOLLY_OSS_RELEASE_VERSION}-arm64.dmg"
+          if [[ ! -f "${versioned_dmg}" ]]; then
+            echo "Missing versioned arm64 DMG for stable alias: ${versioned_dmg}"
+            exit 1
+          fi
+          cp "${versioned_dmg}" release-assets/MollyDesign-arm64.dmg
+
           ls -la release-assets
 
       - name: Upload release assets

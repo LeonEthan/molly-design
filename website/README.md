@@ -8,7 +8,7 @@ This folder is not part of the pnpm workspace. It has its own `package.json` and
 
 | Path | Contents |
 |---|---|
-| `build.py` | Build script (Python 3 standard library). `GH`, `SITE`, `DOWNLOAD`, and the offline `DMG_FALLBACK` sit at the top. The live DMG URL comes from the GitHub Releases API. |
+| `build.py` | Build script (Python 3 standard library). `GH`, `SITE`, and `DOWNLOAD` (stable arm64 DMG on the latest release) sit at the top. |
 | `src/` | `slots.json` (bilingual copy), `style.css`, `site.js`, `404.html`, `_headers` (security headers, CSP, caching) |
 | `assets/` | Web-ready assets only: WebP images, the demo MP4, subset fonts with their OFL licences, wordmark, icons, `og.png`, and `manifest.json` (sizes and provenance) |
 | `docs/COPY.md` | Final EN + 中文 copy, generated from the rendered page |
@@ -23,7 +23,7 @@ This folder is not part of the pnpm workspace. It has its own `package.json` and
 python3 website/build.py
 ```
 
-The build writes `website/dist/`, prints the DMG URL every download link uses, and prints the sha256 of `dist/index.html`. It needs network access: it reads GitHub Releases to fill the DMG download links. The sha can differ between builds when that response changes. If the API is unavailable, the build uses `DMG_FALLBACK` in `build.py`. The build fails on placeholder markup or a missing asset.
+The build writes `website/dist/`, prints the DMG URL every download link uses, and prints the sha256 of `dist/index.html`. Download links use the pinned `DOWNLOAD` URL and do not call the GitHub API. The build fails on placeholder markup or a missing asset.
 
 ## QA
 
@@ -70,19 +70,18 @@ npx wrangler pages deploy website/dist --project-name molly-design --branch main
 curl -fsSL https://molly-design.pages.dev/ | shasum -a 256
 ```
 
-Compare it to the sha of the build you deployed. A later build can print a different sha, because release data is fetched live. Cloudflare serves `/index.html` and `/404.html` as 308 redirects to `/` and `/404`.
+Compare it to the sha of the build you deployed. Cloudflare serves `/index.html` and `/404.html` as 308 redirects to `/` and `/404`.
 
 ## Release
 
-Publishing a GitHub Release is enough. The site does not keep a hand-edited DMG URL.
+Publishing a GitHub Release is enough when release CI uploads `MollyDesign-arm64.dmg` on each release (#250).
 
 - Nav and footer "Releases" link to `https://github.com/LeonEthan/molly-design/releases`.
-- The nav download button, closing, FAQ install and update answers, and the 404 page link to a `.dmg` chosen at build time, so a click starts the download. `fetch_github()` reads up to 100 releases, skips drafts and prereleases, and uses the first `.dmg` it finds, so a newer non-app release does not leave the FAQ on an older installer. `DMG_FALLBACK` is only the offline fallback. Do not edit it for a normal release.
+- The nav download button, closing, FAQ install and update answers, and the 404 page link to `DOWNLOAD` in `build.py` (`releases/latest/download/MollyDesign-arm64.dmg`), so a click starts the download without a GitHub HTML page.
 - Version numbers stay out of visible text.
 
-1. Publish the app release with the arm64 DMG attached, and do not mark it a draft or a prerelease if it should appear on the site.
-2. Rebuild with network access and run QA. Confirm the `download` line the build prints names the new DMG and does not say `(offline fallback)`.
-3. Deploy that build. The sha you confirm is the sha of this build, not a permanent fingerprint of the source.
+1. Publish the app release with the arm64 DMG attached (release CI also uploads the stable `MollyDesign-arm64.dmg` name).
+2. Redeploy the site only when page content changes; the DMG URL does not change between releases.
 
 ## Assets
 

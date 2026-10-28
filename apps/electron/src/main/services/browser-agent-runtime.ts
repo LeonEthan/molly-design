@@ -9,6 +9,7 @@ import {
   BROWSER_AGENT_PROTOCOL_VERSION,
   type BrowserHostCapabilities
 } from '@molly/shared/browser-agent-rpc'
+import { DEFAULT_NO_PROXY } from '@molly/shared/proxy-env'
 
 const REVISION = '44af39842650f0bb9c1afb7354df9a82921d4f09'
 const ManifestSchema = z.object({
@@ -80,6 +81,33 @@ export async function browserRuntimeCapabilities(): Promise<BrowserHostCapabilit
   }
 }
 
+/**
+ * The runtime's environment is built from scratch: it must not inherit the
+ * user's shell. The loopback proxy bypass is part of that contract — see the
+ * comment inside.
+ */
+export function buildAgentBrowserEnvironment(directory: string, session: string): NodeJS.ProcessEnv {
+  return {
+    ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {}),
+    AGENT_BROWSER_EMBEDDED_TOKEN: randomBytes(32).toString('hex'),
+    AGENT_BROWSER_EMBEDDED: '1',
+    AGENT_BROWSER_SESSION: session,
+    AGENT_BROWSER_CONFIG: join(directory, 'config.json'),
+    AGENT_BROWSER_SOCKET_DIR: directory,
+    AGENT_BROWSER_DEFAULT_TIMEOUT: '10000',
+    AGENT_BROWSER_NO_AUTO_DIALOG: '1',
+    AGENT_BROWSER_IDLE_TIMEOUT_MS: '0',
+    // The runtime dials only Molly's own loopback endpoints: the session
+    // daemon and the CDP WebSocket. Proxy clients that detect the system
+    // configuration directly — Windows WinINET settings included — must
+    // still bypass loopback: proxies commonly accept and then black-hole
+    // connections to the machine's own ports, which kills every browser
+    // command as a revoked lease. Both spellings, per @molly/shared/proxy-env.
+    NO_PROXY: DEFAULT_NO_PROXY,
+    no_proxy: DEFAULT_NO_PROXY
+  }
+}
+
 export class BrowserAgentRuntime {
   private directory: string | undefined
   private binary: string | undefined
@@ -108,17 +136,7 @@ export class BrowserAgentRuntime {
     )
     await chmod(this.directory, 0o700)
     await writeFile(join(this.directory, 'config.json'), '{}', { mode: 0o600 })
-    this.environment = {
-      ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {}),
-      AGENT_BROWSER_EMBEDDED_TOKEN: randomBytes(32).toString('hex'),
-      AGENT_BROWSER_EMBEDDED: '1',
-      AGENT_BROWSER_SESSION: this.session,
-      AGENT_BROWSER_CONFIG: join(this.directory, 'config.json'),
-      AGENT_BROWSER_SOCKET_DIR: this.directory,
-      AGENT_BROWSER_DEFAULT_TIMEOUT: '10000',
-      AGENT_BROWSER_NO_AUTO_DIALOG: '1',
-      AGENT_BROWSER_IDLE_TIMEOUT_MS: '0'
-    }
+    this.environment = buildAgentBrowserEnvironment(this.directory, this.session)
     this.assertActive()
     if (this.closed) throw unavailable()
     const daemon = spawn(this.binary, [], {
@@ -170,7 +188,7 @@ export class BrowserAgentRuntime {
         {
           cwd: this.directory,
           env: this.environment,
-          stdio: ['ignore', 'pipe', 'ignore'],
+          stdio: ['ignore', 'pipe', 'pipe'],
           shell: false
         }
       )
@@ -178,34 +196,82 @@ export class BrowserAgentRuntime {
       const chunks: Buffer[] = []
       let size = 0
       let invalid = false
+      let stderrTail = ''
+      let responded = false
+      let buffer = ''
       const timer = setTimeout(() => {
         invalid = true
         this.lost()
         child.kill('SIGKILL')
       }, 30_000)
+      // A win32 driver child prints its one-line JSON reply and then may keep
+      // running indefinitely (a lingering worker keeps the process alive), so
+      // waiting for process exit would stall every command until the watchdog
+      // kills it. The reply itself is authoritative: settle as soon as one
+      // complete parseable line arrives, then reap the child.
+      const settleFromLine = (): boolean => {
+        const newline = buffer.indexOf('\n')
+        if (newline === -1) return false
+        const line = buffer.slice(0, newline)
+        buffer = buffer.slice(newline + 1)
+        if (line.trim().length === 0) return false
+        try {
+          const response = ResponseSchema.parse(JSON.parse(line))
+          responded = true
+          clearTimeout(timer)
+          try {
+            child.kill('SIGKILL')
+          } catch {
+            /* the reply already settles the call */
+          }
+          // Clear synchronously: the close event that would clear it fires
+          // asynchronously, and the immediately following command's call()
+          // would otherwise see a stale in-flight child and fail as
+          // unavailable.
+          if (this.child === child) this.child = undefined
+          resolve(response)
+          return true
+        } catch {
+          return false
+        }
+      }
       child.stdout.on('data', (bytes: Buffer) => {
         size += bytes.length
         if (size > 4 * 1024 * 1024) {
           invalid = true
           this.lost()
           child.kill('SIGKILL')
-        } else chunks.push(bytes)
+          return
+        }
+        if (responded) return
+        chunks.push(bytes)
+        buffer += bytes.toString('utf8')
+        while (!responded && !invalid && settleFromLine()) {
+          // first parseable line settles the call
+        }
+      })
+      child.stderr?.on('data', (bytes: Buffer) => {
+        stderrTail = `${stderrTail}${bytes.toString('utf8')}`.slice(-1000)
       })
       child.on('error', () => {
         invalid = true
       })
-      child.on('close', () => {
+      child.on('close', (code) => {
         clearTimeout(timer)
         if (this.child === child) this.child = undefined
+        if (responded) return
         try {
           this.assertActive()
           if (invalid || this.closed) throw new Error()
           resolve(ResponseSchema.parse(JSON.parse(Buffer.concat(chunks).toString('utf8'))))
         } catch {
           this.lost()
+          const detail = `exit ${code ?? 'unknown'}${
+            stderrTail ? `, stderr: ${stderrTail.trim()}` : ''
+          }`
           reject(
             new Error(
-              'Browser outcome is unknown. Observe before continuing; do not repeat the action automatically.'
+              `Browser outcome is unknown (${detail}). Observe before continuing; do not repeat the action automatically.`
             )
           )
         }

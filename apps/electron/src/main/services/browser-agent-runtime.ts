@@ -246,9 +246,7 @@ export class BrowserAgentRuntime {
         if (responded) return
         chunks.push(bytes)
         buffer += bytes.toString('utf8')
-        while (!responded && !invalid && settleFromLine()) {
-          // first parseable line settles the call
-        }
+        settleFromLine()
       })
       child.stderr?.on('data', (bytes: Buffer) => {
         stderrTail = `${stderrTail}${bytes.toString('utf8')}`.slice(-1000)

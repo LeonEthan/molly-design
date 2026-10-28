@@ -30,6 +30,9 @@ const compiled = await build({
     ),
     '@molly/shared/browser-url': fileURLToPath(
       new URL('../../../../../packages/shared/src/browser-url.ts', import.meta.url)
+    ),
+    '@molly/shared/proxy-env': fileURLToPath(
+      new URL('../../../../../packages/shared/src/proxy-env.ts', import.meta.url)
     )
   }
 })

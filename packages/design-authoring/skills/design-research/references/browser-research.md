@@ -103,8 +103,9 @@ do not publish design assets or supply a saved design-relative path.
 
 The first release lets the user import Pinterest cookies from Chrome in Settings.
 For other sites, the user can take over the built-in page to
-sign in or complete MFA. Only the exact tool error
-`The user has taken control of the browser page.` means control is paused:
+sign in or complete MFA. Only the exact tool errors
+`The user has taken control of the browser page.` or
+`The user has taken control of this browser page.` mean control is paused:
 then ask the user to press "Resume Agent" in the session browser panel
 and observe the page again afterward. Any other browser tool failure is a
 fault, not a pause: quote the exact error text to the user and stop; do not

@@ -193,12 +193,11 @@ export class BrowserAgentRuntime {
         }
       )
       this.child = child
-      const chunks: Buffer[] = []
       let size = 0
       let invalid = false
       let stderrTail = ''
       let responded = false
-      let buffer = ''
+      let received = ''
       const timer = setTimeout(() => {
         invalid = true
         this.lost()
@@ -208,31 +207,33 @@ export class BrowserAgentRuntime {
       // running indefinitely (a lingering worker keeps the process alive), so
       // waiting for process exit would stall every command until the watchdog
       // kills it. The reply itself is authoritative: settle as soon as one
-      // complete parseable line arrives, then reap the child.
-      const settleFromLine = (): boolean => {
-        const newline = buffer.indexOf('\n')
-        if (newline === -1) return false
-        const line = buffer.slice(0, newline)
-        buffer = buffer.slice(newline + 1)
-        if (line.trim().length === 0) return false
-        try {
-          const response = ResponseSchema.parse(JSON.parse(line))
-          responded = true
-          clearTimeout(timer)
+      // complete parseable line arrives, then reap the child. See #253.
+      const settleFromLine = (): void => {
+        for (;;) {
+          if (responded || invalid) break
+          const newline = received.indexOf('\n')
+          if (newline === -1) break
+          const line = received.slice(0, newline)
+          received = received.slice(newline + 1)
+          if (line.trim().length === 0) continue
           try {
-            child.kill('SIGKILL')
+            const response = ResponseSchema.parse(JSON.parse(line))
+            responded = true
+            clearTimeout(timer)
+            try {
+              child.kill('SIGKILL')
+            } catch {
+              /* the reply already settles the call */
+            }
+            // Clear synchronously: the close event that would clear it fires
+            // asynchronously, and the immediately following command's call()
+            // would otherwise see a stale in-flight child and fail as
+            // unavailable.
+            if (this.child === child) this.child = undefined
+            resolve(response)
           } catch {
-            /* the reply already settles the call */
+            /* not a reply line; keep draining */
           }
-          // Clear synchronously: the close event that would clear it fires
-          // asynchronously, and the immediately following command's call()
-          // would otherwise see a stale in-flight child and fail as
-          // unavailable.
-          if (this.child === child) this.child = undefined
-          resolve(response)
-          return true
-        } catch {
-          return false
         }
       }
       child.stdout.on('data', (bytes: Buffer) => {
@@ -244,8 +245,7 @@ export class BrowserAgentRuntime {
           return
         }
         if (responded) return
-        chunks.push(bytes)
-        buffer += bytes.toString('utf8')
+        received += bytes.toString('utf8')
         settleFromLine()
       })
       child.stderr?.on('data', (bytes: Buffer) => {
@@ -261,7 +261,7 @@ export class BrowserAgentRuntime {
         try {
           this.assertActive()
           if (invalid || this.closed) throw new Error()
-          resolve(ResponseSchema.parse(JSON.parse(Buffer.concat(chunks).toString('utf8'))))
+          resolve(ResponseSchema.parse(JSON.parse(received)))
         } catch {
           this.lost()
           const detail = `exit ${code ?? 'unknown'}${

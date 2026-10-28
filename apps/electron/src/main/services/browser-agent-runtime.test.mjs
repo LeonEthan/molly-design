@@ -146,3 +146,16 @@ void test('win32 lingering child settles from its reply line without waiting for
   assert.equal(fixture.isRevoked(), false)
   assert.equal(fixture.childKilled(), true)
 })
+
+void test('the command following a settled reply runs without waiting for the kill to close', async () => {
+  const fixture = new NativeReplyFixture()
+  const connect = fixture.runtime.call(['connect', 'ws://127.0.0.1/native-fixture'])
+  fixture.replyLine(JSON.stringify({ success: true, data: null, error: null }))
+  assert.equal((await connect).success, true)
+  // No close event has fired: the in-flight child must already be cleared, or
+  // this call fails as "unavailable" until the reap lands.
+  const next = fixture.runtime.call(['snapshot'])
+  fixture.replyLine(JSON.stringify({ success: true, data: { snapshot: 'ok' }, error: null }))
+  assert.deepEqual((await next).data, { snapshot: 'ok' })
+  assert.equal(fixture.isRevoked(), false)
+})

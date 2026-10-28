@@ -25,6 +25,7 @@ import {
 import { imageKeyMigrationNoticeDismissedAtom } from '@/atoms';
 import { SegmentedControl } from '@/components/shared/segmented-control';
 import { getIpcServices } from '@/lib/electron-ipc-client';
+import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
 import {
   DropdownMenu,
@@ -44,6 +45,7 @@ import {
 } from '@/ui/icons';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
 import { Input } from '@/ui/input';
+import { Label } from '@/ui/label';
 import { Switch } from '@/ui/switch';
 import { CompactSection } from './compact-layout';
 import {
@@ -69,17 +71,19 @@ type ImageConnectionView = Pick<
 
 const PROTOCOL_COPY: Record<
   ImageConnectionProtocol,
-  { label: string; baseUrlHint: string; defaultBaseUrl: string }
+  { label: string; baseUrlHint: string; defaultBaseUrl: string; candidateModels: readonly string[] }
 > = {
   'openai-images': {
     label: 'settings.imageConnection.protocols.openaiImages',
     baseUrlHint: 'settings.imageConnection.baseUrlHint',
     defaultBaseUrl: 'https://api.openai.com/v1',
+    candidateModels: ['gpt-image-2', 'gpt-image-1'],
   },
   dashscope: {
     label: 'settings.imageConnection.protocols.dashscope',
     baseUrlHint: 'settings.imageConnection.baseUrlHintDashscope',
     defaultBaseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+    candidateModels: ['qwen-image-2.1', 'qwen-image-2.0'],
   },
 };
 
@@ -96,7 +100,15 @@ export function applyImageProtocolChoice(
   protocol: ImageConnectionProtocol
 ): ImageConnectionFormDraft {
   if (draft.protocol === protocol) return draft;
-  return { ...draft, protocol, apiKey: '' };
+  const followsDefault =
+    draft.baseUrl.trim() === '' || !isCustomBaseUrl(draft.protocol, draft.baseUrl);
+  return {
+    ...draft,
+    protocol,
+    baseUrl: followsDefault ? PROTOCOL_COPY[protocol].defaultBaseUrl : draft.baseUrl,
+    apiKey: '',
+    model: '',
+  };
 }
 
 export function applyImageAddressEdit(
@@ -165,7 +177,7 @@ export function createImageConnectionFormDraft(
   return {
     enabled: stored?.enabled ?? true,
     protocol: imageConnectionProtocol(stored ?? {}),
-    baseUrl: stored?.baseUrl ?? '',
+    baseUrl: stored?.baseUrl ?? PROTOCOL_COPY['openai-images'].defaultBaseUrl,
     apiKey: '',
     clearApiKey: false,
     model: stored?.model ?? '',
@@ -362,11 +374,12 @@ export function ImageConnectionForm({
   const typedKey = draft.apiKey.trim();
   const usesStoredKey = imageConnectionUsesStoredKey(draft, stored);
   const destinationNeedsKey = Boolean(
-    stored &&
     !usesStoredKey &&
     !draft.clearApiKey &&
     !typedKey &&
-    (stored.baseUrl !== baseUrl || imageConnectionProtocol(stored) !== draft.protocol)
+    (stored
+      ? stored.baseUrl !== baseUrl || imageConnectionProtocol(stored) !== draft.protocol
+      : isCustomBaseUrl(draft.protocol, draft.baseUrl))
   );
   const protocolCopy = PROTOCOL_COPY[draft.protocol];
   const checkRequest = useMemo<CheckImageConnection | null>(() => {
@@ -391,11 +404,16 @@ export function ImageConnectionForm({
       ? t(checkMessageKey)
       : undefined;
   const canSave = imageConnectionCanSave(draft, stored);
+  const hasModelList =
+    check.phase === 'done' && check.result.ok && check.result.models !== undefined;
   const listed = check.phase === 'done' && check.result.ok ? (check.result.models ?? []) : [];
+  const model = draft.model.trim();
+  const modelNotListed = hasModelList && model !== '' && !listed.includes(model);
+  const endpointSummary = baseUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '');
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!canSave || destinationNeedsKey || saving) return;
+    if (!canSave || !dirty || destinationNeedsKey || saving) return;
     setAddressWhenKeyTyped(null);
     setDraft((current) => ({ ...current, apiKey: '' }));
     void onSave(draft, check);
@@ -493,38 +511,59 @@ export function ImageConnectionForm({
         </Field>
 
         <Field
-          htmlFor={`${fieldId}-model`}
-          label={t('settings.imageConnection.model')}
+          label={t('settings.imageConnection.modelCandidates')}
           hint={
-            issues.model && draft.model.trim().length > 0
-              ? t('settings.imageConnection.invalidModel')
+            issues.model
+              ? t(
+                  model
+                    ? 'settings.imageConnection.invalidModel'
+                    : 'settings.imageConnection.chooseModel'
+                )
               : undefined
           }
         >
           <div className="space-y-2">
-            <Input
-              id={`${fieldId}-model`}
-              disabled={saving}
-              autoComplete="off"
-              spellCheck={false}
-              className="font-mono text-xs"
-              required
-              value={draft.model}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, model: event.target.value }))
-              }
-            />
-            <ModelSuggestions
-              models={listed}
-              value={draft.model}
-              disabled={saving}
-              onPick={(model) => setDraft((current) => ({ ...current, model }))}
-            />
+            <div
+              role="radiogroup"
+              aria-label={t('settings.imageConnection.modelCandidates')}
+              className="flex flex-wrap gap-1.5"
+            >
+              {protocolCopy.candidateModels.map((candidate) => {
+                const selected = draft.model === candidate;
+                return (
+                  <button
+                    key={candidate}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={saving}
+                    onClick={() => setDraft((current) => ({ ...current, model: candidate }))}
+                    className={cn(
+                      'inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 font-mono text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground',
+                      selected && 'border-ring/60 bg-selection text-foreground'
+                    )}
+                  >
+                    {selected ? <CircleCheck aria-hidden className="h-3 w-3 shrink-0" /> : null}
+                    <span className="truncate">{candidate}</span>
+                    {hasModelList && !listed.includes(candidate) ? (
+                      <span className="shrink-0 rounded-full bg-foreground/[0.04] px-1.5 py-px font-sans text-[10px] text-muted-foreground">
+                        {t('settings.models.picker.notListed')}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            {modelNotListed ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t('settings.imageConnection.modelNotListed', { count: listed.length })}
+              </p>
+            ) : null}
           </div>
         </Field>
 
         <Collapsible
-          open={advancedOpen || (issues.baseUrl && (baseUrl.length > 0 || blockEmptyBaseUrl))}
+          open={advancedOpen || issues.baseUrl || modelNotListed}
           onOpenChange={setAdvancedOpen}
         >
           <CollapsibleTrigger asChild>
@@ -533,31 +572,51 @@ export function ImageConnectionForm({
               variant="ghost"
               size="sm"
               disabled={saving}
-              className="group gap-1.5 px-0 text-xs text-muted-foreground"
+              className="group max-w-full gap-1.5 px-0 text-xs text-muted-foreground"
             >
               <ChevronDown
                 aria-hidden
-                className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
+                className="h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180"
               />
               {t('settings.models.moreOptions')}
+              <span className="min-w-0 truncate font-normal text-muted-foreground/80">
+                · {endpointSummary} · {model || '—'}
+              </span>
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="pt-3">
-            <Field
-              htmlFor={`${fieldId}-base-url`}
-              label={t('settings.imageConnection.baseUrl')}
-              icon={
-                <InfoTip>
-                  {t(protocolCopy.baseUrlHint)}{' '}
-                  {t('settings.imageConnection.endpointTransportHint')}
-                </InfoTip>
-              }
-              hint={
-                issues.baseUrl && baseUrl.length > 0
-                  ? t('settings.imageConnection.invalidBaseUrl')
-                  : undefined
-              }
-            >
+          <CollapsibleContent className="space-y-5 pt-3">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor={`${fieldId}-base-url`} className="text-xs font-medium">
+                    {t('settings.imageConnection.baseUrl')}
+                  </Label>
+                  <InfoTip>
+                    {t(protocolCopy.baseUrlHint)}{' '}
+                    {t('settings.imageConnection.endpointTransportHint')}
+                  </InfoTip>
+                </div>
+                {isCustomBaseUrl(draft.protocol, draft.baseUrl) || baseUrl === '' ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    disabled={saving}
+                    onClick={() => {
+                      setAddressWhenKeyTyped(null);
+                      setAdvancedOpen(false);
+                      setDraft((current) => ({
+                        ...current,
+                        baseUrl: protocolCopy.defaultBaseUrl,
+                        apiKey: '',
+                      }));
+                    }}
+                  >
+                    {t('settings.models.useDefaultEndpoint')}
+                  </Button>
+                ) : null}
+              </div>
               <Input
                 id={`${fieldId}-base-url`}
                 disabled={saving}
@@ -581,6 +640,43 @@ export function ImageConnectionForm({
                   }));
                 }}
               />
+              {issues.baseUrl && baseUrl.length > 0 ? (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t('settings.imageConnection.invalidBaseUrl')}
+                </p>
+              ) : null}
+            </div>
+            <Field
+              htmlFor={`${fieldId}-model`}
+              label={t('settings.imageConnection.otherModel')}
+              hint={
+                issues.model && model
+                  ? t('settings.imageConnection.invalidModel')
+                  : undefined
+              }
+            >
+              <div className="space-y-2">
+                <Input
+                  id={`${fieldId}-model`}
+                  disabled={saving}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="font-mono text-xs"
+                  required
+                  value={draft.model}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, model: event.target.value }))
+                  }
+                />
+                <ModelSuggestions
+                  models={listed}
+                  value={modelNotListed ? '' : draft.model}
+                  disabled={saving}
+                  onPick={(nextModel) =>
+                    setDraft((current) => ({ ...current, model: nextModel }))
+                  }
+                />
+              </div>
             </Field>
           </CollapsibleContent>
         </Collapsible>

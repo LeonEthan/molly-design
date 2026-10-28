@@ -84,7 +84,7 @@ describe('image connection form values', () => {
     expect(createImageConnectionFormDraft(undefined)).toEqual({
       enabled: true,
       protocol: 'openai-images',
-      baseUrl: '',
+      baseUrl: 'https://api.openai.com/v1',
       apiKey: '',
       clearApiKey: false,
       model: '',
@@ -158,13 +158,13 @@ describe('image connection form values', () => {
       )?.protocol
     ).toBe('dashscope');
   });
-  it('keeps a saved address and never fills a vendor address when the protocol changes', () => {
+  it('follows an unedited default and preserves a custom address when the protocol changes', () => {
     expect(
       applyImageProtocolChoice(createImageConnectionFormDraft(undefined), 'dashscope')
     ).toEqual({
       enabled: true,
       protocol: 'dashscope',
-      baseUrl: '',
+      baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
       apiKey: '',
       clearApiKey: false,
       model: '',
@@ -178,6 +178,7 @@ describe('image connection form values', () => {
       protocol: 'dashscope',
       baseUrl: 'https://images.example/v1',
       apiKey: '',
+      model: '',
     });
     expect(
       applyImageProtocolChoice(draftOf({ protocol: 'dashscope', apiKey: 'synthetic' }), 'dashscope')
@@ -277,6 +278,14 @@ describe('image connection form values', () => {
       'https://dashscope.aliyuncs.com/api/v1'
     );
   });
+  it('ships the candidate-model copy in English and Chinese', () => {
+    expect(en['settings.imageConnection.chooseModel']).toBe('Choose a model.');
+    expect(en['settings.imageConnection.otherModel']).toBe('Other model ID');
+    expect(en['settings.imageConnection.modelCandidates']).toBe('Model');
+    expect(zh['settings.imageConnection.chooseModel']).toBe('请选择模型。');
+    expect(zh['settings.imageConnection.otherModel']).toBe('其他模型 ID');
+    expect(zh['settings.imageConnection.modelCandidates']).toBe('模型');
+  });
   it('rejects missing or oversized model values', () => {
     expect(imageConnectionDraftIssues(draftOf({ model: ' ' })).model).toBe(true);
     expect(imageConnectionDraftIssues(draftOf({ model: 'a'.repeat(201) })).model).toBe(true);
@@ -334,9 +343,19 @@ describe('ImageConnectionForm', () => {
 
   const button = (view: HTMLElement, text: string): HTMLButtonElement => {
     const found = [...view.querySelectorAll('button')].find(
-      (node) => node.textContent?.trim() === text
+      (node) =>
+        node.textContent?.trim() === text ||
+        (text === copy('settings.models.moreOptions') && node.textContent?.startsWith(text))
     );
     expect(found, `button "${text}"`).toBeDefined();
+    return found as HTMLButtonElement;
+  };
+
+  const modelChip = (view: HTMLElement, model: string): HTMLButtonElement => {
+    const found = [...view.querySelectorAll<HTMLButtonElement>('button[role="radio"]')].find(
+      (node) => node.textContent?.includes(model)
+    );
+    expect(found, `model chip "${model}"`).toBeDefined();
     return found as HTMLButtonElement;
   };
 
@@ -396,6 +415,7 @@ describe('ImageConnectionForm', () => {
     const view = container as HTMLElement;
     expect(view.textContent).toContain(copy('settings.imageConnection.legacyHistoryWarning'));
     await click(button(view, copy('common.edit')));
+    await baseUrlInput(view);
     const model = view.querySelector<HTMLInputElement>('input[id$="-model"]')!;
     await typeInto(model, 'explicit-new-model');
     await act(async () => {
@@ -427,6 +447,31 @@ describe('ImageConnectionForm', () => {
     expect(view.textContent).not.toContain(STORED_KEY);
     expect(view.textContent).toContain(copy('settings.models.keyLocalHint'));
     expect(removeKeyButton(view)).not.toBeNull();
+  });
+
+  it('opens a legacy stored row with its exact values and no selected candidate', async () => {
+    const saves: ImageConnectionFormDraft[] = [];
+    const stored = storedConnection();
+    const view = await renderForm({ stored, onSave: (draft) => void saves.push(draft) });
+    expect(stored.protocol).toBeUndefined();
+    expect(button(view, copy('common.save')).disabled).toBe(true);
+    expect(modelChip(view, 'gpt-image-2').getAttribute('aria-checked')).toBe('false');
+    expect(modelChip(view, 'gpt-image-1').getAttribute('aria-checked')).toBe('false');
+    expect(button(view, copy('settings.models.moreOptions')).textContent).toContain(
+      'api.openai.com/v1 · saved-custom-model'
+    );
+    await baseUrlInput(view);
+    expect(view.querySelector<HTMLInputElement>('input[id$="-base-url"]')?.value).toBe(
+      stored.baseUrl
+    );
+    expect(view.querySelector<HTMLInputElement>('input[id$="-model"]')?.value).toBe(stored.model);
+    await act(async () => {
+      view
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(saves).toEqual([]);
+    expect(stored.revision).toBe(3);
   });
 
   it('keeps Connect outside the scrolling drawer body', async () => {
@@ -510,11 +555,59 @@ describe('ImageConnectionForm', () => {
     });
   });
 
+  it('connects a new OpenAI Images draft with only a key and one model click', async () => {
+    const saves: ImageConnectionFormDraft[] = [];
+    const view = await renderForm({ onSave: (draft) => void saves.push(draft) });
+    const advanced = button(view, copy('settings.models.moreOptions'));
+    expect(advanced.getAttribute('aria-expanded')).toBe('false');
+    expect(advanced.textContent).toContain('api.openai.com/v1');
+    expect(view.querySelector('input[id$="-base-url"]')).toBeNull();
+    expect(view.querySelector('input[id$="-model"]')).toBeNull();
+    await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+    expect(view.textContent).not.toContain(copy('settings.imageConnection.check.enterBaseUrl'));
+    expect(advanced.getAttribute('aria-expanded')).toBe('false');
+    expect(view.textContent).toContain(copy('settings.imageConnection.chooseModel'));
+    const connect = button(view, copy('settings.models.connect'));
+    expect(connect.disabled).toBe(true);
+    await click(modelChip(view, 'gpt-image-2'));
+    expect(connect.disabled).toBe(false);
+    expect(advanced.textContent).toContain('gpt-image-2');
+    await click(connect);
+    expect(saves[0]).toMatchObject({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-image-2',
+      apiKey: 'synthetic-typed-key',
+    });
+  });
+
+  it('switches protocol defaults and candidates while preserving a custom address', async () => {
+    const view = await renderForm();
+    await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+    await click(modelChip(view, 'gpt-image-2'));
+    await click(button(view, copy('settings.imageConnection.protocols.dashscope')));
+    expect(apiKeyInput(view).value).toBe('');
+    expect(modelChip(view, 'qwen-image-2.1').getAttribute('aria-checked')).toBe('false');
+    expect(modelChip(view, 'qwen-image-2.0').getAttribute('aria-checked')).toBe('false');
+    expect(
+      [...view.querySelectorAll('button[role="radio"]')].some((node) =>
+        node.textContent?.includes('gpt-image-2')
+      )
+    ).toBe(false);
+    expect(button(view, copy('settings.models.moreOptions')).textContent).toContain(
+      'dashscope.aliyuncs.com/api/v1 · —'
+    );
+    const address = await baseUrlInput(view);
+    await typeInto(address, 'https://images.example.com/v1');
+    await click(button(view, copy('settings.imageConnection.protocols.openaiImages')));
+    expect(apiKeyInput(view).value).toBe('');
+    expect(address.value).toBe('https://images.example.com/v1');
+  });
+
   it('does not save a new image connection that has no key', async () => {
     const saves: ImageConnectionFormDraft[] = [];
     const view = await renderForm({ onSave: (draft) => void saves.push(draft) });
     await typeInto(await baseUrlInput(view), 'https://images.example.com/v1');
-    await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'gpt-image-2');
+    await click(modelChip(view, 'gpt-image-2'));
     const connect = button(view, copy('settings.models.connect'));
     expect(connect.disabled).toBe(true);
     await click(connect);
@@ -578,6 +671,107 @@ describe('ImageConnectionForm', () => {
       act(async () => {
         await vi.advanceTimersByTimeAsync(CONNECTION_CHECK_DELAY_MS);
       });
+
+    it('rebinds a custom endpoint, checks and saves it, then restores the default', async () => {
+      const requests: CheckImageConnection[] = [];
+      const saves: ImageConnectionFormDraft[] = [];
+      const view = await renderForm({
+        onSave: (draft) => void saves.push(draft),
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true, models: ['gpt-image-2'] };
+        },
+      });
+      await typeInto(apiKeyInput(view), 'synthetic-default-key');
+      const address = await baseUrlInput(view);
+      await typeInto(address, 'https://images.example.com/v1');
+      expect(apiKeyInput(view).value).toBe('');
+      expect(view.textContent).toContain(copy('settings.models.keyRequired'));
+      await typeInto(apiKeyInput(view), 'synthetic-custom-key');
+      await settle();
+      expect(requests).toEqual([
+        {
+          protocol: 'openai-images',
+          baseUrl: 'https://images.example.com/v1',
+          apiKey: 'synthetic-custom-key',
+        },
+      ]);
+      await click(modelChip(view, 'gpt-image-2'));
+      await click(button(view, copy('settings.models.connect')));
+      expect(saves[0]).toMatchObject({
+        baseUrl: 'https://images.example.com/v1',
+        model: 'gpt-image-2',
+      });
+      await click(button(view, copy('settings.models.useDefaultEndpoint')));
+      expect(button(view, copy('settings.models.moreOptions')).getAttribute('aria-expanded')).toBe(
+        'false'
+      );
+      expect(button(view, copy('settings.models.moreOptions')).textContent).toContain(
+        'api.openai.com/v1'
+      );
+    });
+
+    it('allows saving after a key rejection', async () => {
+      const saves: ImageConnectionFormDraft[] = [];
+      const view = await renderForm({
+        onSave: (draft) => void saves.push(draft),
+        onCheck: async () => ({ ok: false, reason: 'key_rejected', status: 401 }),
+      });
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      await click(modelChip(view, 'gpt-image-2'));
+      await settle();
+      expect(view.textContent).toContain(copy('settings.imageConnection.check.keyRejected'));
+      const connect = button(view, copy('settings.models.connect'));
+      expect(connect.disabled).toBe(false);
+      await click(connect);
+      expect(saves[0]).toMatchObject({ model: 'gpt-image-2' });
+    });
+
+    it('shows unreachable and carries its badge to the saved row', async () => {
+      imageIpc.getImageSnapshot.mockResolvedValue({ connection: null });
+      imageIpc.checkImage.mockResolvedValue({ ok: false, reason: 'unreachable' });
+      imageIpc.saveImage.mockResolvedValue(storedConnection({ revision: 4, model: 'gpt-image-2' }));
+      await act(async () => {
+        root?.render(createElement(ImageConnectionSetting, { variant: 'panel' }));
+      });
+      const view = container as HTMLElement;
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      await click(modelChip(view, 'gpt-image-2'));
+      await settle();
+      expect(view.textContent).toContain(copy('settings.imageConnection.check.unreachable'));
+      expect(button(view, copy('settings.models.connect')).disabled).toBe(false);
+      await click(button(view, copy('settings.models.connect')));
+      expect(view.textContent).toContain(copy('settings.check.badge.unreachable'));
+      expect(view.querySelector('form')).toBeNull();
+    });
+
+    it('tags a missing candidate and opens Advanced without replacing the choice', async () => {
+      const saves: ImageConnectionFormDraft[] = [];
+      const view = await renderForm({
+        onSave: (draft) => void saves.push(draft),
+        onCheck: async () => ({ ok: true, models: ['gpt-image-1', 'dall-e-3'] }),
+      });
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      await click(modelChip(view, 'gpt-image-2'));
+      await settle();
+      expect(modelChip(view, 'gpt-image-2').textContent).toContain(
+        copy('settings.models.picker.notListed')
+      );
+      expect(view.textContent).toContain(copy('settings.imageConnection.modelNotListed'));
+      expect(button(view, copy('settings.models.moreOptions')).getAttribute('aria-expanded')).toBe(
+        'true'
+      );
+      expect(view.querySelector<HTMLInputElement>('input[id$="-model"]')?.value).toBe(
+        'gpt-image-2'
+      );
+      expect(view.textContent).toContain(
+        copy('settings.imageConnection.suggestions').replace('{{count}}', '2')
+      );
+      expect(button(view, 'gpt-image-1')).toBeDefined();
+      expect(button(view, 'dall-e-3')).toBeDefined();
+      await click(button(view, copy('settings.models.connect')));
+      expect(saves[0]).toMatchObject({ model: 'gpt-image-2' });
+    });
 
     it('checks a typed key once it settles and offers the listed models', async () => {
       const requests: CheckImageConnection[] = [];
@@ -676,7 +870,7 @@ describe('ImageConnectionForm', () => {
       }
     );
 
-    it('keeps a key typed before the address and does not reuse one after the protocol changes', async () => {
+    it('clears a key typed before an address edit and follows the new protocol default', async () => {
       const requests: CheckImageConnection[] = [];
       const fresh = await renderForm({
         onCheck: async (input) => {
@@ -687,19 +881,21 @@ describe('ImageConnectionForm', () => {
       await typeInto(apiKeyInput(fresh), 'synthetic-typed-key');
       const freshUrl = await baseUrlInput(fresh);
       await typeInto(freshUrl, 'https://images.example.com/v1');
-      expect(apiKeyInput(fresh).value).toBe('synthetic-typed-key');
+      expect(apiKeyInput(fresh).value).toBe('');
       await settle();
       expect(requests).toEqual([]);
-      await blur(freshUrl);
+      await typeInto(apiKeyInput(fresh), 'synthetic-custom-key');
       await settle();
       expect(requests).toEqual([
         {
           protocol: 'openai-images',
           baseUrl: 'https://images.example.com/v1',
-          apiKey: 'synthetic-typed-key',
+          apiKey: 'synthetic-custom-key',
         },
       ]);
 
+      await act(async () => root?.unmount());
+      root = createRoot(container as HTMLDivElement);
       const stored = storedConnection({
         protocol: 'dashscope',
         baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
@@ -717,9 +913,9 @@ describe('ImageConnectionForm', () => {
       expect(requests).toHaveLength(1);
       expect(
         button(switched, copy('settings.models.moreOptions')).getAttribute('aria-expanded')
-      ).toBe('true');
-      expect(switched.querySelector<HTMLInputElement>('input[id$="-base-url"]')?.value).toBe(
-        'https://dashscope.aliyuncs.com/api/v1'
+      ).toBe('false');
+      expect(button(switched, copy('settings.models.moreOptions')).textContent).toContain(
+        'api.openai.com/v1 · —'
       );
       expect(switched.textContent).toContain(copy('settings.models.keyRequired'));
       expect(button(switched, copy('common.save')).disabled).toBe(true);
@@ -727,7 +923,7 @@ describe('ImageConnectionForm', () => {
       await settle();
       expect(requests[1]).toEqual({
         protocol: 'openai-images',
-        baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+        baseUrl: 'https://api.openai.com/v1',
         apiKey: 'synthetic-typed-key',
       });
     });
@@ -743,7 +939,7 @@ describe('ImageConnectionForm', () => {
       await typeInto(apiKeyInput(view), 'synthetic-typed-key');
       const firstAddress = await baseUrlInput(view);
       await typeInto(firstAddress, 'https://images.example.com/v1');
-      expect(apiKeyInput(view).value).toBe('synthetic-typed-key');
+      expect(apiKeyInput(view).value).toBe('');
       await blur(firstAddress);
       await typeInto(firstAddress, 'https://elsewhere.example.com/v1');
       expect(apiKeyInput(view).value).toBe('');
@@ -773,43 +969,26 @@ describe('ImageConnectionForm', () => {
       expect(requests).toEqual([]);
     });
 
-    it('keeps a key through each character of the first address and saves it', async () => {
-      const requests: CheckImageConnection[] = [];
+    it('saves a custom model ID from Advanced without selecting a candidate', async () => {
       const saves: ImageConnectionFormDraft[] = [];
-      const view = await renderForm({
-        onSave: (draft) => void saves.push(draft),
-        onCheck: async (input) => {
-          requests.push(input);
-          return { ok: true, models: [] };
-        },
-      });
+      const view = await renderForm({ onSave: (draft) => void saves.push(draft) });
       await typeInto(apiKeyInput(view), 'synthetic-typed-key');
-      const url = 'https://images.example.com/v1';
-      const input = await baseUrlInput(view);
-      for (let index = 1; index <= url.length; index += 1) {
-        const slice = url.slice(0, index);
-        await typeInto(input, slice);
-        expect(apiKeyInput(view).value).toBe('synthetic-typed-key');
-        if (slice === 'https://i' || slice === url) {
-          await settle();
-          expect(requests).toEqual([]);
-        }
-      }
-      await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'gpt-image-2');
+      await baseUrlInput(view);
+      await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'flux-pro');
+      expect(modelChip(view, 'gpt-image-2').getAttribute('aria-checked')).toBe('false');
+      expect(modelChip(view, 'gpt-image-1').getAttribute('aria-checked')).toBe('false');
       const connect = button(view, copy('settings.models.connect'));
       expect(connect.disabled).toBe(false);
       await click(connect);
-      expect(requests).toEqual([]);
       expect(saves).toEqual([
         draftOf({
-          baseUrl: url,
           apiKey: 'synthetic-typed-key',
-          model: 'gpt-image-2',
+          model: 'flux-pro',
         }),
       ]);
     });
 
-    it('collapses More options for an empty or provider-root address', async () => {
+    it('collapses More options for provider roots and expands for custom addresses', async () => {
       const moreOptions = (view: HTMLElement) => button(view, copy('settings.models.moreOptions'));
       const mount = async (props: Partial<FormProps> = {}) => {
         await act(async () => {
@@ -849,10 +1028,13 @@ describe('ImageConnectionForm', () => {
       );
       const keyFirst = await mount();
       await typeInto(apiKeyInput(keyFirst), 'synthetic-typed-key');
-      expect(moreOptions(keyFirst).getAttribute('aria-expanded')).toBe('true');
+      expect(moreOptions(keyFirst).getAttribute('aria-expanded')).toBe('false');
+      expect(keyFirst.querySelector('input[id$="-base-url"]')).toBeNull();
+      await click(moreOptions(keyFirst));
       const keyFirstUrl = keyFirst.querySelector<HTMLInputElement>('input[id$="-base-url"]')!;
       await typeInto(keyFirstUrl, 'https://images.example.com/v1');
       expect(moreOptions(keyFirst).getAttribute('aria-expanded')).toBe('true');
+      expect(apiKeyInput(keyFirst).value).toBe('');
       expect(keyFirstUrl.isConnected).toBe(true);
     });
 
@@ -865,7 +1047,8 @@ describe('ImageConnectionForm', () => {
         },
       });
       const urlInput = await baseUrlInput(view);
-      expect(urlInput.value).toBe('');
+      expect(urlInput.value).toBe('https://api.openai.com/v1');
+      await typeInto(urlInput, '');
       expect(urlInput.placeholder).toBe(copy('settings.imageConnection.baseUrlPlaceholder'));
       expect(urlInput.placeholder).toBe('https://api.example.com/v1');
       expect(view.querySelector('[role="alert"]')).toBeNull();

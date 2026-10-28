@@ -245,7 +245,7 @@ function ProviderPicker({
       <div className="grid grid-cols-2 gap-1.5 @[30rem]:grid-cols-3">{tiles}</div>
     </div>
   );
-  const keyProviders = signIn ? API_KEY_PROVIDERS : [...API_KEY_PROVIDERS, 'kimi-coding' as const];
+  const keyProviders = [...API_KEY_PROVIDERS, 'kimi-coding' as const];
   return (
     <div
       role="radiogroup"
@@ -595,6 +595,30 @@ export function ModelConnectionForm({
         ? selectedModels.filter((modelId) => catalogIds.has(modelId))
         : selectedModels
       : undefined;
+  const chosenCount = provider === 'openai-compatible' ? customModels.length : models?.length;
+  const summary =
+    chosenCount === undefined
+      ? t('settings.models.summary.all')
+      : provider !== 'openai-compatible' && providerModels
+        ? t('settings.models.summary.countOf', {
+            count: chosenCount,
+            total: providerModels.length,
+          })
+        : t('settings.models.summary.count', { count: chosenCount });
+  const selectedModelsChanged =
+    stored?.models === undefined
+      ? selectedModels.length > 0
+      : selectedModels.length !== stored.models.length ||
+        selectedModels.some((model, index) => model !== stored.models?.[index]);
+  const dirty =
+    !stored ||
+    provider === 'openai-compatible' ||
+    provider !== stored.providerPresetId ||
+    name !== stored.displayName ||
+    endpoint !== stored.baseUrl ||
+    typedKey.length > 0 ||
+    chooseModels !== (stored.models !== undefined) ||
+    selectedModelsChanged;
   const parsed = SaveModelConnectionSchema.safeParse({
     id: stored?.id,
     expectedRevision: stored?.revision,
@@ -622,7 +646,7 @@ export function ModelConnectionForm({
   });
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!parsed.success || missingRequiredKey || busy) return;
+    if (!parsed.success || missingRequiredKey || !dirty || busy) return;
     const input = parsed.data;
     setApiKey('');
     await onSave(input, check);
@@ -955,13 +979,18 @@ export function ModelConnectionForm({
                     variant="ghost"
                     size="sm"
                     disabled={busy}
-                    className="group gap-1.5 px-0 text-xs text-muted-foreground"
+                    className="group max-w-full gap-1.5 px-0 text-xs text-muted-foreground"
                   >
                     <ChevronDown
                       aria-hidden
-                      className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
+                      className="h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180"
                     />
                     {t('settings.models.moreOptions')}
+                    {native ? (
+                      <span className="min-w-0 truncate font-normal text-muted-foreground/80">
+                        · {endpointLabel(endpoint)} · {summary}
+                      </span>
+                    ) : null}
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-5 pt-3">
@@ -1070,7 +1099,10 @@ export function ModelConnectionForm({
             </Button>
           ) : null}
           {!signInOnly ? (
-            <Button type="submit" disabled={busy || !parsed.success || missingRequiredKey}>
+            <Button
+              type="submit"
+              disabled={busy || !parsed.success || missingRequiredKey || !dirty}
+            >
               {stored ? t('common.save') : t('settings.models.connect')}
             </Button>
           ) : null}

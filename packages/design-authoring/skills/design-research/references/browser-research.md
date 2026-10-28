@@ -103,8 +103,12 @@ do not publish design assets or supply a saved design-relative path.
 
 The first release lets the user import Pinterest cookies from Chrome in Settings.
 For other sites, the user can take over the built-in page to
-sign in or complete MFA. When control is paused, ask the user to resume and
-then observe the page again. Imported cookies may not produce a signed-in
+sign in or complete MFA. Only the exact tool error
+`The user has taken control of the browser page.` means control is paused:
+then ask the user to press "Resume Agent" in the session browser panel
+and observe the page again afterward. Any other browser tool failure is a
+fault, not a pause: quote the exact error text to the user and stop; do not
+describe it as waiting for the user to resume control. Imported cookies may not produce a signed-in
 session. A cookie count is not proof of authentication. When a login overlay
 obscures the references, observe whether it can be dismissed once; do not repeatedly
 scroll behind it and claim to have inspected covered work. If the user expects an

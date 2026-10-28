@@ -107,9 +107,16 @@ sign in or complete MFA. Only the exact tool errors
 `The user has taken control of the browser page.` or
 `The user has taken control of this browser page.` mean control is paused:
 then ask the user to press "Resume Agent" in the session browser panel
-and observe the page again afterward. Any other browser tool failure is a
-fault, not a pause: quote the exact error text to the user and stop; do not
-describe it as waiting for the user to resume control. Imported cookies may not produce a signed-in
+and observe the page again afterward. For stale element refs or navigation
+timeouts, re-observe the current page with `snapshot` before continuing. Use
+fresh refs from that observation; retry only when the observed state confirms
+the intended effect did not occur. Never replay mutating actions (click submit,
+type, form post, etc.) whose outcome is uncertain; observe first. For a pending
+WebMCP call, read its result before deciding what to do next. If recovery remains
+blocked, quote the exact error text and report the access limit. Only the exact
+takeover errors above mean waiting for the user to resume control.
+
+Imported cookies may not produce a signed-in
 session. A cookie count is not proof of authentication. When a login overlay
 obscures the references, observe whether it can be dismissed once; do not repeatedly
 scroll behind it and claim to have inspected covered work. If the user expects an

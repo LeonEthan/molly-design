@@ -30,8 +30,9 @@ const compiled = await build({
 class NativeReplyFixture {
   constructor() {
     let child
+    this.warnings = []
     const module = { exports: {} }
-    compileFunction(compiled.outputFiles[0].text, ['module', 'exports', 'require'])(
+    compileFunction(compiled.outputFiles[0].text, ['module', 'exports', 'require', 'console'])(
       module,
       module.exports,
       (name) => {
@@ -41,6 +42,7 @@ class NativeReplyFixture {
             spawn: () => {
               child = Object.assign(new EventEmitter(), {
                 stdout: new EventEmitter(),
+                stderr: new EventEmitter(),
                 kill: () => {
                   killed = true
                 }
@@ -49,7 +51,8 @@ class NativeReplyFixture {
             }
           }
         return require(name)
-      }
+      },
+      { warn: (...args) => this.warnings.push(args) }
     )
     let killed = false
     let revoked = false
@@ -72,6 +75,8 @@ class NativeReplyFixture {
     this.replyLine = (text) => {
       child.stdout.emit('data', Buffer.from(`${text}\n`))
     }
+    this.stdoutChunk = (bytes) => child.stdout.emit('data', bytes)
+    this.stderrChunk = (text) => child.stderr.emit('data', Buffer.from(text))
     this.isRevoked = () => revoked
     this.childKilled = () => killed
   }
@@ -131,11 +136,34 @@ void test('runtime environment pins loopback proxy bypass in both spellings', ()
   assert.equal(env.HTTP_PROXY, undefined)
 })
 
-void test('failed child output reports exit code in the unknown-outcome error', async () => {
-  const fixture = new NativeReplyFixture()
-  const result = fixture.runtime.call(['snapshot'])
-  fixture.reply('not JSON', 3)
-  await assert.rejects(result, /Browser outcome is unknown \(exit 3\)/)
+void test('first-connect failures keep native diagnostics local and return a fixed error', async () => {
+  for (const stderr of ['native failure at /private/fixture/profile; token=synthetic-secret', '']) {
+    const fixture = new NativeReplyFixture()
+    const result = fixture.runtime.call(['connect', 'ws://127.0.0.1/native-fixture'])
+    fixture.stderrChunk(stderr)
+    fixture.reply('not JSON', 3)
+    await assert.rejects(result, {
+      message:
+        'Browser outcome is unknown. Observe before continuing; do not repeat the action automatically.'
+    })
+    const diagnostics = fixture.warnings.flat().join(' ')
+    assert.match(diagnostics, /exit 3/)
+    if (stderr) assert.ok(diagnostics.includes(stderr))
+    assert.equal(fixture.isRevoked(), true)
+  }
+})
+
+void test('native replies preserve multibyte UTF-8 split across stdout chunks', async () => {
+  for (const ending of ['', '\n']) {
+    const fixture = new NativeReplyFixture()
+    const result = fixture.runtime.call(['snapshot'])
+    const data = { snapshot: '- heading "中文 🌿"' }
+    const bytes = Buffer.from(JSON.stringify({ success: true, data, error: null }) + ending)
+    for (const byte of bytes) fixture.stdoutChunk(Buffer.from([byte]))
+    fixture.reply('')
+    assert.deepEqual((await result).data, data)
+    assert.equal(fixture.isRevoked(), false)
+  }
 })
 
 void test('win32 lingering child settles from its reply line without waiting for exit', async () => {

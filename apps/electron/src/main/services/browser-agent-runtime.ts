@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { chmod, lstat, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { StringDecoder } from 'node:string_decoder'
 import { app } from 'electron'
 import { z } from 'zod'
 import {
@@ -86,7 +87,10 @@ export async function browserRuntimeCapabilities(): Promise<BrowserHostCapabilit
  * user's shell. The loopback proxy bypass is part of that contract — see the
  * comment inside.
  */
-export function buildAgentBrowserEnvironment(directory: string, session: string): NodeJS.ProcessEnv {
+export function buildAgentBrowserEnvironment(
+  directory: string,
+  session: string
+): NodeJS.ProcessEnv {
   return {
     ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {}),
     AGENT_BROWSER_EMBEDDED_TOKEN: randomBytes(32).toString('hex'),
@@ -198,6 +202,7 @@ export class BrowserAgentRuntime {
       let stderrTail = ''
       let responded = false
       let received = ''
+      const stdoutDecoder = new StringDecoder('utf8')
       const timer = setTimeout(() => {
         invalid = true
         this.lost()
@@ -245,7 +250,7 @@ export class BrowserAgentRuntime {
           return
         }
         if (responded) return
-        received += bytes.toString('utf8')
+        received += stdoutDecoder.write(bytes)
         settleFromLine()
       })
       child.stderr?.on('data', (bytes: Buffer) => {
@@ -258,6 +263,7 @@ export class BrowserAgentRuntime {
         clearTimeout(timer)
         if (this.child === child) this.child = undefined
         if (responded) return
+        received += stdoutDecoder.end()
         try {
           this.assertActive()
           if (invalid || this.closed) throw new Error()
@@ -267,9 +273,10 @@ export class BrowserAgentRuntime {
           const detail = `exit ${code ?? 'unknown'}${
             stderrTail ? `, stderr: ${stderrTail.trim()}` : ''
           }`
+          console.warn(`[BrowserAgentRuntime] Native command failed (${detail}).`)
           reject(
             new Error(
-              `Browser outcome is unknown (${detail}). Observe before continuing; do not repeat the action automatically.`
+              'Browser outcome is unknown. Observe before continuing; do not repeat the action automatically.'
             )
           )
         }

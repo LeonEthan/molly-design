@@ -17,6 +17,13 @@ const LICENSES = [
   'NOTICE.txt'
 ]
 const patchSha256 = () => sha256(fs.readFileSync(path.join(native, 'embedded.patch')))
+// The Rust win32 driver links the UCRT umbrella import (`ucrt.dll`), which is
+// not an OS file: it ships with the Windows SDK / Visual Studio. On machines
+// with neither, the loader fails the binary with STATUS_DLL_NOT_FOUND
+// (0xC0000135) before any code runs. Deploy the system's own ucrtbase.dll
+// renamed as the app-local ucrt.dll — Microsoft's documented app-local UCRT
+// deployment — whose export surface is identical.
+const WINDOWS_UCRT = 'ucrt.dll'
 const TARGETS = {
   'darwin-arm64': 'aarch64-apple-darwin',
   'darwin-x64': 'x86_64-apple-darwin',
@@ -55,7 +62,11 @@ export function verifyAgentBrowser(directory, target = {}) {
   )
     throw new Error('agent-browser target mismatch')
   const binary = manifest.platform === 'win32' ? 'agent-browser.exe' : 'agent-browser'
-  const expected = [binary, ...LICENSES]
+  const expected = [
+    binary,
+    ...(manifest.platform === 'win32' ? [WINDOWS_UCRT] : []),
+    ...LICENSES
+  ]
   if (
     !Array.isArray(manifest.files) ||
     manifest.files.length !== expected.length ||
@@ -161,9 +172,22 @@ export async function buildAgentBrowser({ platform = process.platform, arch = pr
     path.join(agentBrowserResources, binary)
   )
   fs.chmodSync(path.join(agentBrowserResources, binary), 0o755)
+  if (platform === 'win32') {
+    const systemRoot = process.env.SystemRoot ?? 'C:\\Windows'
+    const ucrtSource = path.join(systemRoot, 'System32', 'ucrtbase.dll')
+    if (!fs.existsSync(ucrtSource))
+      throw new Error(
+        `Copy ucrtbase.dll as ${WINDOWS_UCRT} into resources/agent-browser/ to package the win32 driver.`
+      )
+    fs.copyFileSync(ucrtSource, path.join(agentBrowserResources, WINDOWS_UCRT))
+  }
   for (const name of LICENSES)
     fs.copyFileSync(path.join(native, name), path.join(agentBrowserResources, name))
-  const files = [binary, ...LICENSES].map((file) => ({
+  const files = [
+    binary,
+    ...(platform === 'win32' ? [WINDOWS_UCRT] : []),
+    ...LICENSES
+  ].map((file) => ({
     path: file,
     sha256: sha256(fs.readFileSync(path.join(agentBrowserResources, file)))
   }))

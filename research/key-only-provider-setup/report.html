@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>选服务商后只填 Key：AI 模型与图像模型连接（方案 v3 + 高保真原型）</title>
+<style>
+/* Molly tokens: packages/components/src/tailwind/index.css :root (light, soft-lime default) */
+:root{
+  --background:41.2 47.1% 93.3%; --foreground:66 12.8% 15.3%; --card:43.6 57.9% 96.3%;
+  --primary:74.7 60.2% 65.5%; --primary-foreground:80 54.5% 8.6%; --button-hover:75.1 53.6% 59.4%;
+  --muted:42 37% 89.4%; --muted-foreground:48 9.9% 39.6%; --hover:42 37% 89.4%;
+  --selection:71.1 52.9% 90%; --destructive:12.4 50.4% 45.1%; --border:40.9 30.6% 85.9%;
+  --input-border:41.5 25.5% 80%; --input-field:43.6 57.9% 96.3%; --input-placeholder:45.7 9.6% 57.1%;
+  --switch-track:41.5 25.5% 80%; --ring:76.3 70.6% 26.7%;
+  --font-sans:'Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  --note:222 62% 47%; /* report-only annotation colour, outside the product palette */
+}
+*{box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased}
+body{margin:0;font-family:var(--font-sans);color:hsl(var(--foreground));background:#fbfaf6;line-height:1.75;font-size:15px}
+main{max-width:1200px;margin:0 auto;padding:48px 32px 96px}
+h1{font-size:30px;line-height:1.25;margin:0 0 8px;letter-spacing:-.01em}
+h2{font-size:22px;margin:56px 0 12px;padding-top:18px;border-top:1px solid hsl(var(--border))}
+h3{font-size:17px;margin:32px 0 8px}
+h4{font-size:15px;margin:20px 0 6px}
+p,li{max-width:900px}
+code{font-family:var(--font-mono);font-size:.86em;background:hsl(var(--muted)/.7);padding:1px 5px;border-radius:4px}
+a{color:hsl(var(--note))}
+.meta{color:hsl(var(--muted-foreground));font-size:13px}
+.uv{color:#b4540a;font-weight:600;white-space:nowrap}
+.tldr{background:#fff;border:1px solid hsl(var(--border));border-radius:16px;padding:18px 22px;margin:24px 0}
+.tldr li{margin:4px 0}
+table.t{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+table.t th,table.t td{border:1px solid hsl(var(--border));padding:8px 10px;vertical-align:top;text-align:left}
+table.t th{background:hsl(var(--muted)/.6);font-weight:600}
+ol.ac li{margin:8px 0}
+.callout{border-left:3px solid hsl(var(--note));background:hsl(var(--note)/.06);padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+.warn{border-left-color:#b4540a;background:#b4540a10}
+.toc{columns:2;font-size:14px}
+
+/* prototype stage */
+.cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px;margin:16px 0 8px;align-items:start}
+.frame{background:hsl(var(--background));border-radius:18px;padding:18px;border:1px solid hsl(var(--border))}
+.frame>.cap{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:hsl(var(--muted-foreground));margin:0 0 12px;display:flex;gap:8px;align-items:center}
+.frame>.cap .pill{letter-spacing:0;text-transform:none;font-weight:600;border-radius:999px;padding:1px 8px;font-size:11px}
+.pill.b{background:hsl(var(--muted));color:hsl(var(--muted-foreground))}
+.pill.a{background:hsl(var(--note));color:#fff}
+.anno{font-size:13px;color:hsl(var(--muted-foreground));margin:12px 2px 0;line-height:1.6}
+.anno b{color:hsl(var(--note))}
+.n{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:hsl(var(--note));color:#fff;font-size:11px;font-weight:700;line-height:1;vertical-align:1px;flex:none}
+.chg{outline:2px dashed hsl(var(--note)/.75);outline-offset:3px;border-radius:8px;position:relative}
+.chg>.n{position:absolute;right:-10px;top:-10px;z-index:2}
+.steps{display:flex;flex-direction:column;gap:12px}
+.step-l{font-size:12px;color:hsl(var(--muted-foreground));margin:0 0 6px}
+
+/* Molly UI replicas (class names map to the Tailwind classes in the components) */
+.ui{font-family:var(--font-sans);font-size:13px;line-height:1.45;color:hsl(var(--foreground))}
+.card{overflow:hidden;border-radius:16px;border:1px solid hsl(var(--border)/.4);background:hsl(var(--card))}
+.card-h{padding:16px 20px;min-height:48px}
+.card-h .t{font-size:14px;font-weight:500;margin:0}
+.card-h .d{font-size:12px;color:hsl(var(--muted-foreground));margin:4px 0 0;line-height:1.6}
+.slot{border-top:1px solid hsl(var(--border)/.4);background:hsl(var(--foreground)/.015);padding:20px}
+.stk>*+*{margin-top:20px}
+.sp2>*+*{margin-top:8px}
+.sp15>*+*{margin-top:6px}
+.lbl{font-size:14px;font-weight:500;line-height:1;display:block}
+.flbl{font-size:12px;font-weight:500;line-height:1;display:flex;gap:6px;align-items:center}
+.inp{display:flex;align-items:center;height:32px;width:100%;border-radius:6px;border:1px solid hsl(var(--input-border));background:hsl(var(--input-field));padding:0 12px;font-size:13px;color:hsl(var(--foreground));white-space:nowrap;overflow:hidden}
+.inp.ph{color:hsl(var(--input-placeholder))}
+.inp.focus{box-shadow:0 0 0 1px hsl(var(--ring))}
+.mono{font-family:var(--font-mono);font-size:12px}
+.hint{font-size:12px;color:hsl(var(--muted-foreground));margin:0}
+.h11{font-size:11px;color:hsl(var(--muted-foreground));margin:0}
+.err{display:flex;align-items:center;gap:6px;font-size:12px;color:hsl(var(--destructive));margin:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;border-radius:6px;font-size:13px;font-weight:500;height:32px;padding:0 12px;border:0;background:none;color:inherit;font-family:inherit}
+.btn.sm{height:26px;padding:0 10px;font-size:12px}
+.btn.x7{height:28px;padding:0 8px;font-size:12px}
+.btn.pri{background:hsl(var(--primary));color:hsl(var(--primary-foreground))}
+.btn.out{border:1px solid hsl(var(--input-border));background:hsl(var(--background))}
+.btn.ghost{color:hsl(var(--foreground))}
+.btn.dis{opacity:.4}
+.adv{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));height:26px}
+.adv .sum{font-weight:400;color:hsl(var(--muted-foreground)/.85)}
+.adv .sum code{background:none;padding:0;font-size:11px}
+.foot{display:flex;align-items:center;gap:8px;margin-top:20px}
+.foot .r{margin-left:auto;display:flex;gap:8px}
+.between{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.seg{max-width:100%;display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;height:30px;background:hsl(var(--muted));padding:2px;border-radius:6px}
+.seg span{display:block;line-height:26px;text-align:center;overflow:hidden;text-overflow:ellipsis;padding:0 10px;min-width:0;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));border-radius:3px;white-space:nowrap}
+.seg span.on{background:hsl(var(--selection));color:hsl(var(--foreground))}
+.eyebrow{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.14em;color:hsl(var(--muted-foreground));margin:0}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.tile{display:flex;min-width:0;align-items:center;gap:8px;border-radius:8px;border:1px solid hsl(var(--border)/.6);padding:6px 8px;font-size:12px;color:hsl(var(--muted-foreground))}
+.tile span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile.hot{border-color:hsl(var(--foreground)/.4);background:hsl(var(--foreground)/.03);color:hsl(var(--foreground))}
+.mk{display:flex;flex:none;align-items:center;justify-content:center;background:hsl(var(--foreground)/.06);font-weight:600;letter-spacing:-.02em;color:hsl(var(--foreground))}
+.mk.s{width:20px;height:20px;border-radius:6px;font-size:8px}
+.mk.m{width:32px;height:32px;border-radius:8px;font-size:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;border:1px solid hsl(var(--border)/.6);padding:2px 8px;font-family:var(--font-mono);font-size:11px;color:hsl(var(--muted-foreground))}
+.chip.on{background:hsl(var(--selection));border-color:hsl(var(--ring)/.6);color:hsl(var(--foreground))}
+.chip.lg{padding:4px 10px;font-size:12px}
+.tag{display:inline-flex;border-radius:999px;padding:0 6px;font-family:var(--font-sans);font-size:10px;background:hsl(var(--foreground)/.06);color:hsl(var(--foreground))}
+.tag.mut{background:hsl(var(--foreground)/.04);color:hsl(var(--muted-foreground))}
+.badge{display:inline-flex;flex:none;align-items:center;gap:4px;border-radius:999px;padding:2px 8px;font-size:11px}
+.badge.bad{background:hsl(var(--destructive)/.1);color:hsl(var(--destructive))}
+.badge.ok{background:hsl(var(--foreground)/.06)}
+.crow{display:flex;align-items:center;gap:12px;padding:14px 20px;border-top:1px solid hsl(var(--border)/.4)}
+.crow .mid{min-width:0;flex:1}
+.crow .mid p{margin:0}
+.sw{width:32px;height:18px;border-radius:999px;background:hsl(var(--primary));position:relative;flex:none}
+.sw::after{content:"";position:absolute;right:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#fff}
+.ck{overflow:hidden;border-radius:12px;border:1px solid hsl(var(--border)/.6)}
+.ck .sr{display:flex;align-items:center;gap:8px;border-bottom:1px solid hsl(var(--border)/.6);padding:8px 12px;font-size:12px;color:hsl(var(--input-placeholder))}
+.ck .ac{display:flex;gap:4px;border-bottom:1px solid hsl(var(--border)/.6);padding:4px 8px}
+.ck ul{list-style:none;margin:0;padding:4px 0}
+.ck li{display:flex;align-items:center;gap:10px;padding:6px 12px;max-width:none}
+.cb{width:14px;height:14px;border-radius:4px;border:1px solid hsl(var(--input-border));flex:none;display:flex;align-items:center;justify-content:center}
+.cb.on{background:hsl(var(--primary));border-color:hsl(var(--primary))}
+.i{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.i.s12{width:12px;height:12px}
+.i.s16{width:16px;height:16px}
+.dots{letter-spacing:2px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="tick" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="img" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+  <symbol id="dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+</svg>
+<main>
+<h1>选服务商后只填 Key：AI 模型与图像模型连接</h1>
+<p class="meta">方案 v3 + 高保真原型 · 2026-10-28 · 代码基线 <code>main 7a6794a4</code>（feat(harness-pi): add Kimi K3.1 Pro on Pi 1.4.0）· 只读调研：没有改源码，没有提交、推送，也没有操作 GitHub。标 <span class="uv">【未验证】</span> 的内容还没在代码或真实服务上核实过。</p>
+
+<div class="tldr">
+<strong>结论速览</strong>
+<ul>
+<li><strong>AI 模型表单已经基本做到"只填 Key"。</strong>对 9 个 API Key 服务商，当前代码在选中服务商时就预填官方 URL（<code>applyProviderChoice</code> → <code>PROVIDER_PRESET_DEFAULT_BASE_URLS</code>），URL 收在「Advanced」里；模型默认是「All N」；名称默认取服务商名；保存只要求 Key。唯一明显的缺口在 Kimi Code：设置页有登录入口时，Kimi Code 的 Key 入口只能从「Sign in with a plan › Kimi Code › Use an API key instead」进去，要多走两步。</li>
+<li><strong>真正的缺口在图像表单。</strong>新建时 URL 是空的（<code>createImageConnectionFormDraft</code>），一填 Key 就报 "Enter a base URL."；Model 必须手动输入。</li>
+<li><strong>和规范有一处冲突。</strong>Spec（<code>specs/graphic-design-platform.zh.md</code>「内置图像工具」）和根 <code>AGENTS.md</code> 都要求图像模型"由用户必填、产品不设默认模型"。所以本方案推荐<strong>一键选择的候选模型 chip，不预选任何一个</strong>：用户点一下就行，不用打字，也不算产品默认值。如果要预选默认模型，就得先改 Spec 和 AGENTS.md，见 D4。</li>
+<li>不改共享层、main 进程、存储、运行时，也不新增 IPC。AI 表单改 1 个组件文件，图像表单改 1 个组件文件再加 2 个 locale 文件。</li>
+</ul>
+</div>
+
+<p class="toc">
+<a href="#s1">1. 问题与边界</a><br><a href="#s2">2. 方案</a><br><a href="#s3">3. 原型</a><br><a href="#s4">4. 边界情况</a><br><a href="#s5">5. 验收标准</a><br><a href="#s6">6. 待确认决策</a><br><a href="#s7">附：对 v2 草案的更正</a>
+</p>
+
+<h2 id="s1">1. 问题与边界</h2>
+<h3>要解决的问题</h3>
+<p>用户使用官方账号时，在 AI 模型连接和图像模型连接两个表单里点选服务商（例如 Kimi Code、OpenAI、阿里云百炼）后，<strong>唯一需要输入的是 API Key</strong>。Base URL 预填为官方地址，收在默认折叠的「Advanced」里，需要时可以改成自定义地址。模型由我们给出候选，或者在校验 Key 时自动列出，用户不需要手动输入 URL 或模型名。</p>
+
+<h3>现状（从代码核实）</h3>
+<table class="t">
+<tr><th>环节</th><th>AI 模型表单 <code>model-connection-setting.tsx</code></th><th>图像表单 <code>image-connection-setting.tsx</code></th></tr>
+<tr><td>选服务商</td><td><code>ProviderPicker</code> 分组磁贴：Sign in with a plan（ChatGPT、Kimi Code）/ API key（9 个）/ Other（Custom）。有登录桥时，<code>kimi-coding</code> <strong>不在</strong> API key 组（L248 <code>keyProviders</code>）</td><td>「Connection type」是 <code>SegmentedControl</code>：OpenAI Images / Alibaba Model Studio (DashScope)（L425）。底层就是 <code>protocol</code>（#33 要求显式选择）</td></tr>
+<tr><td>Base URL</td><td>选中服务商时预填官方 URL；只有当 URL 与默认值不同时，才在主区域显示输入框，否则收在 Advanced 里，显示为 "Sends requests to {{url}}" 加 "Use a custom endpoint"</td><td>新建时为空（L168）。<code>PROTOCOL_COPY.defaultBaseUrl</code> 只用来判断地址是否为自定义，没有用来预填。填了 Key 而 URL 为空时，提示 <code>settings.imageConnection.check.enterBaseUrl</code></td></tr>
+<tr><td>模型</td><td>原生服务商在 Advanced 里有「Models in the conversation picker」，默认 <em>All N</em>（不写 <code>models</code>），保存时不用选。Choose 模式勾选的是打包目录里的模型，校验列表只用来打上「Not on this account」标签</td><td>主区域的 Model 是必填文本框。校验通过后，<code>ModelSuggestions</code> 列出服务返回的模型名供点选。DashScope 没有免费校验接口，所以不会给出任何建议</td></tr>
+<tr><td>保存条件</td><td><code>parsed.success && !missingRequiredKey</code>。校验失败（key_rejected、unreachable）<strong>不拦截</strong>保存</td><td><code>imageConnectionCanSave</code>：URL 合法、model 非空、有 Key。校验失败同样不拦截</td></tr>
+<tr><td>校验</td><td colspan="2">都在 main 进程完成（<code>connection-check.ts</code> 的 <code>checkModelConnection</code> / <code>checkImageConnection</code>），Key 停顿 700 ms 后自动触发，成功时不显示任何提示，失败时在 Key 下方显示一行。DashScope 直接返回 <code>unsupported</code>，不显示提示</td></tr>
+</table>
+
+<h3>做</h3>
+<ul>
+<li>AI 表单：在设置页里，Kimi Code 的 Key 入口直接放进 API key 组。折叠的「Advanced」旁边显示一行摘要（地址 · 模型范围），让预填的值看得见。</li>
+<li>图像表单：新建时按协议预填官方 URL，切换协议时跟着切换（前提是用户没改过 URL）。主区域的 Model 文本框换成候选 chip，点一下就选中；手动输入模型名的文本框移进「Advanced」。</li>
+<li>引导流程的 providers 步骤复用同一组件（<code>providers-screen.tsx</code> L483/L490，<code>variant="panel"</code>），所以自动获得同样的行为。</li>
+</ul>
+<h3>不做</h3>
+<ul>
+<li>不按 Key 前缀推断服务商，不新增服务商，不改 OAuth（ChatGPT 和 Kimi Code 的登录流程原样保留）。</li>
+<li>不改运行时、凭据存储、IPC，不改 <code>connection-check.ts</code>、<code>model-discovery.ts</code>、<code>embedded-harness.ts</code>、<code>image-connection.ts</code>。</li>
+<li>已保存的连接不迁移、不改写：只有 <code>stored === undefined</code> 时才预填。</li>
+<li>不改会话里的模型选择器；<code>openai-compatible</code>（Custom）的流程不变。</li>
+</ul>
+
+<h2 id="s2">2. 方案</h2>
+<div class="callout"><strong>复用阶梯（按 AGENTS.md 要求列出）：</strong>① 直接复用：<code>PROVIDER_PRESET_DEFAULT_BASE_URLS</code>、<code>applyProviderChoice</code>、<code>PROTOCOL_COPY.defaultBaseUrl</code>、<code>ModelSuggestions</code>、<code>ModelChecklist</code>、<code>ConnectionCheckError</code>/<code>Badge</code>、<code>useConnectionCheck</code>、现有 locale 文案。② 改造后复用：在 <code>PROTOCOL_COPY</code> 里加候选模型；<code>ModelSuggestions</code> 的 chip 样式复用为候选 chip；Advanced 触发按钮加摘要。③ 借鉴模式：「Use the default endpoint」按钮照搬 AI 表单的做法。④ 新建：不需要。<br>没有采用的做法：v2 提出的共享层 <code>IMAGE_PROVIDER_PRESETS</code> / <code>RECOMMENDED_MODELS</code>。前者目前除了这个组件没有别的使用方，按 AGENTS.md "先复用模块再加协议/存储" 的要求不该进共享层；后者和现有的「All 模型」默认值、"不从校验列表预选" 的注释（L583–586）以及 Spec 都冲突。另外，用服务商磁贴替换图像表单的 SegmentedControl 没有收益：只有两个协议，而且分段控件已经对应到服务商了。</div>
+
+<h3>2.1 AI 模型表单</h3>
+<p><strong>改动文件：</strong><code>packages/components/src/components/settings/model-connection-setting.tsx</code>、<code>packages/components/tests/model-connection-setting.test.tsx</code>、<code>packages/components/src/stories/ModelConnectionSetting.stories.tsx</code>。locale 不改，复用 <code>settings.models.summary.*</code> 和 <code>endpointLabel</code>。</p>
+<ol>
+<li><strong>Kimi Code 的 Key 入口始终放在 API key 组。</strong><code>ProviderPicker</code> 里的 <code>keyProviders</code> 改成总是包含 <code>'kimi-coding'</code>，显示为 "Kimi Code (membership API key)"。这和 OpenAI 的做法一致：ChatGPT（登录）和 OpenAI（Key）本来就各有一个磁贴。登录磁贴原样保留，「Use an API key instead」也保留。</li>
+<li><strong>Advanced 折叠时显示摘要。</strong>触发按钮后面追加一行弱化文字：<code>{endpointLabel(endpoint)} · {summary}</code>，例如 <code>api.kimi.com/coding/v1 · All models</code>。summary 直接沿用 <code>ModelConnectionRow</code> 已有的表达方式（All models / N of M models）。</li>
+<li><strong>其余不变。</strong>URL 已经预填，模型默认 All，名称默认取服务商名，保存只要 Key。模型清单本来就在 Advanced 里（D3）。</li>
+</ol>
+
+<h3>2.2 图像模型表单</h3>
+<p><strong>改动文件：</strong><code>packages/components/src/components/settings/image-connection-setting.tsx</code>、<code>packages/components/tests/image-connection-setting.test.tsx</code>、<code>packages/components/src/stories/ImageConnectionSetting.stories.tsx</code>、<code>locales/en.json</code>、<code>locales/zh_CN.json</code>，以及 <code>specs/graphic-design-platform.zh.md</code>/<code>.md</code> 的措辞（见 D4）。</p>
+<ol>
+<li><strong>新建时预填 URL。</strong><code>createImageConnectionFormDraft(undefined)</code> 返回 <code>baseUrl = PROTOCOL_COPY['openai-images'].defaultBaseUrl</code>。有 <code>stored</code> 时行为不变。</li>
+<li><strong>切换协议时跟着换 URL。</strong>扩展 <code>applyImageProtocolChoice</code>：当前 URL 为空或等于旧协议的默认地址时，换成新协议的默认地址；用户自定义的地址保留不动。现有的清空 Key 行为保留，model 也一并清空（候选模型因协议而异）。</li>
+<li><strong>候选模型 chip。</strong>给 <code>PROTOCOL_COPY</code> 加上 <code>candidateModels</code>。主区域的 Model 字段改为一组单选 chip（<code>role="radio"</code>），<strong>默认不选中任何一个</strong>。如果校验返回了列表，不在列表里的候选打上 <code>settings.models.picker.notListed</code> 标签（复用现有文案）。
+  <ul><li>OpenAI Images：<code>gpt-image-2</code>、<code>gpt-image-1</code>。仓库测试里用得最多的是 <code>gpt-image-2</code>（29 处）；这是否就是 OpenAI 当前官方的模型名 <span class="uv">【未验证】</span>。</li>
+  <li>DashScope：<code>qwen-image-2.1</code>、<code>qwen-image-2.0</code>（出现在 <code>design-image-tool.test.ts</code> 和 <code>model-connection-store.test.mjs</code> 里）<span class="uv">【未验证】</span>。</li></ul></li>
+<li><strong>Advanced 收纳 URL 和自定义模型。</strong>折叠时只显示摘要 <code>{host}{path} · {model || "—"}</code>；展开后是 Service address（加「Use the default endpoint」按钮）和「Other model ID」文本框，<code>ModelSuggestions</code> 跟着移进来。URL 不合法、或已选模型不在服务列表里时，自动展开 Advanced（沿用现在 <code>open</code> 的判断方式）。</li>
+<li><strong>保存条件不变</strong>（<code>imageConnectionCanSave</code>），仍要求 model 非空。没选模型时，主区域显示 "Choose a model."。</li>
+<li><strong>新增 locale 键</strong>（中英各一份）：<code>settings.imageConnection.chooseModel</code> = "Choose a model."；<code>settings.imageConnection.otherModel</code> = "Other model ID"；<code>settings.imageConnection.modelCandidates</code> = "Model"。其余文案全部复用。</li>
+</ol>
+
+<h3>2.3 共用部分</h3>
+<ul>
+<li>校验逻辑原样保留：Key 只在 main 进程里使用，不进渲染进程以外的地方，不需要新 IPC。</li>
+<li>存储格式、revision 规则、harness 都不改。只有新建草稿会预填；编辑已有连接时，显示的就是已保存的值。</li>
+</ul>
+<h2 id="s3">3. 原型</h2>
+<p>原型按真实组件的 Tailwind 类和亮色主题 token 复刻：卡片 <code>rounded-2xl border-border/40 bg-card</code>，输入框 32 px、<code>bg-input-field</code>，主按钮用 soft-lime 的 <code>primary</code> 填充配深色文字。界面文案用 en.json 里的现有字符串，新增的用 <em>斜体</em> 标在注释里。蓝色虚线框和编号是报告自己的标注，不属于 UI。</p>
+
+<!-- ============ P1 AI form Kimi Code ============ -->
+<h3>3.1 AI 模型表单：Kimi Code（设置页，有登录桥）</h3>
+<div class="cmp">
+ <div class="frame">
+  <p class="cap">Before <span class="pill b">3 步才到 Key</span></p>
+  <div class="steps ui">
+   <div><p class="step-l">① Choose a provider</p>
+    <div class="card"><div class="slot stk">
+     <span class="lbl">Choose a provider</span>
+     <div class="sp2"><p class="eyebrow">Sign in with a plan</p>
+      <div class="tiles"><div class="tile"><span class="mk s">OA</span><span>ChatGPT</span></div><div class="tile hot"><span class="mk s">KC</span><span>Kimi Code</span></div></div></div>
+     <div class="sp2"><p class="eyebrow">API key</p>
+      <div class="tiles">
+       <div class="tile"><span class="mk s">OA</span><span>OpenAI</span></div><div class="tile"><span class="mk s">AN</span><span>Anthropic (Claude)</span></div>
+       <div class="tile"><span class="mk s">GE</span><span>Google (Gemini)</span></div><div class="tile"><span class="mk s">DS</span><span>DeepSeek</span></div>
+       <div class="tile"><span class="mk s">MS</span><span>Moonshot Open Platform (API)</span></div><div class="tile"><span class="mk s">ZA</span><span>Z.ai (GLM)</span></div>
+       <div class="tile"><span class="mk s">XA</span><span>xAI (Grok)</span></div><div class="tile"><span class="mk s">MM</span><span>MiniMax</span></div>
+       <div class="tile"><span class="mk s">OR</span><span>OpenRouter</span></div></div></div>
+     <div class="sp2"><p class="eyebrow">Other</p><div class="tiles"><div class="tile"><span class="mk s">{ }</span><span>Custom</span></div></div></div>
+    </div></div></div>
+   <div><p class="step-l">② 选中 Kimi Code 后只有登录按钮</p>
+    <div class="card"><div class="slot stk">
+     <div class="between"><div style="display:flex;gap:10px;align-items:center"><span class="mk m">KC</span><span style="font-size:14px">Kimi Code</span></div><span class="btn ghost x7">All providers</span></div>
+     <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="btn pri sm">Sign in with Kimi Code</span><span class="btn ghost sm" style="color:hsl(var(--muted-foreground))">Use an API key instead</span></div>
+     <div class="foot"><div class="r"><span class="btn out">Cancel</span></div></div>
+    </div></div></div>
+   <div><p class="step-l">③ 才出现 Key 输入框</p>
+    <div class="card"><div class="slot stk">
+     <div class="between"><div style="display:flex;gap:10px;align-items:center"><span class="mk m">KC</span><span style="font-size:14px">Kimi Code (membership API key)</span></div><span class="btn ghost x7">All providers</span></div>
+     <div class="sp2"><span class="lbl">API key</span><div class="inp"></div><p class="hint">Keys stay on your computer.</p></div>
+     <span class="adv"><svg class="i"><use href="#chev"/></svg>Advanced</span>
+     <div class="foot"><div class="r"><span class="btn out">Cancel</span><span class="btn pri dis">Connect</span></div></div>
+    </div></div></div>
+  </div>
+ </div>
+ <div class="frame">
+  <p class="cap">After <span class="pill a">1 步到 Key</span></p>
+  <div class="steps ui">
+   <div><p class="step-l">① Choose a provider：API key 组里直接有 Kimi Code</p>
+    <div class="card"><div class="slot stk">
+     <span class="lbl">Choose a provider</span>
+     <div class="sp2"><p class="eyebrow">Sign in with a plan</p>
+      <div class="tiles"><div class="tile"><span class="mk s">OA</span><span>ChatGPT</span></div><div class="tile"><span class="mk s">KC</span><span>Kimi Code</span></div></div></div>
+     <div class="sp2"><p class="eyebrow">API key</p>
+      <div class="tiles">
+       <div class="tile"><span class="mk s">OA</span><span>OpenAI</span></div><div class="tile"><span class="mk s">AN</span><span>Anthropic (Claude)</span></div>
+       <div class="tile"><span class="mk s">GE</span><span>Google (Gemini)</span></div><div class="tile"><span class="mk s">DS</span><span>DeepSeek</span></div>
+       <div class="tile"><span class="mk s">MS</span><span>Moonshot Open Platform (API)</span></div><div class="tile"><span class="mk s">ZA</span><span>Z.ai (GLM)</span></div>
+       <div class="tile"><span class="mk s">XA</span><span>xAI (Grok)</span></div><div class="tile"><span class="mk s">MM</span><span>MiniMax</span></div>
+       <div class="tile"><span class="mk s">OR</span><span>OpenRouter</span></div>
+       <div class="tile hot chg"><span class="n">1</span><span class="mk s">KC</span><span>Kimi Code (membership API key)</span></div></div></div>
+     <div class="sp2"><p class="eyebrow">Other</p><div class="tiles"><div class="tile"><span class="mk s">{ }</span><span>Custom</span></div></div></div>
+    </div></div></div>
+   <div><p class="step-l">② 粘贴 Key → Connect</p>
+    <div class="card"><div class="slot stk">
+     <div class="between"><div style="display:flex;gap:10px;align-items:center"><span class="mk m">KC</span><span style="font-size:14px">Kimi Code (membership API key)</span></div><span class="btn ghost x7">All providers</span></div>
+     <div class="sp2"><span class="lbl">API key</span><div class="inp focus"><span class="dots">••••••••••••••••••••</span></div><p class="hint">Keys stay on your computer.</p></div>
+     <span class="adv chg"><span class="n">2</span><svg class="i"><use href="#chev"/></svg>Advanced <span class="sum">· <code>api.kimi.com/coding/v1</code> · All models</span></span>
+     <div class="foot"><div class="r"><span class="btn out">Cancel</span><span class="btn pri">Connect</span></div></div>
+    </div></div></div>
+  </div>
+ </div>
+</div>
+<p class="anno"><b>1</b> <code>keyProviders</code> 始终包含 <code>kimi-coding</code>，登录磁贴不变。<b>2</b> Advanced 折叠时显示摘要，复用 <code>endpointLabel</code> 和 <code>settings.models.summary.all</code>。Key 校验通过时界面不显示提示（与现状一致）。保存结果：<code>{providerPresetId:'kimi-coding', baseUrl:'https://api.kimi.com/coding/v1', displayName:'Kimi Code (membership API key)'}</code>，不写 <code>models</code>（即 All）。没有登录桥的界面（例如 Storybook）本来就把 Kimi Code 放在 API key 组里，不受影响。</p>
+
+<!-- ============ P2 Image form ============ -->
+<h3>3.2 图像模型表单：新建（OpenAI 和百炼）</h3>
+<div class="cmp">
+ <div class="frame">
+  <p class="cap">Before <span class="pill b">URL 和模型都要手打</span></p>
+  <div class="card ui">
+   <div class="card-h"><p class="t">Image generation</p><p class="d">Required to start designing. Connect an image service to generate and edit images.</p></div>
+   <div class="slot stk">
+    <div class="sp2"><span class="flbl">Connection type</span><span class="seg"><span class="on">OpenAI Images</span><span>Alibaba Model Studio (DashScope)</span></span></div>
+    <div class="sp2"><span class="flbl">API key</span><div class="sp15"><div class="inp mono"><span class="dots">••••••••••••••••</span></div><p class="hint">Keys stay on your computer.</p><p class="err"><svg class="i"><use href="#alert"/></svg>Enter a base URL.</p></div></div>
+    <div class="sp2"><span class="flbl">Model</span><div class="inp mono"></div></div>
+    <div><span class="adv"><svg class="i" style="transform:rotate(180deg)"><use href="#chev"/></svg>Advanced</span>
+     <div class="sp2" style="margin-top:12px"><span class="flbl">Service address <svg class="i s12" style="color:hsl(var(--muted-foreground))"><use href="#alert"/></svg></span><div class="inp mono ph">https://api.example.com/v1</div></div></div>
+    <div class="foot" style="margin-top:20px"><div class="r"><span class="btn out sm">Cancel</span><span class="btn pri sm dis">Connect</span></div></div>
+   </div>
+  </div>
+  <p class="anno">新建草稿的 <code>baseUrl = ''</code>、<code>model = ''</code>，所以粘贴 Key 后立即显示 "Enter a base URL."，Advanced 也被强制展开。</p>
+ </div>
+ <div class="frame">
+  <p class="cap">After · OpenAI <span class="pill a">只填 Key + 点一下</span></p>
+  <div class="card ui">
+   <div class="card-h"><p class="t">Image generation</p><p class="d">Required to start designing. Connect an image service to generate and edit images.</p></div>
+   <div class="slot stk">
+    <div class="sp2"><span class="flbl">Connection type</span><span class="seg"><span class="on">OpenAI Images</span><span>Alibaba Model Studio (DashScope)</span></span></div>
+    <div class="sp2"><span class="flbl">API key</span><div class="sp15"><div class="inp mono focus"><span class="dots">••••••••••••••••</span></div><p class="hint">Keys stay on your computer.</p></div></div>
+    <div class="sp2 chg"><span class="n">1</span><span class="flbl">Model</span><div class="chips" role="radiogroup"><span class="chip lg on"><svg class="i s12"><use href="#tick"/></svg>gpt-image-2</span><span class="chip lg">gpt-image-1</span></div></div>
+    <span class="adv chg"><span class="n">2</span><svg class="i"><use href="#chev"/></svg>Advanced <span class="sum">· <code>api.openai.com/v1</code> · <code>gpt-image-2</code></span></span>
+    <div class="foot"><div class="r"><span class="btn out sm">Cancel</span><span class="btn pri sm">Connect</span></div></div>
+   </div>
+  </div>
+  <p class="anno"><b>1</b> 候选 chip 默认不选中，用户点一下才写入 <code>draft.model</code>（见 D4）。<b>2</b> URL 已经按协议预填，Advanced 默认折叠，只显示摘要。</p>
+ </div>
+ <div class="frame">
+  <p class="cap">After · 百炼，未选模型 <span class="pill a">没有默认值</span></p>
+  <div class="card ui">
+   <div class="card-h"><p class="t">Image generation</p><p class="d">Required to start designing. Connect an image service to generate and edit images.</p></div>
+   <div class="slot stk">
+    <div class="sp2"><span class="flbl">Connection type</span><span class="seg"><span>OpenAI Images</span><span class="on">Alibaba Model Studio (DashScope)</span></span></div>
+    <div class="sp2"><span class="flbl">API key</span><div class="sp15"><div class="inp mono"><span class="dots">••••••••••••••••</span></div><p class="hint">Keys stay on your computer.</p></div></div>
+    <div class="sp2"><span class="flbl">Model</span><div class="chips"><span class="chip lg">qwen-image-2.1</span><span class="chip lg">qwen-image-2.0</span></div><p class="h11"><em>Choose a model.</em></p></div>
+    <span class="adv chg"><span class="n">3</span><svg class="i"><use href="#chev"/></svg>Advanced <span class="sum">· <code>dashscope.aliyuncs.com/api/v1</code> · —</span></span>
+    <div class="foot"><div class="r"><span class="btn out sm">Cancel</span><span class="btn pri sm dis">Connect</span></div></div>
+   </div>
+  </div>
+  <p class="anno"><b>3</b> 从 OpenAI 切到 DashScope 时，没改过的默认 URL 跟着换；Key 和 model 清空（Key 清空是现有行为）。DashScope 没有免费校验接口，所以 Key 不会被检查，界面上也不显示任何提示。候选模型名 <span class="uv">【未验证】</span>。</p>
+ </div>
+</div>
+<!-- ============ P3 Advanced custom URL ============ -->
+<h3>3.3 展开 Advanced，使用自定义 Base URL</h3>
+<div class="cmp">
+ <div class="frame">
+  <p class="cap">AI · Moonshot 国内地址</p>
+  <div class="card ui"><div class="slot stk">
+   <div class="between"><div style="display:flex;gap:10px;align-items:center"><span class="mk m">MS</span><span style="font-size:14px">Moonshot Open Platform (API)</span></div><span class="btn ghost x7">All providers</span></div>
+   <div class="sp2"><span class="lbl">API key</span><div class="inp"></div><p class="hint">Keys stay on your computer.</p></div>
+   <div class="sp2"><div class="between"><span class="lbl">API base URL</span><span class="btn ghost x7">Use the default endpoint</span></div><div class="inp focus">https://api.moonshot.cn/v1</div></div>
+   <div><span class="adv"><svg class="i" style="transform:rotate(180deg)"><use href="#chev"/></svg>Advanced <span class="sum chg" style="padding:0 2px"><span class="n">1</span>· <code>api.moonshot.cn/v1</code> · All models</span></span>
+    <div class="stk" style="margin-top:12px">
+     <div class="sp2"><div class="between"><span class="lbl">Models in the conversation picker</span><span class="seg"><span class="on">All 4</span><span>Choose</span></span></div></div>
+     <div class="sp2"><span class="lbl">Connection name</span><div class="inp">Moonshot Open Platform (API)</div></div>
+    </div></div>
+   <div class="foot"><div class="r"><span class="btn out">Cancel</span><span class="btn pri dis">Connect</span></div></div>
+  </div></div>
+  <p class="anno">这是现有行为：在 Advanced 里点「Use a custom endpoint」后，URL 输入框显示在主区域；修改 URL 会清空已填的 Key（L659–662），所以 Connect 不可用，直到用户重新粘贴 Key。<b>1</b> 摘要同步显示自定义地址。<code>.cn</code> 的 Key 能否在 <code>.ai</code> 上通过 <span class="uv">【未验证】</span>。</p>
+ </div>
+ <div class="frame">
+  <p class="cap">AI · Kimi Code 地址写错</p>
+  <div class="card ui"><div class="slot stk">
+   <div class="between"><div style="display:flex;gap:10px;align-items:center"><span class="mk m">KC</span><span style="font-size:14px">Kimi Code (membership API key)</span></div><span class="btn ghost x7">All providers</span></div>
+   <div class="sp2"><span class="lbl">API key</span><div class="inp"><span class="dots">••••••••••••••••</span></div><p class="hint">Keys stay on your computer.</p></div>
+   <div class="sp2"><div class="between"><span class="lbl">API base URL</span><span class="btn ghost x7">Use the default endpoint</span></div><div class="inp">https://api.kimi.com/coding</div></div>
+   <p class="err">For Kimi Code on api.kimi.com, use https://api.kimi.com/coding/v1 (include /v1). This preset uses the OpenAI-compatible protocol.</p>
+   <span class="adv"><svg class="i"><use href="#chev"/></svg>Advanced <span class="sum">· <code>api.kimi.com/coding</code> · All models</span></span>
+   <div class="foot"><div class="r"><span class="btn out">Cancel</span><span class="btn pri">Connect</span></div></div>
+  </div></div>
+  <p class="anno">沿用 <code>getModelConnectionConfigurationIssue</code> 和 <code>kimiCodeEndpointRequired</code> 文案。这时校验不会发出（<code>checkRequest</code> 为 null）。保存时 schema 会把 <code>/coding</code> 规范化成 <code>/coding/v1</code>（<code>embedded-harness.ts</code> L771–776），所以 Connect 仍然可用。</p>
+ </div>
+ <div class="frame">
+  <p class="cap">图像 · 自定义 OpenAI Images 兼容网关</p>
+  <div class="card ui"><div class="slot stk">
+   <div class="sp2"><span class="flbl">Connection type</span><span class="seg"><span class="on">OpenAI Images</span><span>Alibaba Model Studio (DashScope)</span></span></div>
+   <div class="sp2"><span class="flbl">API key <span style="font-weight:400;color:hsl(var(--muted-foreground))">· Paste a key for this service address.</span></span><div class="sp15"><div class="inp mono ph">sk-...</div><p class="hint">Keys stay on your computer.</p></div></div>
+   <div class="sp2"><span class="flbl">Model</span><div class="chips"><span class="chip lg">gpt-image-2</span><span class="chip lg">gpt-image-1</span></div></div>
+   <div><span class="adv"><svg class="i" style="transform:rotate(180deg)"><use href="#chev"/></svg>Advanced <span class="sum">· <code>images.example-gateway.com/v1</code> · flux-pro</span></span>
+    <div class="stk" style="margin-top:12px">
+     <div class="sp2 chg"><span class="n">1</span><div class="between"><span class="flbl">Service address <svg class="i s12" style="color:hsl(var(--muted-foreground))"><use href="#alert"/></svg></span><span class="btn ghost x7">Use the default endpoint</span></div><div class="inp mono focus">https://images.example-gateway.com/v1</div></div>
+     <div class="sp2 chg"><span class="n">2</span><span class="flbl"><em>Other model ID</em></span><div class="inp mono">flux-pro</div>
+      <div class="sp15"><p class="h11">Models on your service · 3</p><div class="chips"><span class="chip">flux-pro</span><span class="chip">flux-dev</span><span class="chip">sdxl</span></div></div></div>
+    </div></div>
+   <div class="foot"><div class="r"><span class="btn out sm">Cancel</span><span class="btn pri sm dis">Connect</span></div></div>
+  </div></div>
+  <p class="anno"><b>1</b> 新增「Use the default endpoint」，借鉴 AI 表单。地址改动沿用 <code>applyImageAddressEdit</code>：Key 绑定的是填 Key 时的地址；因为地址现在预填了，<strong>先填 Key、后改地址</strong>会清空 Key（行为变化，见 4 节）。<b>2</b> 自定义模型名的输入框和 <code>ModelSuggestions</code> 移进 Advanced；填了自定义模型名时，主区域的候选 chip 都不选中。示例里的网关和模型名都是虚构的。</p>
+ </div>
+</div>
+
+<!-- ============ P4 Errors ============ -->
+<h3>3.4 错误状态：Key 被拒、地址不可达</h3>
+<div class="cmp">
+ <div class="frame">
+  <p class="cap">AI · Key 被拒</p>
+  <div class="card ui"><div class="slot stk">
+   <div class="between"><div style="display:flex;gap:10px;align-items:center"><span class="mk m">KC</span><span style="font-size:14px">Kimi Code (membership API key)</span></div><span class="btn ghost x7">All providers</span></div>
+   <div class="sp2"><span class="lbl">API key</span><div class="inp"><span class="dots">••••••••••••••••</span></div><p class="hint">Keys stay on your computer.</p><p class="err"><svg class="i"><use href="#alert"/></svg>The provider rejected this key (401).</p></div>
+   <span class="adv"><svg class="i"><use href="#chev"/></svg>Advanced <span class="sum">· <code>api.kimi.com/coding/v1</code> · All models</span></span>
+   <div class="foot"><div class="r"><span class="btn out">Cancel</span><span class="btn pri">Connect</span></div></div>
+  </div></div>
+ </div>
+ <div class="frame">
+  <p class="cap">AI · 地址不可达</p>
+  <div class="card ui"><div class="slot stk">
+   <div class="between"><div style="display:flex;gap:10px;align-items:center"><span class="mk m">MS</span><span style="font-size:14px">Moonshot Open Platform (API)</span></div><span class="btn ghost x7">All providers</span></div>
+   <div class="sp2"><span class="lbl">API key</span><div class="inp"><span class="dots">••••••••••••••••</span></div><p class="hint">Keys stay on your computer.</p><p class="err"><svg class="i"><use href="#alert"/></svg>Couldn't reach api.moonshot.ai. Check the address and your network.</p></div>
+   <span class="adv"><svg class="i"><use href="#chev"/></svg>Advanced <span class="sum">· <code>api.moonshot.ai/v1</code> · All models</span></span>
+   <div class="foot"><div class="r"><span class="btn out">Cancel</span><span class="btn pri">Connect</span></div></div>
+  </div></div>
+ </div>
+ <div class="frame">
+  <p class="cap">图像 · Key 被拒</p>
+  <div class="card ui"><div class="slot stk">
+   <div class="sp2"><span class="flbl">Connection type</span><span class="seg"><span class="on">OpenAI Images</span><span>Alibaba Model Studio (DashScope)</span></span></div>
+   <div class="sp2"><span class="flbl">API key</span><div class="sp15"><div class="inp mono"><span class="dots">••••••••••••••••</span></div><p class="hint">Keys stay on your computer.</p><p class="err"><svg class="i"><use href="#alert"/></svg>The key was rejected. Check the key and try again.</p></div></div>
+   <div class="sp2"><span class="flbl">Model</span><div class="chips"><span class="chip lg on"><svg class="i s12"><use href="#tick"/></svg>gpt-image-2</span><span class="chip lg">gpt-image-1</span></div></div>
+   <span class="adv"><svg class="i"><use href="#chev"/></svg>Advanced <span class="sum">· <code>api.openai.com/v1</code> · <code>gpt-image-2</code></span></span>
+   <div class="foot"><div class="r"><span class="btn out sm">Cancel</span><span class="btn pri sm">Connect</span></div></div>
+  </div></div>
+ </div>
+ <div class="frame">
+  <p class="cap">图像 · 不可达</p>
+  <div class="card ui"><div class="slot stk">
+   <div class="sp2"><span class="flbl">Connection type</span><span class="seg"><span class="on">OpenAI Images</span><span>Alibaba Model Studio (DashScope)</span></span></div>
+   <div class="sp2"><span class="flbl">API key</span><div class="sp15"><div class="inp mono"><span class="dots">••••••••••••••••</span></div><p class="hint">Keys stay on your computer.</p><p class="err"><svg class="i"><use href="#alert"/></svg>Can't reach the server from your computer. Check the URL and your network.</p></div></div>
+   <div class="sp2"><span class="flbl">Model</span><div class="chips"><span class="chip lg on"><svg class="i s12"><use href="#tick"/></svg>gpt-image-2</span><span class="chip lg">gpt-image-1</span></div></div>
+   <span class="adv"><svg class="i"><use href="#chev"/></svg>Advanced <span class="sum">· <code>api.openai.com/v1</code> · <code>gpt-image-2</code></span></span>
+   <div class="foot"><div class="r"><span class="btn out sm">Cancel</span><span class="btn pri sm">Connect</span></div></div>
+  </div></div>
+ </div>
+ <div class="frame" style="grid-column:1/-1">
+  <p class="cap">保存后的列表行（现有组件，不改）</p>
+  <div class="card ui">
+   <div class="card-h"><p class="t">Models</p><p class="d">Connect the AI that creates your designs. Your key stays on this computer.</p></div>
+   <div class="crow"><span class="mk m">KC</span><div class="mid"><div style="display:flex;gap:8px;align-items:center"><p style="font-size:14px">Kimi Code (membership API key)</p><span class="badge bad"><svg class="i s12"><use href="#alert"/></svg>Key rejected</span></div><p class="hint">Kimi Code (membership API key) · All models</p></div><span class="sw"></span><span class="btn out sm">Edit</span><svg class="i s16"><use href="#dots"/></svg></div>
+  </div>
+  <div class="card ui" style="margin-top:12px">
+   <div class="card-h"><p class="t">Image generation</p><p class="d">Required to start designing. Connect an image service to generate and edit images.</p></div>
+   <div class="crow"><span class="mk m"><svg class="i s16"><use href="#img"/></svg></span><div class="mid"><div style="display:flex;gap:8px;align-items:center"><p style="font-size:14px">OpenAI Images · <span class="mono">gpt-image-2</span></p><span class="badge bad"><svg class="i s12"><use href="#alert"/></svg>Unreachable</span></div><p class="hint">api.openai.com</p></div><span class="sw"></span><span class="btn out sm">Edit</span><svg class="i s16"><use href="#dots"/></svg></div>
+  </div>
+  <p class="anno">文案都是现有的：<code>settings.check.failures.key_rejected</code>/<code>unreachable</code> 和 <code>settings.imageConnection.check.keyRejected</code>/<code>unreachable</code>。<strong>Connect 在这两种失败下仍然可用</strong>，这是现状，本方案也保持不变；v2 主张"Key 被拒时不能保存"，作为决策 D5 列出。保存时会把这次校验结果带到列表行的徽标上（<code>recordCheck</code> / <code>setCheck</code>）。</p>
+ </div>
+</div>
+<!-- ============ P5 Model unavailable ============ -->
+<h3>3.5 预设模型在该账号不可用</h3>
+<div class="cmp">
+ <div class="frame">
+  <p class="cap">图像 · 选中的候选不在服务列表里</p>
+  <div class="card ui"><div class="slot stk">
+   <div class="sp2"><span class="flbl">Connection type</span><span class="seg"><span class="on">OpenAI Images</span><span>Alibaba Model Studio (DashScope)</span></span></div>
+   <div class="sp2"><span class="flbl">API key</span><div class="sp15"><div class="inp mono"><span class="dots">••••••••••••••••</span></div><p class="hint">Keys stay on your computer.</p></div></div>
+   <div class="sp2 chg"><span class="n">1</span><span class="flbl">Model</span><div class="chips"><span class="chip lg on"><svg class="i s12"><use href="#tick"/></svg>gpt-image-2 <span class="tag mut">Not on this account</span></span><span class="chip lg">gpt-image-1</span></div>
+    <p class="h11">Your service doesn't list this model. Check the exact name; Molly saves it as typed.</p></div>
+   <div><span class="adv"><svg class="i" style="transform:rotate(180deg)"><use href="#chev"/></svg>Advanced <span class="sum">· <code>api.openai.com/v1</code> · <code>gpt-image-2</code></span></span>
+    <div class="stk" style="margin-top:12px">
+     <div class="sp2"><span class="flbl">Service address</span><div class="inp mono">https://api.openai.com/v1</div></div>
+     <div class="sp2 chg"><span class="n">2</span><span class="flbl"><em>Other model ID</em></span><div class="inp mono ph"></div>
+      <div class="sp15"><p class="h11">Models on your service · 2</p><div class="chips"><span class="chip">gpt-image-1</span><span class="chip">dall-e-3</span></div></div></div>
+    </div></div>
+   <div class="foot"><div class="r"><span class="btn out sm">Cancel</span><span class="btn pri sm">Connect</span></div></div>
+  </div></div>
+  <p class="anno"><b>1</b> 不自动换模型：Spec 规定"不猜测模型别名或静默切换"。所以只打上 <code>Not on this account</code> 标签，并复用 <code>modelNotListed</code> 文案说明。保存仍然可用，因为有的服务虽然没列出某个模型，实际仍能调用。<b>2</b> 这种情况下 Advanced 自动展开，用户可以从服务实际列出的模型里点选。示例数据是虚构的。</p>
+ </div>
+ <div class="frame">
+  <p class="cap">AI · Kimi Code 的 Key 只列出 <code>k3</code></p>
+  <div class="card ui"><div class="slot stk">
+   <div class="between"><div style="display:flex;gap:10px;align-items:center"><span class="mk m">KC</span><span style="font-size:14px">Kimi Code (membership API key)</span></div><span class="btn ghost x7">All providers</span></div>
+   <div class="sp2"><span class="lbl">API key</span><div class="inp"><span class="dots">••••••••••••••••</span></div><p class="hint">Keys stay on your computer.</p></div>
+   <div><span class="adv"><svg class="i" style="transform:rotate(180deg)"><use href="#chev"/></svg>Advanced <span class="sum">· <code>api.kimi.com/coding/v1</code> · 5 of 5 models</span></span>
+    <div class="stk" style="margin-top:12px">
+     <p class="hint">Sends requests to https://api.kimi.com/coding/v1 <span class="btn ghost x7" style="color:hsl(var(--foreground))">Use a custom endpoint</span></p>
+     <div class="sp2"><div class="between"><span class="lbl">Models in the conversation picker</span><span class="seg"><span>All 5</span><span class="on">Choose</span></span></div>
+      <div class="ck">
+       <div class="sr"><svg class="i"><use href="#search"/></svg>Search models<span style="margin-left:auto;font-size:11px;color:hsl(var(--muted-foreground))">5 of 5</span></div>
+       <div class="ac"><span class="btn ghost" style="height:24px;padding:0 8px;font-size:11px">Select all</span><span class="btn ghost" style="height:24px;padding:0 8px;font-size:11px">Clear</span></div>
+       <ul>
+        <li><span class="cb on"><svg class="i s12" style="color:hsl(var(--primary-foreground))"><use href="#tick"/></svg></span><span style="flex:1;font-size:12px">k3</span><span class="tag">Sees images</span></li>
+        <li><span class="cb on"><svg class="i s12" style="color:hsl(var(--primary-foreground))"><use href="#tick"/></svg></span><span style="flex:1;font-size:12px">k3.1-pro</span><span class="tag mut">Not on this account</span></li>
+        <li><span class="cb on"><svg class="i s12" style="color:hsl(var(--primary-foreground))"><use href="#tick"/></svg></span><span style="flex:1;font-size:12px">k3-256k</span><span class="tag mut">Not on this account</span></li>
+        <li><span class="cb on"><svg class="i s12" style="color:hsl(var(--primary-foreground))"><use href="#tick"/></svg></span><span style="flex:1;font-size:12px">kimi-for-coding</span><span class="tag mut">Not on this account</span></li>
+        <li><span class="cb on"><svg class="i s12" style="color:hsl(var(--primary-foreground))"><use href="#tick"/></svg></span><span style="flex:1;font-size:12px">kimi-for-coding-highspeed</span><span class="tag mut">Not on this account</span></li>
+       </ul>
+      </div></div>
+    </div></div>
+   <div class="foot"><div class="r"><span class="btn out">Cancel</span><span class="btn pri">Connect</span></div></div>
+  </div></div>
+  <p class="anno">这是现有行为，本方案不改：默认 All 不受校验列表影响；进入 Choose 时预勾选整个打包目录，只给列表里没有的模型打标签。代码注释（L583–586）解释了原因：Kimi Code 的 Key 常常只列出 <code>k3</code>，如果按列表预选，选择器里就只剩一个模型。显示名在原型里用模型 id 代替，真实名称以打包目录为准；"Sees images" 等标签只是示意 <span class="uv">【未验证】</span>。列表里没有 <code>k3.1-pro</code> 是否意味着实际调用会失败 <span class="uv">【未验证】</span>。</p>
+ </div>
+</div>
+
+<h2 id="s4">4. 边界情况</h2>
+<table class="t">
+<tr><th>情况</th><th>AI 表单</th><th>图像表单</th></tr>
+<tr><td>自定义 URL</td><td>沿用现状：URL 改了就清空已填 Key，并对新地址自动校验；保存时使用自定义地址；列表行显示 <code>Provider · host</code>。Kimi Code 只接受 <code>/coding/v1</code></td><td>沿用 <code>applyImageAddressEdit</code>。<strong>行为变化：</strong>以前是先填地址再填 Key；现在地址已经预填，"先粘 Key、后改地址"会清空 Key，并显示 <code>keyRequired</code> 提示。切换协议时，自定义地址保留</td></tr>
+<tr><td>Key 无效（401/403）</td><td colspan="2">在 Key 下方显示 key_rejected 那一行；保存仍然可用（现状）；列表行显示徽标「Key rejected」。是否要拦截保存见 D5</td></tr>
+<tr><td>网络不通、超时</td><td colspan="2">显示 unreachable，保存可用（现状，已在代码中核实），行上显示「Unreachable」</td></tr>
+<tr><td>429 / 其他 HTTP 错误</td><td colspan="2">显示 rate_limited / http_error 文案（现有），不自动重试</td></tr>
+<tr><td>服务没有免费校验接口</td><td>OpenRouter 只校验 Key、不返回列表；Choose 模式下不打标签</td><td>DashScope 返回 <code>unsupported</code>，界面不显示提示；Key 只有在实际生图时才会被验证。原型不显示"已校验"之类的状态</td></tr>
+<tr><td>预设模型不在账号列表里</td><td>All 模式不受影响；Choose 模式打「Not on this account」标签，不自动取消勾选</td><td>选中的 chip 打标签，显示 <code>modelNotListed</code>，自动展开 Advanced 供改选；不自动替换</td></tr>
+<tr><td>打包目录读不到</td><td>现有的 <code>picker.unavailable</code> 文案；保存时不写 models（All）</td><td>不涉及（候选写在组件里）</td></tr>
+<tr><td>编辑已有连接</td><td colspan="2">显示已保存的 URL、模型和名称，不用预设覆盖。只打开不修改时，<code>isDirty</code> 为 false、revision 不变；图像表单若已保存模型不在候选里，chip 都不选中，模型显示在 Advanced 的「Other model ID」里</td></tr>
+<tr><td>只有预填值时点 Cancel</td><td colspan="2">和现在一样直接关闭，不写入任何内容</td></tr>
+<tr><td>引导流程（panel）</td><td colspan="2">同一组件，行为一致；首个图像连接的表单直接打开（<code>formOpen</code> 现有逻辑）</td></tr>
+<tr><td>Moonshot 国内账号</td><td>默认 <code>api.moonshot.ai</code>；国内 Key 可能需要在 Advanced 里改成 <code>.cn</code> <span class="uv">【未验证】</span>。不按 Key 推断（不在范围内）</td><td>—</td></tr>
+</table>
+
+<h2 id="s5">5. 验收标准</h2>
+<p>测试都是组件或单元测试，用 mock 的 <code>onCheck</code>/<code>onSave</code> 返回值观察结果，不断言 mock 的调用次数，不用真实网络和真实等待（用 fake timers 跳过 700 ms 防抖）。</p>
+<ol class="ac">
+<li>AI：有 <code>onOpenAiAuth</code> 时，Picker 的 API key 组里有 "Kimi Code (membership API key)" 磁贴，Sign in with a plan 组里仍有 "Kimi Code" 磁贴。</li>
+<li>AI：点 API key 组的 Kimi Code → 只粘贴 Key → 点 Connect，<code>onSave</code> 收到 <code>{providerPresetId:'kimi-coding', baseUrl:'https://api.kimi.com/coding/v1', displayName:'Kimi Code (membership API key)'}</code>，不含 <code>models</code>；表单里没有出现 "Sign in with Kimi Code" 按钮。</li>
+<li>AI（参数化）：对 <code>API_KEY_PROVIDERS</code> 和 <code>kimi-coding</code> 中的每一项，新建时只填 Key 即可保存，<code>baseUrl === PROVIDER_PRESET_DEFAULT_BASE_URLS[preset]</code>，不出现 URL 输入框。</li>
+<li>AI：Advanced 折叠时，触发按钮里能看到 <code>api.kimi.com/coding/v1</code> 和 "All models"；改成自定义地址后，摘要显示新的 host。</li>
+<li>图像：新建表单默认 <code>Service address = https://api.openai.com/v1</code>；粘贴 Key 后不出现 "Enter a base URL."，Advanced 保持折叠。</li>
+<li>图像：没选模型时 Connect 不可用，并显示 "Choose a model."；点击 <code>gpt-image-2</code> chip 后 Connect 可用，<code>onSave</code> 收到的 draft 中 <code>baseUrl</code>、<code>model</code> 为预设值。全程不需要在任何文本框里输入 URL 或模型名。</li>
+<li>图像：没改过 URL 时切换到 DashScope，URL 变为 <code>https://dashscope.aliyuncs.com/api/v1</code>，Key 和 model 清空，chip 换成 DashScope 的候选；改过 URL 时切换协议，URL 保持不变。</li>
+<li>图像：展开 Advanced 改成自定义地址后，Key 被清空并提示 "Paste a key for this service address."；重新填 Key 后，校验请求发往新地址，保存的 <code>baseUrl</code> 就是这个地址。点「Use the default endpoint」恢复官方地址。</li>
+<li>Key 被拒（mock 返回 <code>key_rejected</code>, 401）时，AI 表单显示 "The provider rejected this key (401)."，图像表单显示 "The key was rejected. Check the key and try again."。保存是否可用以 D5 的结论为准（默认：可用）。</li>
+<li>不可达（mock 返回 <code>unreachable</code>）时，两个表单分别显示对应文案；保存后列表行显示「Unreachable」徽标。</li>
+<li>图像：mock 校验返回 <code>models:['gpt-image-1','dall-e-3']</code> 且已选 <code>gpt-image-2</code> 时，该 chip 显示 "Not on this account"，出现 modelNotListed 文案，Advanced 展开并列出这两个模型；<code>draft.model</code> 仍是 <code>gpt-image-2</code>（不自动替换）。</li>
+<li>AI：Kimi Code 的校验只返回 <code>['k3']</code> 时，保存出的连接仍不含 <code>models</code>（All）；切到 Choose 时预勾选整个目录，其余模型带 "Not on this account" 标签（现有测试应继续通过）。</li>
+<li>已有的 AI 连接和图像连接（包括没有 <code>protocol</code> 的旧行，以及模型不在候选里的行）打开后，显示的值等于已保存的值，Connect/Save 不可用（未修改）；不保存时 revision 不变。</li>
+<li>引导流程的 providers 步骤里，AI 连接和图像连接都能用同样的"点服务商 → 粘贴 Key（→ 点模型）"完成；<code>locales/en.json</code> 和 <code>zh_CN.json</code> 都有新增的 3 个键；<code>pnpm run docs check</code>、<code>pnpm check</code> 通过。</li>
+</ol>
+
+<h2 id="s6">6. 待确认决策</h2>
+<table class="t">
+<tr><th>#</th><th>问题</th><th>建议</th><th>备选与影响</th></tr>
+<tr><td>D1</td><td>每个 AI 服务商的默认模型</td><td><strong>不设默认模型，保持 All。</strong>会话里由用户自己选模型（现有设计）；连接表单不需要预选，所以也不需要 v2 的 <code>RECOMMENDED_MODELS</code>。</td><td>如果确实想让选择器先显示一个推荐模型，那是会话选择器的需求，不属于这次。参考 pi-ai 1.4.0 的目录：kimi-coding 有 <code>k3</code> <code>k3-256k</code> <code>kimi-for-coding</code> <code>kimi-for-coding-highspeed</code>，overlay 再加上 <code>k3.1-pro</code>；moonshotai 有 <code>kimi-k2.6</code> <code>kimi-k2.7-code</code> <code>kimi-k2.7-code-highspeed</code> <code>kimi-k3</code>。打包进应用的 <code>model-catalog.json</code> 是构建时生成的、不在仓库里，与这份列表是否完全一致 <span class="uv">【未验证】</span>。</td></tr>
+<tr><td>D2</td><td>首批图像服务商</td><td><strong>只做 OpenAI 和阿里云百炼。</strong>它们对应现有的两个协议；其他兼容服务走 OpenAI Images 协议加 Advanced 自定义地址。</td><td>加 Kimi 或其他服务商就是新增服务商或协议，不在本次范围内。候选模型名（<code>gpt-image-2/1</code>、<code>qwen-image-2.1/2.0</code>）需要你确认 <span class="uv">【未验证】</span>。</td></tr>
+<tr><td>D3</td><td>AI 表单的模型清单是否收进 Advanced</td><td><strong>已经在 Advanced 里了</strong>（L985–1029），保持不变，只加摘要行。</td><td>—</td></tr>
+<tr><td>D4</td><td>图像表单：候选 chip 不预选（B），还是预选默认模型（A）</td><td><strong>B。</strong>符合 Spec "产品不设默认模型" 和 AGENTS.md "user-required model and no product default"，用户点一下就行。Spec 里"用户配置 URL"的措辞需要改成"官方 URL 预填、可在 Advanced 中修改"；Spec 本来就是 draft 状态。</td><td>A 少点一下，但要先修改 Spec 和根 AGENTS.md 的约束，并获得你书面批准；另外默认模型过期时，会造成"静默错误"的风险。</td></tr>
+<tr><td>D5</td><td>Key 被拒时是否拦截保存</td><td><strong>不拦截</strong>（现状）。有的代理会在校验阶段报错，但实际能用。</td><td>只对官方地址的 401/403 拦截：更不容易误存错误的 Key，但需要新的分支逻辑和测试，也会改变现有的契约测试。</td></tr>
+<tr><td>D6</td><td>设置页 API key 组里是否始终显示 Kimi Code 的 Key 磁贴</td><td><strong>是</strong>，和 ChatGPT / OpenAI 双磁贴的做法一致。</td><td>不改：保留"登录优先"的引导，但持 Key 的用户要多走两步。</td></tr>
+</table>
+
+<h2 id="s7">附：对 v2 草案的更正</h2>
+<ul>
+<li>基线：v2 写的是 <code>5539c125</code>，本报告基于 <code>7a6794a4</code>。</li>
+<li>v2 说"模型需要用户在 ModelChecklist 里自己勾选"——不对。默认是 All，用户什么都不用选（L324、L592–597）。</li>
+<li>v2 提出"推荐列表 ∩ 账号可用模型"——和现有代码的明确约定相反（L583–586：绝不从校验列表预选），而且 Kimi Code 的列表往往只有 <code>k3</code>。</li>
+<li>v2 说用单测守住"<code>RECOMMENDED_MODELS</code> 都在 <code>model-catalog.json</code> 里"——这个 json 是构建产物（<code>createBundledModelCatalog</code>），不在仓库里，没法直接做这种单测。</li>
+<li>v2 说"Connection type 下拉"——实际是 SegmentedControl。</li>
+<li>v2 说"Key 被拒时保存按钮不可用"——现状是可以保存（见 D5）。v2 对网络失败"允许保存"的说法与代码一致。</li>
+<li>v2 给图像设了默认模型 <code>gpt-image-1</code>/<code>qwen-image</code>——与 Spec 第 134 行、根 AGENTS.md 冲突（见 D4）；仓库测试里用的是 <code>gpt-image-2</code> 和 <code>qwen-image-2.x</code>。</li>
+<li>v2 提出"用户改过的 URL 打上 Custom address 标记"——不需要新的状态：AI 表单用 <code>isDefaultEndpoint</code>，图像表单用 <code>isCustomBaseUrl</code>，从当前值就能推算出来。</li>
+<li>v2 引用的 <code>embedded-harness.ts:698/775</code>：698 是 <code>/coding/v1</code> 的配置诊断，775 是保存时把 <code>/coding</code> 规范化，二者都不会"强制改写"用户填的其他地址。</li>
+</ul>
+<p class="meta">参考的源码：<code>packages/components/src/components/settings/{model-connection-setting,image-connection-setting,connection-check,model-checklist,form-primitives,compact-layout}.tsx</code>、<code>packages/components/src/ui/{button,input,label}.tsx</code>、<code>packages/components/src/components/shared/segmented-control.tsx</code>、<code>packages/components/src/tailwind/index.css</code>、<code>packages/shared/src/{embedded-harness,image-connection}.ts</code>、<code>apps/electron/src/main/services/connection-check.ts</code>、<code>packages/harness-pi/src/{model-catalog,native-model-overlay}.ts</code>、<code>locales/en.json</code>、<code>specs/graphic-design-platform.zh.md</code>。</p>
+</main>
+</body>
+</html>

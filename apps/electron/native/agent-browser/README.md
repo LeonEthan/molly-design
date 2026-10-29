@@ -7,9 +7,13 @@ an unchanged official executable. The upstream Apache-2.0 license is in [LICENSE
 
 `pnpm --dir apps/electron build:browser-driver` fetches the archive, verifies it,
 applies the patch and stages one target program plus licenses, notices and manifest in
-`resources/agent-browser/`. Win32 targets built on a matching host architecture also
-stage the host's `ucrtbase.dll` as the app-local `ucrt.dll` the driver imports
-(see #253). Install the Rust target for the build machine first
+`resources/agent-browser/`. Every Win32 target stages `ucrtbase.dll` as the app-local
+`ucrt.dll` the driver imports. Matching host architectures use `%SystemRoot%\System32`;
+cross-arch builds use the highest Windows SDK `Redist\<version>\ucrt\DLLs\<target arch>`
+containing `ucrtbase.dll`. The SDK root is `WindowsSdkDir`, then
+`%ProgramFiles(x86)%\Windows Kits\10`, then `C:\Program Files (x86)\Windows Kits\10`.
+A missing target DLL fails the build, and verification rejects Win32 caches without
+`ucrt.dll` (see #253 and #255). Install the Rust target for the build machine first
 (for Apple Silicon: `rustup target add aarch64-apple-darwin --toolchain 1.99.0`).
 Use Rust 1.99.0 in PATH. The normal build and dev entry points also prepare this
 resource; the application itself never downloads a driver or browser.

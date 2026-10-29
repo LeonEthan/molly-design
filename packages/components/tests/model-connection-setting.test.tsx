@@ -8,6 +8,7 @@ import {
   ModelConnectionSetting,
   applyProviderChoice,
 } from '../src/components/settings/model-connection-setting';
+import { PROVIDER_PRESET_DEFAULT_BASE_URLS } from '@molly/shared/embedded-harness';
 import type {
   CheckModelConnection,
   BeginOpenAiAuth,
@@ -17,6 +18,7 @@ import type {
   DiscoverModelConnectionResult,
   HarnessModelCatalog,
   ModelConnection,
+  ProviderPresetId,
   SaveModelConnection,
 } from '@molly/shared/embedded-harness';
 import { CONNECTION_CHECK_DELAY_MS } from '../src/components/settings/connection-check';
@@ -100,8 +102,8 @@ async function pickDiscovered(text: string) {
 }
 
 async function openMoreOptions() {
-  const trigger = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => button.textContent === en['settings.models.moreOptions']
+  const trigger = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+    button.textContent?.startsWith(en['settings.models.moreOptions'])
   )!;
   expect(trigger.getAttribute('aria-expanded')).toBe('false');
   await act(async () => trigger.click());
@@ -259,7 +261,7 @@ describe('encrypted model connection form', () => {
     expect(host.textContent).toContain(zh['settings.models.customModelsInvalid']);
   });
 
-  it('labels Kimi Code separately and preserves the saved secret by omission', async () => {
+  it('keeps saved native values unchanged until edited, then preserves the secret by omission', async () => {
     const writes: SaveModelConnection[] = [];
     await render(
       async (input) => {
@@ -269,12 +271,28 @@ describe('encrypted model connection form', () => {
     );
     expect(host.textContent).toContain(en['settings.models.kimiCode']);
     expect(host.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('');
+    expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
     await act(async () => {
       host
         .querySelector('form')!
         .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
-    expect(writes[0]).toMatchObject({ providerPresetId: 'kimi-coding' });
+    expect(writes).toEqual([]);
+    await openMoreOptions();
+    expect(host.querySelector<HTMLInputElement>('input[id$="-name"]')!.value).toBe(
+      stored.displayName
+    );
+    await change(host.querySelector<HTMLInputElement>('input[id$="-name"]')!, 'Kimi renamed');
+    await act(async () => {
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(writes[0]).toMatchObject({
+      providerPresetId: 'kimi-coding',
+      displayName: 'Kimi renamed',
+      expectedRevision: stored.revision,
+    });
     expect(writes[0].apiKey).toBeUndefined();
   });
 
@@ -390,7 +408,14 @@ describe('encrypted model connection form', () => {
       groups.indexOf(en['settings.models.groups.apiKey'])
     );
     expect(groups).toContain(en['settings.models.groups.other']);
-    expect(groups).not.toContain(en['settings.models.kimiCode']);
+    const group = (title: string) =>
+      [...host.querySelectorAll('p')].find((node) => node.textContent === title)?.parentElement;
+    expect(group(en['settings.models.groups.signIn'])?.textContent).toContain(
+      en['settings.models.kimiCodePlan']
+    );
+    expect(group(en['settings.models.groups.apiKey'])?.textContent).toContain(
+      en['settings.models.kimiCode']
+    );
     expect(en['settings.models.compatible']).toBe('Custom');
     const tile = (label: string) =>
       [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((node) =>
@@ -406,6 +431,81 @@ describe('encrypted model connection form', () => {
     await act(async () => tile('Custom')!.click());
     expect(host.querySelector('input[id$="-endpoint"]')).not.toBeNull();
     expect(host.textContent).toContain(en['settings.models.optional']);
+  });
+
+  it('connects Kimi Code from the API key group without entering the sign-in flow', async () => {
+    const writes: SaveModelConnection[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          onSave: async (input) => void writes.push(input),
+          onOpenAiAuth: {
+            begin: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+            complete: async () => ({ ok: false as const, reason: 'cancelled' as const }),
+            cancel: async () => undefined,
+            signOut: async () => undefined,
+          },
+        })
+      )
+    );
+    const keyTile = [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((node) =>
+      node.textContent?.endsWith(en['settings.models.kimiCode'])
+    )!;
+    await act(async () => keyTile.click());
+    expect(host.textContent).not.toContain('Sign in with Kimi Code');
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'SYNTHETIC_KEY');
+    await pickDiscovered(en['settings.models.connect']);
+    expect(writes[0]).toMatchObject({
+      providerPresetId: 'kimi-coding',
+      baseUrl: 'https://api.kimi.com/coding/v1',
+      displayName: 'Kimi Code (membership API key)',
+      apiKey: 'SYNTHETIC_KEY',
+    });
+    expect(writes[0]).not.toHaveProperty('models');
+  });
+
+  it.each(Object.entries(PROVIDER_PRESET_DEFAULT_BASE_URLS))(
+    'saves a new %s connection with only its key and preset endpoint',
+    async (preset, baseUrl) => {
+      const writes: SaveModelConnection[] = [];
+      await act(async () =>
+        root.render(
+          createElement(ModelConnectionForm, {
+            initialProvider: preset as ProviderPresetId,
+            onSave: async (input) => void writes.push(input),
+          })
+        )
+      );
+      expect(host.querySelector('input[id$="-endpoint"]')).toBeNull();
+      await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'SYNTHETIC_KEY');
+      await pickDiscovered(en['settings.models.connect']);
+      expect(writes[0]).toMatchObject({ providerPresetId: preset, baseUrl });
+      expect(writes[0]).not.toHaveProperty('models');
+    }
+  );
+
+  it('summarizes the default and custom endpoints beside Advanced', async () => {
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'kimi-coding',
+          onSave: async () => undefined,
+        })
+      )
+    );
+    const trigger = () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+        button.textContent?.startsWith(en['settings.models.moreOptions'])
+      )!;
+    expect(trigger().textContent).toContain('api.kimi.com/coding/v1');
+    expect(trigger().textContent).toContain(en['settings.models.summary.all']);
+    await openMoreOptions();
+    await pickDiscovered(en['settings.models.useCustomEndpoint']);
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://proxy.invalid/coding/v1'
+    );
+    expect(trigger().textContent).toContain('proxy.invalid/coding/v1');
   });
 
   it('asks for the key once a provider tile is picked and suggests its address', async () => {
@@ -435,7 +535,7 @@ describe('encrypted model connection form', () => {
     await change(host.querySelector<HTMLInputElement>('input[id$="-name"]')!, 'Studio');
     await act(async () =>
       [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent === en['settings.models.moreOptions'])!
+        .find((button) => button.textContent?.startsWith(en['settings.models.moreOptions']))!
         .click()
     );
     expect(host.querySelector('input[id$="-name"]')).toBeNull();
@@ -461,6 +561,8 @@ describe('encrypted model connection form', () => {
     await render(async (input) => {
       writes.push(input);
     }, stored);
+    await openMoreOptions();
+    await change(host.querySelector<HTMLInputElement>('input[id$="-name"]')!, 'Synthetic renamed');
     await act(async () => {
       host
         .querySelector('form')!
@@ -471,7 +573,7 @@ describe('encrypted model connection form', () => {
         id: stored.id,
         expectedRevision: 3,
         providerPresetId: 'openai',
-        displayName: 'Synthetic',
+        displayName: 'Synthetic renamed',
         baseUrl: stored.baseUrl,
         enabled: true,
       },
@@ -834,9 +936,14 @@ describe('free key check and model choice', () => {
     await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'SYNTHETIC_KEY');
     await settle();
     expect(host.querySelector('[role=alert]')).toBeNull();
+    await submit();
+    expect(writes[0]).not.toHaveProperty('models');
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'SYNTHETIC_KEY');
+    await settle();
     await openMoreOptions();
     expect(radio('All 4').getAttribute('aria-checked')).toBe('true');
     await act(async () => radio(en['settings.models.picker.choose']).click());
+    expect(host.textContent).toContain(en['settings.models.picker.notListed']);
     const boxes = [...host.querySelectorAll<HTMLButtonElement>('button[role="checkbox"]')];
     expect(boxes).toHaveLength(4);
     expect(boxes.map((box) => box.getAttribute('aria-checked'))).toEqual([
@@ -846,10 +953,52 @@ describe('free key check and model choice', () => {
       'true',
     ]);
     await submit();
-    expect(writes[0]).toMatchObject({
+    expect(writes[1]).toMatchObject({
       providerPresetId: 'kimi-coding',
       models: ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'],
     });
+  });
+
+  it('allows saving a new connection after the provider rejects its key', async () => {
+    const writes: SaveModelConnection[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'kimi-coding',
+          onSave: async (input) => void writes.push(input),
+          onCheck: async () => ({ ok: false, reason: 'key_rejected', status: 401 }),
+        })
+      )
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'SYNTHETIC_KEY');
+    await settle();
+    expect(host.textContent).toContain('The provider rejected this key (401).');
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
+    await submit();
+    expect(writes[0]).toMatchObject({ providerPresetId: 'kimi-coding' });
+  });
+
+  it('shows an unreachable failure and carries its badge to the saved row', async () => {
+    const saved: ModelConnection = {
+      ...stored,
+      providerPresetId: 'kimi-coding',
+      displayName: en['settings.models.kimiCode'],
+      baseUrl: 'https://api.kimi.com/coding/v1',
+    };
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [] });
+    connectionIpc.check.mockResolvedValue({ ok: false, reason: 'unreachable' });
+    connectionIpc.save.mockResolvedValue(saved);
+    await act(async () => root.render(createElement(ModelConnectionSetting, { variant: 'panel' })));
+    await pickDiscovered(en['settings.models.kimiCode']);
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'SYNTHETIC_KEY');
+    await settle();
+    expect(host.textContent).toContain(
+      en['settings.check.failures.unreachable'].replace('{{host}}', 'api.kimi.com')
+    );
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
+    await submit();
+    expect(host.textContent).toContain(en['settings.check.badge.unreachable']);
+    expect(host.querySelector('form')).toBeNull();
   });
 
   it('checks a saved key only against the provider and address it was saved for', async () => {
@@ -879,7 +1028,7 @@ describe('free key check and model choice', () => {
       },
     ]);
     expect(host.textContent).toContain('The provider rejected this key (401).');
-    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
     await change(
       host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
       'https://x.invalid/v1'

@@ -63,7 +63,8 @@ Preserve historical catalog fields when editing unrelated values.
   status strip (the cards report state; Pinterest is a website account). Preserve old config/setup rows without mounting login, installation,
   retry, refresh, editing or automatic migration. Device management retains monitoring
   independently.
-- Image forms validate the endpoint contract before Save or check.
+- Image forms prefill only new drafts, preserve custom addresses on protocol switches, and require
+  an explicit model. They validate the endpoint contract before Save or check.
   A typed key follows its saved protocol and the address committed on blur.
   Private IP HTTP is image-only; explain unencrypted transport. Invalid endpoints show
   field errors, not storage failures.

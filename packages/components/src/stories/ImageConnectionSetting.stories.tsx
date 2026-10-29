@@ -98,6 +98,23 @@ export const CheckListedModels: Story = {
   },
 };
 
+export const PresetModelNotListed: Story = {
+  args: {
+    stored: storedConnection(),
+    checkResult: { ok: true, models: ['gpt-image-1', 'dall-e-3'] },
+  },
+};
+
+export const CustomEndpoint: Story = {
+  args: {
+    stored: storedConnection({
+      baseUrl: 'https://images.example-gateway.com/v1',
+      model: 'flux-pro',
+    }),
+    checkResult: { ok: true, models: ['flux-pro', 'flux-dev', 'sdxl'] },
+  },
+};
+
 /** The upstream refused the credential. */
 export const CheckRejected: Story = {
   args: {

@@ -32,7 +32,16 @@ const meta = {
 } satisfies Meta<typeof ModelConnectionForm>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Empty: Story = {};
+export const Empty: Story = {
+  args: {
+    onOpenAiAuth: {
+      begin: async () => ({ ok: false, reason: 'unavailable' }),
+      complete: async () => ({ ok: false, reason: 'cancelled' }),
+      cancel: async () => undefined,
+      signOut: async () => undefined,
+    },
+  },
+};
 export const StoredSecret: Story = {
   args: {
     stored: {
@@ -58,6 +67,12 @@ export const KimiCode: Story = {
       providerPresetId: 'kimi-coding',
       baseUrl: 'https://api.kimi.com/coding/v1',
     },
+  },
+};
+export const KimiCodeKeyOnly: Story = {
+  args: {
+    initialProvider: 'kimi-coding',
+    onCheck: async () => ({ ok: true, models: ['k3'] }),
   },
 };
 export const KimiCodeMisconfigured: Story = {

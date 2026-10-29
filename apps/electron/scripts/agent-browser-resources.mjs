@@ -18,18 +18,12 @@ const LICENSES = [
 ]
 const patchSha256 = () => sha256(fs.readFileSync(path.join(native, 'embedded.patch')))
 const WINDOWS_UCRT = 'ucrt.dll'
-// The Rust win32 driver links the UCRT umbrella import (`ucrt.dll`), which is
-// not an OS file: it ships with the Windows SDK / Visual Studio. On machines
-// with neither, the loader fails the binary with STATUS_DLL_NOT_FOUND
-// (0xC0000135) before any code runs. Deploy the system's own ucrtbase.dll
-// renamed as the app-local ucrt.dll — Microsoft's documented app-local UCRT
-// deployment — whose export surface is identical. The DLL is
-// architecture-specific, so it is only staged when the target matches the
-// build host's architecture. See #253.
-const stageAppLocalUcrt = (platform, arch) => platform === 'win32' && arch === process.arch
-const expectedFiles = (platform, arch) => [
+// The win32 driver imports ucrt.dll; bundle target-arch ucrtbase.dll under that
+// name to avoid STATUS_DLL_NOT_FOUND. Use System32 for native builds and the
+// Windows SDK redistributable for cross-arch builds. See #253 and #255.
+const expectedFiles = (platform) => [
   platform === 'win32' ? 'agent-browser.exe' : 'agent-browser',
-  ...(stageAppLocalUcrt(platform, arch) ? [WINDOWS_UCRT] : []),
+  ...(platform === 'win32' ? [WINDOWS_UCRT] : []),
   ...LICENSES
 ]
 const TARGETS = {
@@ -52,6 +46,38 @@ export const agentBrowserCacheInputs = {
   ]
 }
 
+export function resolveWindowsUcrt({
+  arch,
+  hostArch = process.arch,
+  env = process.env,
+  exists = fs.existsSync,
+  readdir = fs.readdirSync
+}) {
+  if (arch === hostArch) {
+    const location = path.win32.join(env.SystemRoot ?? 'C:\\Windows', 'System32', 'ucrtbase.dll')
+    if (exists(location)) return location
+    throw new Error(
+      `Copy a ${arch} ucrtbase.dll from ${location} as ${WINDOWS_UCRT} into resources/agent-browser/ to package the win32 driver.`
+    )
+  }
+  const sdkRoot =
+    env.WindowsSdkDir ??
+    path.win32.join(env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Windows Kits', '10')
+  const redist = path.win32.join(sdkRoot, 'Redist')
+  const versions = exists(redist)
+    ? readdir(redist)
+        .filter((version) => /^\d+(?:\.\d+)*$/.test(version))
+        .sort((left, right) => right.localeCompare(left, 'en', { numeric: true }))
+    : []
+  for (const version of versions) {
+    const location = path.win32.join(redist, version, 'ucrt', 'DLLs', arch, 'ucrtbase.dll')
+    if (exists(location)) return location
+  }
+  throw new Error(
+    `Cannot find ${arch} ucrtbase.dll at ${path.win32.join(redist, '<version>', 'ucrt', 'DLLs', arch, 'ucrtbase.dll')}. Install the Windows SDK redistributable UCRT to package the win32 driver.`
+  )
+}
+
 export function verifyAgentBrowser(directory, target = {}) {
   const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8'))
   if (
@@ -69,7 +95,7 @@ export function verifyAgentBrowser(directory, target = {}) {
     manifest.target !== TARGETS[`${manifest.platform}-${manifest.arch}`]
   )
     throw new Error('agent-browser target mismatch')
-  const expected = expectedFiles(manifest.platform, manifest.arch)
+  const expected = expectedFiles(manifest.platform)
   if (
     !Array.isArray(manifest.files) ||
     manifest.files.length !== expected.length ||
@@ -175,18 +201,11 @@ export async function buildAgentBrowser({ platform = process.platform, arch = pr
     path.join(agentBrowserResources, binary)
   )
   fs.chmodSync(path.join(agentBrowserResources, binary), 0o755)
-  if (stageAppLocalUcrt(platform, arch)) {
-    const systemRoot = process.env.SystemRoot ?? 'C:\\Windows'
-    const ucrtSource = path.join(systemRoot, 'System32', 'ucrtbase.dll')
-    if (!fs.existsSync(ucrtSource))
-      throw new Error(
-        `Copy a ${arch} ucrtbase.dll as ${WINDOWS_UCRT} into resources/agent-browser/ to package the win32 driver.`
-      )
-    fs.copyFileSync(ucrtSource, path.join(agentBrowserResources, WINDOWS_UCRT))
-  }
+  if (platform === 'win32')
+    fs.copyFileSync(resolveWindowsUcrt({ arch }), path.join(agentBrowserResources, WINDOWS_UCRT))
   for (const name of LICENSES)
     fs.copyFileSync(path.join(native, name), path.join(agentBrowserResources, name))
-  const files = expectedFiles(platform, arch).map((file) => ({
+  const files = expectedFiles(platform).map((file) => ({
     path: file,
     sha256: sha256(fs.readFileSync(path.join(agentBrowserResources, file)))
   }))

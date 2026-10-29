@@ -6,7 +6,11 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { agentBrowserCacheInputs, verifyAgentBrowser } from './agent-browser-resources.mjs'
+import {
+  agentBrowserCacheInputs,
+  resolveWindowsUcrt,
+  verifyAgentBrowser
+} from './agent-browser-resources.mjs'
 import {
   browserCookieReaderCacheInputs,
   verifyBrowserCookieReader
@@ -125,6 +129,129 @@ void test('real cache keys cover source manifest, patch, licenses and build scri
   }
 })
 
+for (const [hostArch, arch] of [
+  ['x64', 'arm64'],
+  ['arm64', 'x64']
+])
+  void test(`${hostArch} host resolves the SDK UCRT for ${arch} target`, () => {
+    const redist = 'D:\\SDK\\Redist'
+    const expected = `${redist}\\10.0.26100.0\\ucrt\\DLLs\\${arch}\\ucrtbase.dll`
+    assert.equal(
+      resolveWindowsUcrt({
+        arch,
+        hostArch,
+        env: { WindowsSdkDir: 'D:\\SDK\\', 'ProgramFiles(x86)': 'E:\\Programs' },
+        exists: (location) => location === redist || location === expected,
+        readdir: (location) => {
+          assert.equal(location, redist)
+          return ['10.0.26100.0']
+        }
+      }),
+      expected
+    )
+  })
+
+for (const arch of ['x64', 'arm64'])
+  void test(`${arch} native builds keep using System32 UCRT`, () => {
+    for (const env of [{}, { SystemRoot: 'D:\\Windows' }]) {
+      const expected = `${env.SystemRoot ?? 'C:\\Windows'}\\System32\\ucrtbase.dll`
+      assert.equal(
+        resolveWindowsUcrt({
+          arch,
+          hostArch: arch,
+          env,
+          exists: (location) => location === expected,
+          readdir: () => assert.fail('Native builds must not inspect the SDK')
+        }),
+        expected
+      )
+    }
+  })
+
+void test('SDK root falls back to ProgramFiles(x86), then the default Windows Kits path', () => {
+  for (const [env, redist] of [
+    [{ 'ProgramFiles(x86)': 'E:\\Programs' }, 'E:\\Programs\\Windows Kits\\10\\Redist'],
+    [{}, 'C:\\Program Files (x86)\\Windows Kits\\10\\Redist']
+  ]) {
+    const expected = `${redist}\\10.0.26100.0\\ucrt\\DLLs\\arm64\\ucrtbase.dll`
+    assert.equal(
+      resolveWindowsUcrt({
+        arch: 'arm64',
+        hostArch: 'x64',
+        env,
+        exists: (location) => location === redist || location === expected,
+        readdir: (location) => {
+          assert.equal(location, redist)
+          return ['10.0.26100.0']
+        }
+      }),
+      expected
+    )
+  }
+})
+
+void test('SDK UCRT uses the highest numeric version containing the target DLL', () => {
+  const redist = 'D:\\SDK\\Redist'
+  const expected = `${redist}\\10.0.26100.0\\ucrt\\DLLs\\arm64\\ucrtbase.dll`
+  const files = new Set([
+    redist,
+    expected,
+    `${redist}\\10.0.9999.0\\ucrt\\DLLs\\arm64\\ucrtbase.dll`,
+    `${redist}\\10.0.30000.0\\ucrt\\DLLs\\x64\\ucrtbase.dll`
+  ])
+  assert.equal(
+    resolveWindowsUcrt({
+      arch: 'arm64',
+      hostArch: 'x64',
+      env: { WindowsSdkDir: 'D:\\SDK' },
+      exists: (location) => files.has(location),
+      readdir: () => ['10.0.9999.0', '10.0.30000.0', '10.0.26100.0', 'not-a-version']
+    }),
+    expected
+  )
+})
+
+void test('missing SDK UCRT names the target architecture and expected path', () => {
+  const redist = 'D:\\SDK\\Redist'
+  for (const entries of [undefined, [], ['10.0.26100.0']])
+    assert.throws(
+      () =>
+        resolveWindowsUcrt({
+          arch: 'arm64',
+          hostArch: 'x64',
+          env: { WindowsSdkDir: 'D:\\SDK' },
+          exists: (location) => location === redist && entries !== undefined,
+          readdir: () => {
+            assert.ok(entries)
+            return entries
+          }
+        }),
+      (error) => {
+        assert.match(error.message, /Cannot find arm64 ucrtbase\.dll/)
+        assert.ok(error.message.includes(`${redist}\\<version>\\ucrt\\DLLs\\arm64\\ucrtbase.dll`))
+        return true
+      }
+    )
+})
+
+void test('missing native UCRT names the System32 source path', () => {
+  assert.throws(
+    () =>
+      resolveWindowsUcrt({
+        arch: 'x64',
+        hostArch: 'x64',
+        env: {},
+        exists: () => false,
+        readdir: () => assert.fail('Native builds must not inspect the SDK')
+      }),
+    (error) => {
+      assert.match(error.message, /Copy a x64 ucrtbase\.dll/)
+      assert.ok(error.message.includes('C:\\Windows\\System32\\ucrtbase.dll'))
+      return true
+    }
+  )
+})
+
 const RESOURCES = [
   {
     name: 'agent-browser',
@@ -140,8 +267,8 @@ const RESOURCES = [
   }
 ]
 
-function writeManifest(directory, resource, manifest) {
-  const files = [resource.binary, ...resource.licenses].map((file) => ({
+function writeManifest(directory, resource, manifest, extraFiles = []) {
+  const files = [resource.binary, ...resource.licenses, ...extraFiles].map((file) => ({
     path: file,
     sha256: sha256(fs.readFileSync(path.join(directory, file)))
   }))
@@ -151,7 +278,11 @@ function writeManifest(directory, resource, manifest) {
   )
 }
 
-function stageRestoredResource(t, resource) {
+function stageRestoredResource(
+  t,
+  resource,
+  target = { platform: 'darwin', arch: 'arm64', target: 'aarch64-apple-darwin' }
+) {
   const parent = temporaryDirectory(t)
   const directory = path.join(parent, resource.name)
   const marker = path.join(parent, 'executed')
@@ -165,14 +296,28 @@ function stageRestoredResource(t, resource) {
     fs.copyFileSync(path.join(native, license), path.join(directory, license))
   const manifest = {
     ...source,
-    platform: 'darwin',
-    arch: 'arm64',
-    target: 'aarch64-apple-darwin',
+    ...target,
     patchSha256: sha256(fs.readFileSync(path.join(native, 'embedded.patch')))
   }
   writeManifest(directory, resource, manifest)
   return { directory, marker, manifest }
 }
+
+void test('win32 manifests require ucrt.dll for every target architecture', (t) => {
+  const resource = { ...RESOURCES[0], binary: 'agent-browser.exe' }
+  for (const arch of ['x64', 'arm64']) {
+    const target = {
+      platform: 'win32',
+      arch,
+      target: agentBrowserCacheInputs.targets[`win32-${arch}`]
+    }
+    const { directory, manifest } = stageRestoredResource(t, resource, target)
+    assert.throws(() => verifyAgentBrowser(directory, target), /Invalid agent-browser file list/)
+    fs.writeFileSync(path.join(directory, 'ucrt.dll'), `synthetic ${arch} UCRT`)
+    writeManifest(directory, resource, manifest, ['ucrt.dll'])
+    assert.equal(verifyAgentBrowser(directory, target).arch, arch)
+  }
+})
 
 const DAMAGE = {
   missing: ({ directory }) => fs.rmSync(directory, { recursive: true }),

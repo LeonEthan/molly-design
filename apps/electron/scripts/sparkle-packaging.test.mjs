@@ -78,9 +78,10 @@ void test('pins the Sparkle signing Action and scopes release credentials to tru
   assert.doesNotMatch(signingStep, /APPLE_API_KEY|CSC_LINK|CSC_KEY_PASSWORD/u)
 })
 
-void test('publishes only the first-release architecture with the resolved package version', () => {
+void test('packages macOS arm64 and experimental Windows x64 with the resolved package version', () => {
   assert.match(releaseWorkflow, /package_args: '--mac --arm64'/u)
-  assert.doesNotMatch(releaseWorkflow, /package_args:.*(?:--x64|--win|--linux)/u)
+  assert.match(releaseWorkflow, /package_args: '--win nsis --x64'/u)
+  assert.doesNotMatch(releaseWorkflow, /package_args:.*(?:--mac.*--x64|--linux)/u)
   const resolveStep = releaseWorkflowStep('Resolve release version')
   assert.match(resolveStep, /echo "version=\$\{version\}" >> "\$GITHUB_OUTPUT"/u)
   assert.match(releaseWorkflow, /version: \$\{\{ steps\.version\.outputs\.version \}\}/u)

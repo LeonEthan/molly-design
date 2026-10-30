@@ -102,8 +102,11 @@ launch Molly's full desktop or call a model.
 
 Run these commands from `apps/electron`. They use the local renderer and embedded
 service. Packaging defaults to no publication; explicitly supplied signing
-credentials determine signed/notarized versus ad-hoc output. Official release CI
-targets macOS arm64 only; Intel macOS and Windows remain experimental.
+credentials determine signed/notarized versus ad-hoc output. Release CI packages
+signed macOS arm64 plus an unsigned experimental Windows x64 NSIS installer with
+the stable alias `MollyDesign-x64-setup.exe`. No Windows auto-update feed
+(`latest.yml`/`latest*.yml`) is published. Windows remains outside the Spec's
+supported/accepted scope; Intel macOS remains experimental.
 Linux desktop packaging, updates and desktop-file integration are retired. Ubuntu
 CI runners and cross-platform Bento resource checks remain infrastructure checks.
 

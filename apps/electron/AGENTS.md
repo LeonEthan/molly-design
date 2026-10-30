@@ -88,9 +88,8 @@ and native source outside the package. See [driver build](native/agent-browser/R
   never `electron-builder` directly. It injects the released version via
   `extraMetadata` so `package.json` is a fallback rather than the release source of
   truth, and it forces `--publish never` unless a caller opts in.
-- Windows electron-updater still uses the `publish` block: Vite strips every
-  `VITE_*` value, so `AppUpdaterService` falls back to packaged `app-update.yml` and
-  `latest*.yml`. Tag contract is `v${version}`.
+- Windows packaging retains `publish` and `app-update.yml`; the runtime updater
+  remains macOS arm64-only. Tag contract is `v${version}`.
 - macOS uses Sparkle (`electron-sparkle-updater`): `SUFeedURL` + `SUPublicEDKey` in
   Info.plist, `package-electron.mjs` rebuilds the native addon, afterPack injects
   `SPARKLE_ED_PUBLIC_KEY` before signing. The release workflow then runs
@@ -115,10 +114,10 @@ and native source outside the package. See [driver build](native/agent-browser/R
 - macOS releases must be signed and notarized. `generate_appcast` refuses archives
   that fail `codesign --verify --deep --strict`, and Gatekeeper needs a notarized
   first-install DMG. Windows does not have this constraint.
-- Official release CI packages macOS arm64 only. Intel macOS and Windows
-  commands remain experimental local builds; widening release scope needs native
-  acceptance evidence. Linux desktop packaging and integration are retired;
-  Linux CI runners and platform-neutral resource probes remain.
+- Release CI packages signed macOS arm64 plus unsigned experimental Windows x64 NSIS
+  (`MollyDesign-x64-setup.exe` alias), without publishing a Windows `latest*.yml`
+  update feed. Windows is outside the Spec's supported/accepted scope; Intel macOS
+  is experimental. Linux desktop is retired; Linux CI and resource probes remain.
 
 ## Verification
 

@@ -1,7 +1,7 @@
 name: Release Electron
 
-# Official first-release scope: macOS Apple Silicon only.
-# Other platform build commands remain experimental local tooling.
+# macOS Apple Silicon is the supported signed release; Windows x64 ships an
+# unsigned experimental NSIS installer without auto-update.
 # The resolved version is shared by packaging and publication; macOS requires
 # Developer ID signing, notarization and the Molly Sparkle signing identity.
 
@@ -16,7 +16,7 @@ on:
         required: false
         type: string
       publish:
-        description: 'Create/update the GitHub Release with the built artifacts'
+        description: 'Publish the GitHub Release; false (default) is a dry run: all build legs run and upload workflow artifacts only; no tag, release, or release upload'
         required: false
         default: false
         type: boolean
@@ -43,6 +43,10 @@ jobs:
           - os: macos-latest
             target: mac
             package_args: '--mac --arm64'
+          - os: windows-latest
+            target: win
+            package_args: '--win nsis --x64'
+    continue-on-error: ${{ matrix.target == 'win' }}
     runs-on: ${{ matrix.os }}
     environment: release
     env:
@@ -229,12 +233,22 @@ jobs:
             exit 1
           fi
 
-          versioned_dmg="release-assets/MollyDesign-${MOLLY_OSS_RELEASE_VERSION}-arm64.dmg"
-          if [[ ! -f "${versioned_dmg}" ]]; then
-            echo "Missing versioned arm64 DMG for stable alias: ${versioned_dmg}"
-            exit 1
+          if [[ "${{ matrix.target }}" == "mac" ]]; then
+            versioned_dmg="release-assets/MollyDesign-${MOLLY_OSS_RELEASE_VERSION}-arm64.dmg"
+            if [[ ! -f "${versioned_dmg}" ]]; then
+              echo "Missing versioned arm64 DMG for stable alias: ${versioned_dmg}"
+              exit 1
+            fi
+            cp "${versioned_dmg}" release-assets/MollyDesign-arm64.dmg
+          elif [[ "${{ matrix.target }}" == "win" ]]; then
+            rm -f release-assets/latest*.yml
+            versioned_installer="release-assets/MollyDesign-${MOLLY_OSS_RELEASE_VERSION}-x64-setup.exe"
+            if [[ ! -f "${versioned_installer}" ]]; then
+              echo "Missing versioned x64 NSIS installer for stable alias: ${versioned_installer}"
+              exit 1
+            fi
+            cp "${versioned_installer}" release-assets/MollyDesign-x64-setup.exe
           fi
-          cp "${versioned_dmg}" release-assets/MollyDesign-arm64.dmg
 
           ls -la release-assets
 
@@ -247,7 +261,7 @@ jobs:
 
   publish:
     needs: build
-    if: github.event_name == 'push' || inputs.publish
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -269,6 +283,18 @@ jobs:
         run: |
           set -euo pipefail
 
+          for asset in "MollyDesign-${RELEASE_VERSION}-arm64.dmg" MollyDesign-arm64.dmg appcast.xml; do
+            if [[ ! -f "release-assets/${asset}" ]]; then
+              echo "Missing required macOS release asset: ${asset}"
+              exit 1
+            fi
+          done
+          for asset in "MollyDesign-${RELEASE_VERSION}-x64-setup.exe" MollyDesign-x64-setup.exe; do
+            if [[ ! -f "release-assets/${asset}" ]]; then
+              echo "::warning::Missing experimental Windows release asset: ${asset}"
+            fi
+          done
+
           tag="v${RELEASE_VERSION}"
           (cd release-assets && sha256sum * > SHA256SUMS.txt)
 
@@ -281,6 +307,6 @@ jobs:
             gh release upload "${tag}" release-assets/* --clobber
           else
             gh release create "${tag}" release-assets/* \
-              --title "Molly ${tag#v} — macOS Apple Silicon" \
+              --title "Molly ${tag#v}" \
               --generate-notes
           fi

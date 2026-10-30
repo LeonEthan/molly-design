@@ -174,7 +174,7 @@ A chat tool usually returns one flat image. Molly gives you a layered file you c
 Sizes are in pixels, including A-series and US Letter presets. There is no bleed or millimetre unit yet, so screen and social work fit best.
 
 **Which platforms are supported?**
-The public release is for macOS on Apple Silicon. Windows and Intel Mac builds exist in the codebase but are experimental and not supported yet. Linux desktop support is retired.
+The public release is for macOS on Apple Silicon. An unsigned experimental Windows x64 installer is attached to each release; Windows SmartScreen will warn on install (**More info → Run anyway**). Windows and Intel Mac builds remain experimental and unsupported. Linux desktop support is retired.
 
 **How do I update?**
 On macOS, Molly checks for new releases in the app and can update itself (Sparkle). You can also download the latest DMG from [Releases](https://github.com/LeonEthan/molly-design/releases/latest) at any time.

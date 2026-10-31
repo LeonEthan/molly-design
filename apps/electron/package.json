@@ -3,7 +3,7 @@
   "productName": "Molly",
   "private": true,
   "license": "FSL-1.1-ALv2",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Molly — local desktop canvas for Agent-assisted graphic design",
   "main": "./out/main/index.js",
   "author": "Molly contributors",

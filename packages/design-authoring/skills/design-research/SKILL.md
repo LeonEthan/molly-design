@@ -167,6 +167,12 @@ and check the reproduction against them in the render-and-read pass.
 - **Every motif has a reason.** A signature device (a reflection, a floating
   product, a shelf arrangement, a gradient backdrop) must connect to the subject
   or message, not appear because it is popular.
+- **Physically plausible.** Shadows fall away from the key light with matching
+  softness; objects sit on their surfaces with a contact shadow; each object has
+  one shadow, none left behind where it used to be and none cut off by the
+  canvas edge; scale and perspective agree. After you move, resize, regenerate
+  or restyle an object, check its shadow against its new pose, size and the
+  scene's light, and recast it instead of keeping one that no longer fits.
 
 Do not apply the golden ratio or rule of thirds as composition rules; place
 things by hierarchy, content and space.

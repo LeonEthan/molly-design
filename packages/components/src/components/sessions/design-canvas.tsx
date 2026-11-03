@@ -799,7 +799,7 @@ export function DesignCanvas({
     ({
       'remove-background': t(
         'design.presetRemoveBackgroundPrompt',
-        "Remove the background of the selected image: edit it into a transparent PNG that keeps only the subject, then replace only that image's asset. Preserve the rest of the artwork."
+        "Remove the background of the selected image: edit it into a transparent PNG that keeps only the subject and its cast and contact shadows, then replace only that image's asset. Preserve the rest of the artwork."
       ),
       'replace-object': t(
         'design.presetReplaceObjectPrompt',

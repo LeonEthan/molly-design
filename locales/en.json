@@ -2956,7 +2956,7 @@
   "design.presetSplitLayers": "Split into layers",
   "design.presetShorten": "Shorten",
   "design.presetRewrite": "Rewrite",
-  "design.presetRemoveBackgroundPrompt": "Remove the background of the selected image: edit it into a transparent PNG that keeps only the subject, then replace only that image's asset. Preserve the rest of the artwork.",
+  "design.presetRemoveBackgroundPrompt": "Remove the background of the selected image: edit it into a transparent PNG that keeps only the subject and its cast and contact shadows, then replace only that image's asset. Preserve the rest of the artwork.",
   "design.presetReplaceObjectPrompt": "In the selected image, replace the object described below, matching the existing lighting and perspective. Use its current image as the source and replace only that image's asset. Preserve the rest of the artwork. Replace:",
   "design.presetRelightPrompt": "Relight the selected image while keeping its content and composition. Use its current image as the source and replace only that image's asset. Preserve the rest of the artwork.",
   "design.presetWordingEditablePrompt": "The selected image shows lettering. Read its exact wording and set that element's textCopy to it without changing the picture, so the wording can be edited from the canvas. If it shows no lettering, say so and change nothing.",

@@ -14,13 +14,15 @@ a failed layer, so re-extract it or report the departure.
    block in the chosen image (the `pack` grid helps), and its colors, type
    weights and alignment.
 2. **Background plate.** `edit` the chosen design with a prompt that removes the
-   foreground objects and every piece of text and fills what they covered, as an
+   foreground objects together with their cast and contact shadows, and every
+   piece of text, and fills what they covered, as an
    opaque image at the canvas size. Ask for every other pixel to stay unchanged,
    light, color, texture and grain included; when the connection accepts a mask,
    mask only the removed regions. Compare the plate with the design outside
    those regions: it should read as the same pixels.
 3. **Objects.** For each object worth editing on its own, `edit` the chosen
-   design to extract that object exactly as it appears — same strokes, colors,
+   design to extract that object together with its cast and contact shadows,
+   exactly as it appears — same strokes, colors,
    texture and proportions, never redrawn or restyled — completing only the
    parts other objects genuinely hide, on a transparent background. Request at
    least the pixel size the element occupies on the canvas; a smaller layer
@@ -35,7 +37,9 @@ a failed layer, so re-extract it or report the departure.
    chosen design and `compare` the extracted layer with it. `compare` needs
    same-size images, so when the layer came back at a different size, read the
    crop and the layer side by side instead. Re-extract a layer that visibly
-   drifts, now rather than after assembly, or report the departure.
+   drifts, now rather than after assembly, or report the departure. A layer
+   should keep the design's framing: the object at its original size and
+   position, and its whole shadow inside the frame.
 6. **Assemble and compare.** Place each layer at its measured position, render,
    and compare the render with the chosen design as described under
    [Comparing native previews](#comparing-native-previews). Fix and re-render
@@ -48,24 +52,32 @@ a failed layer, so re-extract it or report the departure.
 Plan layers by independent editing value: what a person would want to move,
 resize, recolor or replace on its own. A typical poster has an opaque background,
 one main subject, a few secondary objects and effects. Keep together what always
-moves together (an object and its contact shadow) and split what a user would
-adjust separately. Grouping shadows, steam, glow and similar effects is a
-judgment call; note the choice.
+moves together and split what a user would adjust separately. An object's cast
+and contact shadows belong to its layer by default: a shadow left on the plate
+or missing from both is a layer defect. Grouping steam, glow and similar effects
+is a judgment call; note the choice. A transparent or refractive object (glass,
+caustics) often comes back with pale surface or caustic pixels in its shadow;
+when that happens, extract the shadow as its own layer, group it with the
+object through `groupId`, and say so in the report.
 
 Isolate each raster object completely from the chosen design; a crop keeps
 holes where other objects overlapped it. For a foreground object that needs
 transparent isolation, call `molly_image` `edit` with the design as the first
 image and:
 
-- a prompt that names only this element and asks for it exactly as it appears
-  there — same strokes, colors, texture and proportions, never redrawn or
+- a prompt that names only this element and its cast and contact shadows and
+  asks for them exactly as they appear there, at the design's original framing,
+  position and size, with the whole shadow inside the frame and the shadow as
+  dark semi-transparent pixels, never opaque grey, checkerboard or surface
+  texture — same strokes, colors, texture and proportions, never redrawn or
   restyled — completing only the parts other objects genuinely hide, isolated on
   a transparent background, at no fewer pixels than the element occupies on the
   canvas;
 - `background: "transparent"` and `output_format: "png"`.
 
 For the background plate, edit the design into the empty scene with every
-foreground element and all text removed, as an opaque image at the canvas ratio,
+foreground element, its cast and contact shadows, and all text removed, as an
+opaque image at the canvas ratio,
 asking for every other pixel to stay unchanged — light, color, texture and grain
 included. When the connection accepts a mask, mask only the removed regions. Add supplied
 delivery assets or earlier layers as extra `images` when they help the model keep
@@ -87,6 +99,10 @@ reports the crop offset, keeping click targets close to the visible object. Fain
 alpha pixels can keep the bounds large: `alpha --threshold N` shows where more
 solid pixels sit, and `trim --alpha-above N --margin M` keeps only that region plus
 a margin, dropping faint pixels outside it, so check soft effects afterwards.
+
+For a layer that carries a shadow, view it over a dark and a light
+background: the shadow should be dark and cover where it fell in the design,
+with no pale halo, and the object should keep its size and position.
 
 Generated solids can have alpha 253–254 rather than 255 and stay slightly
 see-through when stacked. Judge this in a render.

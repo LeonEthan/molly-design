@@ -1,7 +1,7 @@
 # 生成式分层设计：任务与方案
 
-Status: approved
-Approval: [2026-10-26 layout structure approval](../.github/spec-approvals.md#2026-10-26-layout-structure-from-design-research)
+Status: draft
+Previous approval: [2026-10-26 layout structure approval](../.github/spec-approvals.md#2026-10-26-layout-structure-from-design-research)
 Previous approval: [2026-10-26 inspiration images approval](../.github/spec-approvals.md#2026-10-26-inspiration-images-in-replies-and-layout-generation)
 Previous approval: [2026-10-26 MOSS layout alignment approval](../.github/spec-approvals.md#2026-10-26-moss-image-layout-alignment)
 Previous approval: [2026-10-26 whole-image and layout-first approval](../.github/spec-approvals.md#2026-10-26-whole-image-delivery-and-layout-first-path)
@@ -45,7 +45,7 @@ Translation: current
 - 参考图复刻同样产出完整图层，以参考图代替设计方案；局部修改围绕用户要求展开。
 - 创作检查、原生预览与最终收集应对受支持素材采用一致的准入判断。对已知的内置素材大小、格式、字体加载和渲染错误提供安全且可指导修复的诊断；通用外部错误不能被当作桌面连接失败的证据。在精细排版前，利用首个可渲染草稿检查自定义字体。不增加静默字体转换或替换。
 - 原生审视和最终保存是不同的观察。收集发生在 Agent 自然结束之后，因此 Agent 如实说明已经验证的事项，不等待或预先断言本轮稍后产生的保存回执。部分结果仍可按现有结构、素材与版本规则被收集；视觉限制不是应用保存门禁。不能因外部合成图看起来可接受就把原生审视失败改称成功。
-- 区分交付素材与参考图，按独立编辑价值决定分层粒度。保真、补全、阴影与蒸汽如何分层等开放问题由 Agent 判断，不穷举固定规则，也不增加重绘素材申请流程。Skill 可以推荐源自实际失败的可打破设计默认值（主体比例、边距、字号层级、文案位置及图上文字可读性），并将其作为审视清单，包括每个标志性视觉手法都与主题或信息相关；Agent 可以说明理由后偏离，应用不强制执行任何一项。
+- 区分交付素材与参考图，按独立编辑价值决定分层粒度。物体的投影与接触阴影默认与物体同层，背景底图同时去除二者；透明或折射物体可由 Skill 建议改用与物体编组的独立阴影层。保真、补全、蒸汽与光晕如何分层等开放问题由 Agent 判断，不穷举固定规则，也不增加重绘素材申请流程。Skill 可以推荐源自实际失败的可打破设计默认值（主体比例、边距、字号层级、文案位置、图上文字可读性及阴影与光照的物理合理性），并将其作为审视清单，包括每个标志性视觉手法都与主题或信息相关；Agent 可以说明理由后偏离，应用不强制执行任何一项。
 - 用户在后续回合否定方向时，Agent 先对照方向词判断：方向词仍成立，就重新诠释其视觉表达并说明改变了什么；不再成立，就回到意图理解，用一个问题询问用户不满意之处。
 - 提供并排、叠层、局部差异和明暗底色等对比经验，且须能用随包工具执行：原生渲染加读图，以及下文的 Node 辅助脚本。指引不得依赖 Python 等用户机器上可能缺失的运行时。视觉质量由人判断，不以像素分数替代。
 - **工具错误沿用 Pi 原生行为。** 图片调用失败或结果未知时，作为普通工具错误返回 Agent，由 Agent 决定下一步。应用不为工具错误额外增加停止运行、重试栅栏或自行重试。崩溃或重启后恢复运行时仍不重放已发出的调用；这属于会话恢复，而非工具错误处理。

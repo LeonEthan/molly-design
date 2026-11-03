@@ -2953,7 +2953,7 @@
   "design.presetSplitLayers": "拆分图层",
   "design.presetShorten": "精简",
   "design.presetRewrite": "改写",
-  "design.presetRemoveBackgroundPrompt": "去除所选图片的背景：将其编辑为只保留主体的透明 PNG，然后只替换该图片的素材。保留作品的其他部分。",
+  "design.presetRemoveBackgroundPrompt": "去除所选图片的背景：将其编辑为只保留主体及其投影和接触阴影的透明 PNG，然后只替换该图片的素材。保留作品的其他部分。",
   "design.presetReplaceObjectPrompt": "在所选图片中替换下方描述的物体，并与现有光线和透视保持一致。以其当前图片为原图，只替换该图片的素材。保留作品的其他部分。替换：",
   "design.presetRelightPrompt": "为所选图片重新打光，保持其内容与构图不变。以其当前图片为原图，只替换该图片的素材。保留作品的其他部分。",
   "design.presetWordingEditablePrompt": "所选图片上有艺术字。请读出其确切文字，并将该元素的 textCopy 设为这段文字，不要改动图片，以便在画布上编辑文字。如果图片上没有文字，请说明并保持不变。",

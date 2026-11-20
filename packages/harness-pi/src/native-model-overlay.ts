@@ -8,76 +8,44 @@ import {
   type Model,
   type ModelsStoreEntry,
 } from '@earendil-works/pi-ai';
+import { OpenAICompletionsCompatSchema } from '@earendil-works/pi-ai/providers/compat-schema';
+import {
+  ModelCostSchema,
+  ModelInputLimitsSchema,
+  ModelInputModalitySchema,
+  ModelPromptCacheSchema,
+  ThinkingLevelMapSchema,
+} from '@earendil-works/pi-ai/providers/model-schema';
 import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { PI_ENGINE_VERSION } from '@molly/shared/embedded-harness';
+import { Type } from 'typebox';
+import { Check } from 'typebox/value';
 import { z } from 'zod';
 
 export const NATIVE_OVERLAY_PROVIDER_ID = 'kimi-coding';
 export const NATIVE_OVERLAY_MODEL_ID = 'k3.1-pro';
 export const NATIVE_OVERLAY_RESOURCE = 'native-model-overlay.json';
 
-const NativeTargetModelSchema = z
-  .object({
-    id: z.literal(NATIVE_OVERLAY_MODEL_ID),
-    name: z.string().trim().min(1).max(300),
-    api: z.literal('openai-completions'),
-    provider: z.literal(NATIVE_OVERLAY_PROVIDER_ID),
-    baseUrl: z.literal('https://api.kimi.com/coding/v1'),
-    input: z.tuple([z.literal('text'), z.literal('image')]),
-    inputLimits: z
-      .object({
-        images: z
-          .object({
-            resize: z
-              .object({
-                maxWidth: z.number().int().positive(),
-                maxHeight: z.number().int().positive(),
-                maxBytes: z.number().int().positive(),
-                jpegQuality: z.number().positive().max(100),
-              })
-              .strict(),
-          })
-          .strict(),
-      })
-      .strict(),
-    cost: z
-      .object({
-        input: z.number().nonnegative(),
-        output: z.number().nonnegative(),
-        cacheRead: z.number().nonnegative(),
-        cacheWrite: z.number().nonnegative(),
-      })
-      .strict(),
-    type: z.literal('chat'),
-    reasoning: z.literal(true),
-    thinkingLevelMap: z
-      .object({
-        off: z.null(),
-        minimal: z.null(),
-        low: z.literal('low'),
-        medium: z.null(),
-        high: z.literal('high'),
-        xhigh: z.null(),
-        max: z.literal('max'),
-      })
-      .strict(),
-    contextWindow: z.literal(1_048_576),
-    maxTokens: z.literal(131_072),
-    compat: z
-      .object({
-        supportsStrictMode: z.literal(false),
-        supportsStore: z.literal(false),
-        supportsDeveloperRole: z.literal(false),
-        supportsReasoningEffort: z.literal(true),
-        maxTokensField: z.literal('max_tokens'),
-        thinkingFormat: z.literal('openai'),
-        requiresReasoningContentOnAssistantMessages: z.literal(true),
-        supportsMidConvoSystemMessages: z.literal(true),
-        supportsMidConvoToolAdditions: z.literal(true),
-      })
-      .strict(),
-  })
-  .strict();
+const NativeTargetModelSchema = Type.Object(
+  {
+    id: Type.Literal(NATIVE_OVERLAY_MODEL_ID),
+    name: Type.String({ minLength: 1 }),
+    api: Type.Literal('openai-completions'),
+    provider: Type.Literal(NATIVE_OVERLAY_PROVIDER_ID),
+    baseUrl: Type.Literal('https://api.kimi.com/coding/v1'),
+    input: Type.Array(ModelInputModalitySchema, { minItems: 2, uniqueItems: true }),
+    inputLimits: Type.Optional(ModelInputLimitsSchema),
+    cost: ModelCostSchema,
+    type: Type.Optional(Type.Literal('chat')),
+    reasoning: Type.Literal(true),
+    thinkingLevelMap: Type.Optional(ThinkingLevelMapSchema),
+    promptCache: Type.Optional(ModelPromptCacheSchema),
+    contextWindow: Type.Integer({ minimum: 1 }),
+    maxTokens: Type.Integer({ minimum: 1 }),
+    compat: Type.Optional(OpenAICompletionsCompatSchema),
+  },
+  { additionalProperties: false }
+);
 
 const NativeModelOverlaySchema = z
   .object({
@@ -87,7 +55,11 @@ const NativeModelOverlaySchema = z
     source: z.literal('pi.dev'),
     entry: z
       .object({
-        models: z.array(NativeTargetModelSchema).length(1),
+        models: z
+          .array(
+            z.custom<Model<'openai-completions'>>((model) => Check(NativeTargetModelSchema, model))
+          )
+          .length(1),
         lastModified: z.number().int().positive(),
       })
       .strict(),
@@ -150,7 +122,7 @@ export async function readNativeModelOverlay(
 }
 
 function assertTarget(model: Model<Api> | undefined): void {
-  if (!model || !NativeTargetModelSchema.safeParse(model).success) throw overlayError('invalid');
+  if (!Check(NativeTargetModelSchema, model)) throw overlayError('invalid');
 }
 
 async function createRuntime(
@@ -191,9 +163,7 @@ export async function createNativeModelRuntime(
   return runtime;
 }
 
-export async function verifyNativeModelOverlay(
-  overlay: NativeModelOverlay
-): Promise<NativeModelOverlay> {
+export async function verifyNativeModelOverlay(overlay: unknown): Promise<NativeModelOverlay> {
   const parsed = NativeModelOverlaySchema.parse(overlay);
   const baseline = await createNativeModelRuntime();
   if (baseline.getModel(NATIVE_OVERLAY_PROVIDER_ID, NATIVE_OVERLAY_MODEL_ID))
@@ -203,6 +173,10 @@ export async function verifyNativeModelOverlay(
   const after = restored.getModels(NATIVE_OVERLAY_PROVIDER_ID);
   if (
     after.length !== before.length + 1 ||
+    !isDeepStrictEqual(
+      restored.getModel(NATIVE_OVERLAY_PROVIDER_ID, NATIVE_OVERLAY_MODEL_ID),
+      parsed.entry.models[0]
+    ) ||
     before.some(
       (model) =>
         !isDeepStrictEqual(
@@ -238,7 +212,7 @@ async function refreshNativeEntry(signal?: AbortSignal): Promise<ModelsStoreEntr
 
 export async function resolveNativeModelOverlay(
   options: {
-    fallback?: NativeModelOverlay;
+    readFallback?: () => unknown;
     signal?: AbortSignal;
     refresh?: (signal?: AbortSignal) => Promise<ModelsStoreEntry>;
   } = {}
@@ -253,7 +227,7 @@ export async function resolveNativeModelOverlay(
     const entry = await (options.refresh ?? refreshNativeEntry)(options.signal);
     if (!Number.isInteger(entry.lastModified) || (entry.lastModified ?? 0) <= 0)
       throw overlayError('refresh_failed');
-    const overlay = NativeModelOverlaySchema.parse({
+    const overlay = await verifyNativeModelOverlay({
       version: 1,
       engineVersion: PI_ENGINE_VERSION,
       providerId: NATIVE_OVERLAY_PROVIDER_ID,
@@ -263,12 +237,12 @@ export async function resolveNativeModelOverlay(
         models: entry.models.filter((model) => model.id === NATIVE_OVERLAY_MODEL_ID),
       },
     });
-    return { overlay: await verifyNativeModelOverlay(overlay), source: 'refreshed' };
+    return { overlay, source: 'refreshed' };
   } catch {
     if (options.signal?.aborted) throw overlayError('refresh_aborted');
-    if (!options.fallback) throw overlayError('refresh_failed');
     try {
-      return { overlay: await verifyNativeModelOverlay(options.fallback), source: 'cached' };
+      const overlay = await verifyNativeModelOverlay(options.readFallback?.());
+      return { overlay, source: 'cached' };
     } catch {
       throw overlayError('refresh_failed');
     }

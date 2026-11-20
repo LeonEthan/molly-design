@@ -177,9 +177,15 @@ export async function buildEmbeddedHarness(outputName = 'dist', preservedOverlay
   } catch {
     fallback = undefined;
   }
-  const resolved = await resolveNativeModelOverlay({ fallback });
+  const resolved = await resolveNativeModelOverlay({
+    readFallback: () =>
+      fallback ??
+      JSON.parse(
+        fs.readFileSync(path.join(harnessRoot, 'resources', 'native-model-overlay.json'), 'utf8')
+      ),
+  });
   if (resolved.source === 'cached')
-    console.warn('Pi catalog refresh failed; reusing the verified previous native model overlay');
+    console.warn('Pi catalog refresh failed; using a verified native model overlay');
   if (resolved.overlay)
     fs.writeFileSync(
       path.join(directory, 'native-model-overlay.json'),

@@ -33,7 +33,7 @@ export function syntheticKimiProModel(): NativeModelOverlay['entry']['models'][n
       max: 'max',
     },
     contextWindow: 1_048_576,
-    maxTokens: 131_072,
+    maxTokens: 1_048_576,
     compat: {
       supportsStrictMode: false,
       supportsStore: false,

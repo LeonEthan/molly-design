@@ -95,7 +95,7 @@ Provider preset、用户连接和模型选择分别建模。同厂商多个连�
 
 保留已有原生 presets、高级 OpenAI-compatible 和多连接架构；本次真实服务交付以已配置的 Kimi k3-256k/high 为准，不再扩展逐厂商、地域和模型验收。SDK 保持锁定基线（为使用原生 MCP 和包而采用 v1.0.4，现为 v1.4.0）。Molly 保留未修改的原生 provider 适配器，并通过公开 stream / streamSimple options 禁止 Responses / Gemini 请求跟随重定向；完成、压缩和偏好提取沿用相同策略。Pi 1.4.0 的 Google 依赖定向覆盖为公开版本 2.23.0，以使用其公开 HttpOptions.fetch；Molly 负责兼容性与打包验证，不修改 SDK 或全局 fetch。Google 的真实服务验收仍未完成。支持矩阵区分真实验证、模拟验证、阻塞和未执行；只有真实通过的范围可称为正式支持。目录存在不代表服务可用，无视觉能力的模型不得显示为完成了原生看图评审。
 
-原生模型新增项保持为密封构建资源，而非运行时下载。锁定 SDK 尚未包含 `kimi-coding/k3.1-pro` 时，构建仅通过 Pi 原生机制刷新 Kimi 目录，使用内存合成凭据，只密封该模型的原生 `ModelsStoreEntry`，并校验 endpoint、协议、输入、thinking 与 reasoning 兼容元数据。既有模型不得被覆盖，也不纳入 `k3.1-pro-highspeed`。未来 SDK 已内置目标模型时跳过刷新。刷新失败只能复用同引擎且 checksum 有效的上一版 overlay；否则构建失败，不得静默缺失目标模型。
+原生模型新增项是密封构建资源。锁定 SDK 尚未包含 `kimi-coding/k3.1-pro` 时，构建仅通过 Pi 原生机制使用内存合成凭据刷新 Kimi 目录。构建只密封该模型，并校验其标识、endpoint、协议、文本与图像支持以及推理能力。Token 上限和兼容性设置等元数据沿用 Pi 的原始值。既有模型保持原样，且不纳入 `k3.1-pro-highspeed`。SDK 已内置目标模型时跳过刷新。刷新失败时，构建验证并使用同引擎的上一版构建 overlay，无可用的上一版时使用仓库中的 overlay。备用 overlay 未通过验证时，构建失败。
 
 Overlay 与 UI 目录共用 manifest 和 build ID。UI 生成及每个 worker 都通过内存 `ModelsStore` 恢复同一 overlay，运行时目录联网保持关闭。不新增运行时目录 RPC、设置页刷新动作或用户级缓存，目录刷新不使用用户凭据。连接的模型清单继续收窄可用范围。目录存在及合成执行不证明 K3.1 Pro 的真实账号、OAuth、图像或设计验收；这些证据与既有 k3-256k 旅程分别记录。
 

@@ -26,25 +26,26 @@ export const NATIVE_OVERLAY_PROVIDER_ID = 'kimi-coding';
 export const NATIVE_OVERLAY_MODEL_ID = 'k3.1-pro';
 export const NATIVE_OVERLAY_RESOURCE = 'native-model-overlay.json';
 
-const NativeTargetModelSchema = Type.Object({
-  id: Type.Literal(NATIVE_OVERLAY_MODEL_ID),
-  name: Type.String({ minLength: 1 }),
-  api: Type.Literal('openai-completions'),
-  provider: Type.Literal(NATIVE_OVERLAY_PROVIDER_ID),
-  baseUrl: Type.Literal('https://api.kimi.com/coding/v1'),
-  input: Type.Array(ModelInputModalitySchema, { minItems: 2, uniqueItems: true }),
-  inputLimits: Type.Optional(ModelInputLimitsSchema),
-  cost: ModelCostSchema,
-  type: Type.Optional(Type.Literal('chat')),
-  reasoning: Type.Literal(true),
-  thinkingLevelMap: Type.Optional(ThinkingLevelMapSchema),
-  promptCache: Type.Optional(ModelPromptCacheSchema),
-  contextWindow: Type.Integer({ minimum: 1 }),
-  maxTokens: Type.Integer({ minimum: 1 }),
-  compat: Type.Optional(OpenAICompletionsCompatSchema),
-  headers: Type.Optional(Type.Never()),
-  apiKey: Type.Optional(Type.Never()),
-});
+const NativeTargetModelSchema = Type.Object(
+  {
+    id: Type.Literal(NATIVE_OVERLAY_MODEL_ID),
+    name: Type.String({ minLength: 1 }),
+    api: Type.Literal('openai-completions'),
+    provider: Type.Literal(NATIVE_OVERLAY_PROVIDER_ID),
+    baseUrl: Type.Literal('https://api.kimi.com/coding/v1'),
+    input: Type.Array(ModelInputModalitySchema, { minItems: 2, uniqueItems: true }),
+    inputLimits: Type.Optional(ModelInputLimitsSchema),
+    cost: ModelCostSchema,
+    type: Type.Optional(Type.Literal('chat')),
+    reasoning: Type.Literal(true),
+    thinkingLevelMap: Type.Optional(ThinkingLevelMapSchema),
+    promptCache: Type.Optional(ModelPromptCacheSchema),
+    contextWindow: Type.Integer({ minimum: 1 }),
+    maxTokens: Type.Integer({ minimum: 1 }),
+    compat: Type.Optional(OpenAICompletionsCompatSchema),
+  },
+  { additionalProperties: false }
+);
 
 const NativeModelOverlaySchema = z
   .object({

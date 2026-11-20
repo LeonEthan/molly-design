@@ -112,6 +112,21 @@ describe('native model overlay', () => {
     expect(restored.getModel('kimi-coding', 'k3.1-pro')?.maxTokens).toBe(1_048_576);
   });
 
+  it.each(['samplingParams', 'samplingParamsByThinkingLevel'])(
+    'uses the verified fallback when refresh includes undeclared %s metadata',
+    async (field) => {
+      const { entry } = syntheticNativeModelOverlay();
+      const resolved = await resolveNativeModelOverlay({
+        refresh: async () => ({
+          ...entry,
+          models: entry.models.map((model) => ({ ...model, [field]: {} })),
+        }),
+        readFallback: () => checkedInNativeModelOverlay,
+      });
+      expect(resolved).toEqual({ overlay: checkedInNativeModelOverlay, source: 'cached' });
+    }
+  );
+
   it('rejects an invalid overlay supplied as the fallback', async () => {
     const fallback = syntheticNativeModelOverlay();
     fallback.entry.models = [{ ...syntheticKimiProModel(), reasoning: false }];
@@ -151,13 +166,14 @@ describe('native model overlay', () => {
     );
   });
 
-  it('rejects extra models and credential-bearing fields', () => {
+  it('rejects extra models and undeclared model fields', () => {
     const mutations: ((value: {
       entry: { models: [Record<string, unknown>, ...Record<string, unknown>[]] };
     }) => void)[] = [
       (value) => value.entry.models.push({ ...value.entry.models[0], id: 'k3.1-pro-highspeed' }),
       (value) => (value.entry.models[0].headers = { Authorization: 'secret' }),
       (value) => (value.entry.models[0].apiKey = 'secret'),
+      (value) => (value.entry.models[0].unknownMetadata = {}),
     ];
     for (const mutate of mutations) {
       const value = JSON.parse(JSON.stringify(syntheticNativeModelOverlay()));

@@ -6,7 +6,7 @@ Read [README](README.md) before changing session construction, packages or the b
   vendor Pi or a package; add a package by pinning it in catalog `pi`, listing it in
   shared `MOLLY_PI_PACKAGES` and giving it settings copy. Record known upstream defects
   instead of working around them.
-- Refresh native catalogs only at build time through Pi. Seal only `kimi-coding/k3.1-pro` with validated native metadata and a checksum. Preserve existing models and exclude highspeed. UI/workers restore it offline. On refresh failure verify the same-engine previous or checked-in overlay, or fail the build. No runtime catalog RPC/cache or user credential.
+- Refresh native catalogs only at build time through Pi. Seal only `kimi-coding/k3.1-pro` with validated native metadata and a checksum. Preserve existing models and exclude highspeed. UI/workers restore it offline. On refresh failure the build reads and verifies the same-engine previous or checked-in overlay, or fails. Keep the checkout snapshot out of worker bundles. No runtime catalog RPC/cache or user credential.
 - Each runtime epoch has its own Molly `PI_CODING_AGENT_DIR`, derived identically at
   launch and before SDK import. Never reuse another epoch's auth or model files or open
   the user's `~/.pi/agent`. Keep native discovery, skills, context files and hooks; Molly owns

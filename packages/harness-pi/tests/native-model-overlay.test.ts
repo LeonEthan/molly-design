@@ -74,7 +74,7 @@ describe('native model overlay', () => {
     const fallback = syntheticNativeModelOverlay();
     fallback.entry.models = [{ ...syntheticKimiProModel(), maxTokens: 131_072 }];
     const resolved = await resolveNativeModelOverlay({
-      fallback,
+      readFallback: () => fallback,
       refresh: async () => {
         throw new Error('synthetic_offline');
       },
@@ -104,7 +104,9 @@ describe('native model overlay', () => {
 
   it('uses the checked-in overlay when the native refresh fails on a clean build', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
-    const resolved = await resolveNativeModelOverlay();
+    const resolved = await resolveNativeModelOverlay({
+      readFallback: () => checkedInNativeModelOverlay,
+    });
     expect(resolved).toEqual({ overlay: checkedInNativeModelOverlay, source: 'cached' });
     const restored = await createNativeModelRuntime(resolved.overlay);
     expect(restored.getModel('kimi-coding', 'k3.1-pro')?.maxTokens).toBe(1_048_576);
@@ -115,7 +117,7 @@ describe('native model overlay', () => {
     fallback.entry.models = [{ ...syntheticKimiProModel(), reasoning: false }];
     await expect(
       resolveNativeModelOverlay({
-        fallback,
+        readFallback: () => fallback,
         refresh: async () => {
           throw new Error('synthetic_offline');
         },

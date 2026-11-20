@@ -21,7 +21,6 @@ import { PI_ENGINE_VERSION } from '@molly/shared/embedded-harness';
 import { Type } from 'typebox';
 import { Check } from 'typebox/value';
 import { z } from 'zod';
-import checkedInNativeModelOverlay from '../resources/native-model-overlay.json';
 
 export const NATIVE_OVERLAY_PROVIDER_ID = 'kimi-coding';
 export const NATIVE_OVERLAY_MODEL_ID = 'k3.1-pro';
@@ -212,7 +211,7 @@ async function refreshNativeEntry(signal?: AbortSignal): Promise<ModelsStoreEntr
 
 export async function resolveNativeModelOverlay(
   options: {
-    fallback?: NativeModelOverlay;
+    readFallback?: () => unknown;
     signal?: AbortSignal;
     refresh?: (signal?: AbortSignal) => Promise<ModelsStoreEntry>;
   } = {}
@@ -241,9 +240,7 @@ export async function resolveNativeModelOverlay(
   } catch {
     if (options.signal?.aborted) throw overlayError('refresh_aborted');
     try {
-      const overlay = await verifyNativeModelOverlay(
-        options.fallback ?? checkedInNativeModelOverlay
-      );
+      const overlay = await verifyNativeModelOverlay(options.readFallback?.());
       return { overlay, source: 'cached' };
     } catch {
       throw overlayError('refresh_failed');

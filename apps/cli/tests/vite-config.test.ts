@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 import { describe, expect, it } from 'vitest';
 
 import viteConfig from '../vite.config';
@@ -43,6 +45,25 @@ describe('CLI vite config', () => {
     expect(vite).toBeGreaterThan(preserve);
     expect(seal).toBeGreaterThan(vite);
     expect(viteConfig.build?.emptyOutDir).toBe(true);
+  });
+
+  it('keeps the checkout fallback out of the embedded worker bundle', async () => {
+    const worker = fileURLToPath(
+      new URL('../../../packages/harness-pi/src/entry.ts', import.meta.url)
+    );
+    const { metafile } = await build({
+      entryPoints: [worker],
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      packages: 'external',
+      metafile: true,
+      write: false,
+    });
+    const fallbackInputs = Object.keys(metafile.inputs).filter((path) =>
+      path.endsWith('/native-model-overlay.json')
+    );
+    expect(fallbackInputs).toEqual([]);
   });
 
   it('disables ws optional native dependencies in bundled output', () => {

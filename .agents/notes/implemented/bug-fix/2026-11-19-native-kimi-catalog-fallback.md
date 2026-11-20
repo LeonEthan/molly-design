@@ -14,6 +14,10 @@ Pi 1.4.0 restores cached models but its remote catalog parser does limited shape
 
 The previous-output fallback remains the first choice after a failed refresh. It requires a valid checksum and cannot serve a clean checkout. The checked-in entry comes from the same Pi catalog endpoint and uses the same offline verification and sealed resource manifest. Removing the fixed token limit handles valid catalog changes while the snapshot covers an unavailable or incompatible response. This revises the [Pi 1.4.0 overlay decision](../architecture/2026-10-27-pi-1-4-0-k3-1-pro.md) for [#49](https://github.com/LeonEthan/molly-design/issues/49).
 
+The build coordinator supplies the fallback after refresh fails. A static import from the shared resolver put the checkout snapshot into a chunk loaded by the worker. The coordinator now reads the snapshot from the checkout, and the worker restores only the selected overlay through the sealed resource manifest.
+
 ## Evidence
 
 Deterministic tests cover the 1,048,576-token response, metadata changes, a failed refresh on a clean build, and native offline restoration. The Daily desktop build command completed from clean harness output on macOS arm64 with pi.dev reachable and with pi.dev requests blocked. Both runs verified the sealed CLI and staged Electron overlays. The blocked run matched the checked-in entry.
+
+The bundle regression checks the worker's esbuild inputs for the checkout entry. Clean online and blocked CLI harness builds passed the worker probe and contained only the selected checksum-listed overlay resource.

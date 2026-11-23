@@ -1285,4 +1285,68 @@ describe('ImageConnectionForm', () => {
     unsubscribe();
     mollyStorage.removeItem('molly-image-key-migration-notice-dismissed');
   });
+
+  it('supports onboarding OpenAI key reuse while still requiring explicit model selection and clearing memory after save', async () => {
+    let keyInMemory: string | null = 'sk-ephemeral-openai-key';
+    const savedInputs: unknown[] = [];
+    imageIpc.getImageSnapshot.mockResolvedValue({ connection: null });
+    imageIpc.saveImage.mockImplementation(async (input: unknown) => {
+      savedInputs.push(input);
+      return storedConnection({
+        protocol: 'openai-images',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-image-2',
+      });
+    });
+    const reusable = {
+      available: true,
+      read: () => keyInMemory,
+      clear: () => {
+        keyInMemory = null;
+      },
+    };
+    await act(async () => {
+      root?.render(
+        createElement(ImageConnectionSetting, {
+          variant: 'panel',
+          surface: 'onboarding',
+          reusableOpenAiKey: reusable,
+        })
+      );
+    });
+    const view = container as HTMLElement;
+    expect(view.querySelector('input[type="password"]')).toBeNull();
+    const submitBtn = view.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect(submitBtn.disabled).toBe(true);
+
+    const detailBtn = [...view.querySelectorAll<HTMLButtonElement>('button[role="radio"]')].find(
+      (node) => node.textContent?.includes('gpt-image-2')
+    )!;
+    const standardBtn = [...view.querySelectorAll<HTMLButtonElement>('button[role="radio"]')].find(
+      (node) => node.textContent?.includes('gpt-image-1')
+    )!;
+    expect(detailBtn.querySelector('[data-signal-dot]')).not.toBeNull();
+    expect(standardBtn.querySelector('[data-signal-dot]')).toBeNull();
+
+    await click(standardBtn);
+    expect(standardBtn.getAttribute('aria-checked')).toBe('true');
+    expect(standardBtn.querySelector('[data-signal-dot]')).not.toBeNull();
+    expect(detailBtn.querySelector('[data-signal-dot]')).toBeNull();
+
+    await click(detailBtn);
+    expect(detailBtn.querySelector('[data-signal-dot]')).not.toBeNull();
+    expect(standardBtn.querySelector('[data-signal-dot]')).toBeNull();
+    expect(submitBtn.disabled).toBe(false);
+
+    await click(submitBtn);
+    expect(savedInputs).toEqual([
+      expect.objectContaining({
+        protocol: 'openai-images',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-image-2',
+        apiKey: 'sk-ephemeral-openai-key',
+      }),
+    ]);
+    expect(keyInMemory).toBeNull();
+  });
 });

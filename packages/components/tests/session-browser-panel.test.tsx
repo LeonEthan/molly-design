@@ -614,4 +614,33 @@ describe('SessionBrowserPanel controller', () => {
       resumed.querySelector('[data-testid="managed-preview"]')?.getAttribute('data-viewer-url')
     ).toBe(localEndpoint.viewerUrl);
   });
+
+  it('shows a dismissible on-demand browser import prompt on public web pages when no sites are imported', async () => {
+    window.__MOLLY_ELECTRON__ = true;
+    const originalIpc = window.ipc;
+    window.ipc = {
+      invoke: async (channel: string) => {
+        if (channel === 'publicBrowser.getAccountSummary') {
+          return { importAvailable: true, recoveryRequired: false, sites: [] };
+        }
+        return undefined;
+      },
+      on: () => () => undefined,
+      send: () => undefined,
+    } as typeof window.ipc;
+    try {
+      const testRuntime = createRuntime({ plane: 'local' });
+      const rendered = await renderPanel(testRuntime.runtime);
+      await enterAddress(rendered, 'https://www.pinterest.com/search/pins/?q=poster');
+      await act(async () => {
+        await flushMicrotasks();
+      });
+      expect(rendered.textContent).toContain('Import browser sign-ins to browse reference sites directly.');
+      const dismissBtn = rendered.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!;
+      await act(async () => dismissBtn.click());
+      expect(rendered.textContent).not.toContain('Import browser sign-ins to browse reference sites directly.');
+    } finally {
+      window.ipc = originalIpc;
+    }
+  });
 });

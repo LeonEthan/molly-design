@@ -360,6 +360,12 @@ async function renderControls(context: ReturnType<typeof fixture>) {
       switch (channel) {
         case 'publicBrowser.getState':
           return Promise.resolve(context.ipc.getState(input));
+        case 'publicBrowser.getAccountSummary':
+          return Promise.resolve({
+            importAvailable: false,
+            recoveryRequired: false,
+            sites: [],
+          });
         case 'publicBrowser.takeAgentControl':
           return context.ipc.takeAgentControl(input);
         case 'publicBrowser.resumeAgentControl':

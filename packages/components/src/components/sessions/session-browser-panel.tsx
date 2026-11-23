@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Globe2, Loader2, ShieldAlert } from 'lucide-react';
+import { Globe2, Loader2, ShieldAlert, X } from 'lucide-react';
 import { useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
 import {
@@ -114,7 +114,33 @@ function SessionBrowserPanelController({
     useState<ManagedNavigationPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [importPromptEligible, setImportPromptEligible] = useState(false);
+  const [importPromptDismissed, setImportPromptDismissed] = useState(false);
   const [resumeAddress, setResumeAddress] = useState<BrowserAddress | null>(null);
+
+  const refreshImportEligibility = useCallback(() => {
+    const bridge = getPublicBrowserBridge();
+    if (!bridge) {
+      setImportPromptEligible(false);
+      return;
+    }
+    void Promise.resolve()
+      .then(() => bridge.getAccountSummary())
+      .then(
+        (summary) => {
+          const hasImportedSites = summary.sites.some((site) => site.cookieCount > 0);
+          setImportPromptEligible(
+            Boolean(summary.importAvailable && !summary.recoveryRequired && !hasImportedSites)
+          );
+        },
+        () => setImportPromptEligible(false)
+      );
+  }, []);
+
+  useEffect(() => {
+    if (currentAddress?.engine !== 'public-web') return;
+    refreshImportEligibility();
+  }, [currentAddress?.engine, refreshImportEligibility]);
   const navigationSequenceRef = useRef(0);
   const restoreAttemptKeyRef = useRef<string | null>(null);
   const handledCandidateNavigationRequestRef = useRef(0);
@@ -749,6 +775,38 @@ function SessionBrowserPanelController({
           </Button>
         </div>
       ) : null}
+      {currentAddress?.engine === 'public-web' &&
+      importPromptEligible &&
+      !importPromptDismissed ? (
+        <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-3 py-2 text-xs text-foreground">
+          <span className="min-w-0 flex-1 truncate">
+            {t(
+              'sessions.browser.importPrompt',
+              'Import browser sign-ins to browse reference sites directly.'
+            )}
+          </span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              className="h-6 px-2.5 text-xs"
+              onClick={() => setImportOpen(true)}
+            >
+              {t('sessions.browser.importAction', 'Import')}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground"
+              aria-label={t('common.dismiss', 'Dismiss')}
+              onClick={() => setImportPromptDismissed(true)}
+            >
+              <X className="h-3.5 w-3.5" aria-hidden />
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {error ? (
         <div
           role="alert"
@@ -822,7 +880,13 @@ function SessionBrowserPanelController({
           </p>
         </div>
       )}
-      <BrowserAccountImportDialog open={importOpen} onOpenChange={setImportOpen} />
+      <BrowserAccountImportDialog
+        open={importOpen}
+        onOpenChange={(open) => {
+          setImportOpen(open);
+          if (!open) refreshImportEligibility();
+        }}
+      />
     </div>
   );
 }

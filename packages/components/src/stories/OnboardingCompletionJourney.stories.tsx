@@ -47,11 +47,6 @@ function ProviderNextJourney() {
       onBack={fn()}
       onSkip={fn()}
       onNext={() => setComplete(true)}
-      browserPanel={(close) => (
-        <button type="button" onClick={close}>
-          Browser import
-        </button>
-      )}
     />
   );
 }

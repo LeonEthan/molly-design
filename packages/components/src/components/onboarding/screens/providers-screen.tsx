@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAtomValue } from 'jotai';
 import {
@@ -8,7 +8,7 @@ import {
   type ProtectedImageConnection,
 } from '@molly/shared/embedded-harness';
 import { Button } from '@/ui/button';
-import { ArrowLeft, Check, Globe, Image as ImageIcon, Type, X } from '@/ui/icons';
+import { ArrowLeft, Check, Image as ImageIcon, Type, X } from '@/ui/icons';
 import { cn } from '@/lib/utils';
 import { getAllAgentConfigAtom } from '@/atoms/agents';
 import { localMachineIdAtom } from '@/atoms/local-probe';
@@ -21,9 +21,9 @@ import { ModelConnectionSetting } from '@/components/settings/model-connection-s
 import {
   ImageConnectionSetting,
   imageProtocolLabelKey,
+  type ReusableOpenAiKey,
 } from '@/components/settings/image-connection-setting';
-import { BrowserAccountImportPanel } from '@/components/settings/browser-account-import-dialog';
-import { getIpcServices, getPublicBrowserBridge } from '@/lib/electron-ipc-client';
+import { getIpcServices } from '@/lib/electron-ipc-client';
 import { agentDefaultsCache } from '@/lib/local-storage-cache';
 import { readChatLandingDefaults, writeChatLandingDefaults } from '@/lib/chat-landing-defaults';
 import { defaultComposerReasoning } from '@/lib/composer-provider-hierarchy';
@@ -86,7 +86,27 @@ type ProvidersScreenProps = {
   onNext: () => void;
 };
 
-type PanelId = 'language' | 'image' | 'browser';
+type PanelId = 'language' | 'image';
+
+/**
+ * Only auto-open the first incomplete panel in the two-column desktop layout.
+ * Below 1080px the panel overlays the single column, so leaving it closed keeps
+ * the two-step overview and Skip for now reachable on compact displays.
+ */
+export function resolveInitialAutoOpenPanel({
+  languageReady,
+  imageReady,
+  compactOverlay,
+}: {
+  languageReady: boolean;
+  imageReady: boolean;
+  compactOverlay: boolean;
+}): PanelId | null {
+  if (compactOverlay) return null;
+  if (!languageReady) return 'language';
+  if (!imageReady) return 'image';
+  return null;
+}
 
 export type ProvidersScreenViewProps = ProvidersScreenProps & {
   languageReady: boolean;
@@ -99,14 +119,14 @@ export type ProvidersScreenViewProps = ProvidersScreenProps & {
   onCatalogRetry?: () => void;
   languageSummary?: string;
   imageSummary?: ReactNode;
-  /** Websites with saved sign-ins; browser sign-ins never gate Finish. */
-  browserSummary?: string;
-  /** Panels receive `close`; the language and image panels stay mounted while closed. */
-  languagePanel?: (close: () => void) => ReactNode;
-  imagePanel?: (close: () => void) => ReactNode;
-  browserPanel?: (close: () => void) => ReactNode;
-  /** Called after the browser panel closes, so its row can re-read what was imported. */
-  onBrowserPanelClosed?: () => void;
+  /** Which panel starts open; defaults to null (editorial artwork visible). */
+  initialOpen?: PanelId | null;
+  /** Controlled open panel override when host auto-opens the first incomplete step. */
+  openPanel?: PanelId | null;
+  onOpenPanelChange?: (panel: PanelId | null) => void;
+  /** Panels receive `done(outcome)`; both model panels stay mounted while closed. */
+  languagePanel?: (done: (outcome?: 'saved' | 'cancelled') => void) => ReactNode;
+  imagePanel?: (done: (outcome?: 'saved' | 'cancelled') => void) => ReactNode;
 };
 
 function ConnectRow({
@@ -115,7 +135,6 @@ function ConnectRow({
   summary,
   hint,
   done,
-  optional,
   action,
   active,
   onOpen,
@@ -125,12 +144,10 @@ function ConnectRow({
   summary?: ReactNode;
   hint: string;
   done: boolean;
-  optional?: boolean;
   action: string;
   active: boolean;
   onOpen: () => void;
 }) {
-  const { t } = useTranslation();
   return (
     <button
       type="button"
@@ -153,14 +170,7 @@ function ConnectRow({
         {done ? <Check className="h-4 w-4" /> : icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2 text-sm font-medium text-[#141413]">
-          {title}
-          {optional ? (
-            <span className="rounded-full bg-[#141413]/[0.06] px-2 py-0.5 text-[11px] font-normal text-[#6b6963]">
-              {t('onboarding.models.optional')}
-            </span>
-          ) : null}
-        </span>
+        <span className="flex items-center gap-2 text-sm font-medium text-[#141413]">{title}</span>
         <span className="block min-w-0 text-xs text-[#6b6963]">
           {done && summary ? (
             <span className="flex min-w-0 flex-wrap items-baseline gap-x-1">{summary}</span>
@@ -203,7 +213,7 @@ function PanelCard({
           <ArrowLeft aria-hidden className="h-4 w-4" />
           {t('common.back')}
         </Button>
-        <h2 className="flex-1 text-base font-medium text-[#141413] max-[1080px]:sr-only">
+        <h2 className="font-editorial flex-1 text-[22px] leading-tight text-[#141413] max-[1080px]:sr-only">
           {title}
         </h2>
         <Button
@@ -230,30 +240,37 @@ export function ProvidersScreenView({
   onCatalogRetry,
   languageSummary,
   imageSummary,
-  browserSummary,
+  initialOpen = null,
+  openPanel,
+  onOpenPanelChange,
   languagePanel,
   imagePanel,
-  browserPanel,
-  onBrowserPanelClosed,
   onBack,
   onSkip,
   onNext,
 }: ProvidersScreenViewProps) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState<PanelId | null>(null);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState<PanelId | null>(initialOpen);
+  const open = openPanel !== undefined ? openPanel : uncontrolledOpen;
+  const setOpen = (next: PanelId | null | ((current: PanelId | null) => PanelId | null)) => {
+    const resolved = typeof next === 'function' ? next(open) : next;
+    if (openPanel === undefined) setUncontrolledOpen(resolved);
+    onOpenPanelChange?.(resolved);
+  };
   const canNext = languageReady && imageReady && modelReady && mollyAvailable;
-  const close = () => {
-    if (open === 'browser') onBrowserPanelClosed?.();
-    setOpen(null);
+  const close = () => setOpen(null);
+  const finishLanguage = (outcome?: 'saved' | 'cancelled') => {
+    setOpen(outcome === 'saved' && !imageReady ? 'image' : null);
+  };
+  const finishImage = (outcome?: 'saved' | 'cancelled') => {
+    setOpen(outcome === 'saved' && !languageReady ? 'language' : null);
   };
   const toggle = (panel: PanelId) => {
-    if (open === 'browser' && panel !== 'browser') onBrowserPanelClosed?.();
     setOpen((current) => (current === panel ? null : panel));
   };
   const titles: Record<PanelId, string> = {
     language: t('onboarding.models.rows.language.title'),
     image: t('onboarding.models.rows.image.title'),
-    browser: t('onboarding.models.rows.browser.title'),
   };
   return (
     <OnboardingShell
@@ -274,17 +291,12 @@ export function ProvidersScreenView({
         <>
           {languagePanel ? (
             <PanelCard title={titles.language} hidden={open !== 'language'} onClose={close}>
-              {languagePanel(close)}
+              {languagePanel(finishLanguage)}
             </PanelCard>
           ) : null}
           {imagePanel ? (
             <PanelCard title={titles.image} hidden={open !== 'image'} onClose={close}>
-              {imagePanel(close)}
-            </PanelCard>
-          ) : null}
-          {browserPanel && open === 'browser' ? (
-            <PanelCard title={titles.browser} onClose={close}>
-              {browserPanel(close)}
+              {imagePanel(finishImage)}
             </PanelCard>
           ) : null}
         </>
@@ -310,17 +322,6 @@ export function ProvidersScreenView({
           action={t(imageReady ? 'onboarding.models.change' : 'onboarding.models.setUp')}
           active={open === 'image'}
           onOpen={() => toggle('image')}
-        />
-        <ConnectRow
-          icon={<Globe className="h-4 w-4" />}
-          title={titles.browser}
-          summary={browserSummary}
-          hint={t('onboarding.models.rows.browser.hint')}
-          done={browserSummary !== undefined}
-          optional
-          action={t('onboarding.models.import')}
-          active={open === 'browser'}
-          onOpen={() => toggle('browser')}
         />
         {onCatalogRetry ? (
           <div
@@ -358,19 +359,28 @@ export function ProvidersScreen(props: ProvidersScreenProps) {
   const [catalog, setCatalog] = useState<readonly CatalogModel[]>();
   const [catalogFailed, setCatalogFailed] = useState(false);
   const [catalogAttempt, setCatalogAttempt] = useState(0);
+  const [openPanel, setOpenPanel] = useState<PanelId | null>(null);
+  const autoOpenedRef = useRef(false);
+  const ephemeralOpenAiKeyRef = useRef<string | null>(null);
+  const [hasReusableOpenAiKey, setHasReusableOpenAiKey] = useState(false);
   const ipc = useMemo(() => getIpcServices(), []);
   const { t } = useTranslation();
-  const [savedSites, setSavedSites] = useState<number>();
 
-  const readSavedSites = useCallback(() => {
-    const bridge = getPublicBrowserBridge();
-    if (!bridge) return;
-    void bridge.getAccountSummary().then(
-      (summary) => setSavedSites(summary.sites.filter((site) => site.cookieCount > 0).length),
-      (error: unknown) => console.error('Failed to read saved browser sign-ins', error)
-    );
+  const clearEphemeralOpenAiKey = useCallback(() => {
+    ephemeralOpenAiKeyRef.current = null;
+    setHasReusableOpenAiKey(false);
   }, []);
-  useEffect(readSavedSites, [readSavedSites]);
+
+  useEffect(() => clearEphemeralOpenAiKey, [clearEphemeralOpenAiKey]);
+
+  const reusableOpenAiKey = useMemo<ReusableOpenAiKey>(
+    () => ({
+      available: hasReusableOpenAiKey,
+      read: () => ephemeralOpenAiKeyRef.current,
+      clear: clearEphemeralOpenAiKey,
+    }),
+    [clearEphemeralOpenAiKey, hasReusableOpenAiKey]
+  );
 
   useEffect(() => {
     if (!ipc) return undefined;
@@ -393,6 +403,18 @@ export function ProvidersScreen(props: ProvidersScreenProps) {
   const readyConnections = connections ? getReadyModelConnections(connections) : [];
   const languageReady = connections !== undefined && readyConnections.length > 0;
   const imageReady = isImageConnectionReady(imageConnection);
+
+  useEffect(() => {
+    if (autoOpenedRef.current) return;
+    if (connections === undefined || imageConnection === undefined) return;
+    autoOpenedRef.current = true;
+    const compactOverlay =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(max-width: 1080px)').matches;
+    const next = resolveInitialAutoOpenPanel({ languageReady, imageReady, compactOverlay });
+    if (next) setOpenPanel(next);
+  }, [connections, imageConnection, imageReady, languageReady]);
 
   const selectorOptions = useAcpSelectorOptions(
     mollyConfig
@@ -421,8 +443,14 @@ export function ProvidersScreen(props: ProvidersScreenProps) {
     ? [summaryConnection.displayName, defaultModel?.modelId].filter(Boolean).join(' · ')
     : undefined;
 
+  const handleSkip = () => {
+    clearEphemeralOpenAiKey();
+    props.onSkip();
+  };
+
   const handleNext = () => {
     if (!mollyConfig || !defaultModelId) return;
+    clearEphemeralOpenAiKey();
     // Bind the first session so the landing composer needs no second pick:
     // the connected LLM's first offered model, reasoning = high when offered.
     const thinking = getOnboardingDefaultThinking(
@@ -450,8 +478,13 @@ export function ProvidersScreen(props: ProvidersScreenProps) {
   return (
     <ProvidersScreenView
       onBack={props.onBack}
-      onSkip={props.onSkip}
+      onSkip={handleSkip}
       onNext={handleNext}
+      openPanel={openPanel}
+      onOpenPanelChange={(next) => {
+        autoOpenedRef.current = true;
+        setOpenPanel(next);
+      }}
       languageReady={languageReady}
       imageReady={imageReady}
       modelReady={defaultModelId !== null}
@@ -476,25 +509,28 @@ export function ProvidersScreen(props: ProvidersScreenProps) {
           </>
         ) : undefined
       }
-      browserSummary={
-        savedSites ? t('onboarding.models.rows.browser.saved', { count: savedSites }) : undefined
-      }
-      languagePanel={(close) => (
+      languagePanel={(done) => (
         <ModelConnectionSetting
           variant="panel"
+          surface="onboarding"
           onConnectionsChange={setConnections}
-          onDone={close}
+          onSavedOpenAiDefaultKey={(apiKey) => {
+            ephemeralOpenAiKeyRef.current = apiKey;
+            setHasReusableOpenAiKey(true);
+          }}
+          onOpenAiConnectionChanged={clearEphemeralOpenAiKey}
+          onDone={done}
         />
       )}
-      imagePanel={(close) => (
+      imagePanel={(done) => (
         <ImageConnectionSetting
           variant="panel"
+          surface="onboarding"
+          reusableOpenAiKey={reusableOpenAiKey}
           onConnectionChange={setImageConnection}
-          onDone={close}
+          onDone={done}
         />
       )}
-      browserPanel={(close) => <BrowserAccountImportPanel onClose={close} />}
-      onBrowserPanelClosed={readSavedSites}
     />
   );
 }

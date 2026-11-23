@@ -88,6 +88,26 @@ type ProvidersScreenProps = {
 
 type PanelId = 'language' | 'image';
 
+/**
+ * Only auto-open the first incomplete panel in the two-column desktop layout.
+ * Below 1080px the panel overlays the single column, so leaving it closed keeps
+ * the two-step overview and Skip for now reachable on compact displays.
+ */
+export function resolveInitialAutoOpenPanel({
+  languageReady,
+  imageReady,
+  compactOverlay,
+}: {
+  languageReady: boolean;
+  imageReady: boolean;
+  compactOverlay: boolean;
+}): PanelId | null {
+  if (compactOverlay) return null;
+  if (!languageReady) return 'language';
+  if (!imageReady) return 'image';
+  return null;
+}
+
 export type ProvidersScreenViewProps = ProvidersScreenProps & {
   languageReady: boolean;
   imageReady: boolean;
@@ -388,8 +408,12 @@ export function ProvidersScreen(props: ProvidersScreenProps) {
     if (autoOpenedRef.current) return;
     if (connections === undefined || imageConnection === undefined) return;
     autoOpenedRef.current = true;
-    if (!languageReady) setOpenPanel('language');
-    else if (!imageReady) setOpenPanel('image');
+    const compactOverlay =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(max-width: 1080px)').matches;
+    const next = resolveInitialAutoOpenPanel({ languageReady, imageReady, compactOverlay });
+    if (next) setOpenPanel(next);
   }, [connections, imageConnection, imageReady, languageReady]);
 
   const selectorOptions = useAcpSelectorOptions(

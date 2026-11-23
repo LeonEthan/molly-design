@@ -54,6 +54,7 @@ import {
   getOnboardingDefaultModelId,
   getOnboardingDefaultThinking,
   ProvidersScreenView,
+  resolveInitialAutoOpenPanel,
 } from '../src/components/onboarding/screens/providers-screen';
 import { getOnboardingMollyConfigs } from '../src/components/onboarding/onboarding-agent';
 import { initI18n } from '../src/i18n';
@@ -435,5 +436,38 @@ describe('getOnboardingDefaultThinking', () => {
     expect(getOnboardingDefaultThinking(['off', 'high'])).toBe('high');
     expect(getOnboardingDefaultThinking(['low', 'max'])).toBe('low');
     expect(getOnboardingDefaultThinking(undefined)).toBe('high');
+  });
+});
+
+describe('resolveInitialAutoOpenPanel', () => {
+  it('auto-opens the first incomplete step on wide layouts and stays closed on compact overlays', () => {
+    expect(
+      resolveInitialAutoOpenPanel({
+        languageReady: false,
+        imageReady: false,
+        compactOverlay: false,
+      })
+    ).toBe('language');
+    expect(
+      resolveInitialAutoOpenPanel({
+        languageReady: true,
+        imageReady: false,
+        compactOverlay: false,
+      })
+    ).toBe('image');
+    expect(
+      resolveInitialAutoOpenPanel({
+        languageReady: true,
+        imageReady: true,
+        compactOverlay: false,
+      })
+    ).toBeNull();
+    expect(
+      resolveInitialAutoOpenPanel({
+        languageReady: false,
+        imageReady: false,
+        compactOverlay: true,
+      })
+    ).toBeNull();
   });
 });

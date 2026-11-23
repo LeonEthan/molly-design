@@ -2432,4 +2432,49 @@ describe('model-response connection check (#181)', () => {
     await openMenu();
     expect(host.textContent).toContain('Connected. Model responded.');
   });
+
+  it('orders onboarding providers by locale, folds secondary providers, and hands off a default OpenAI key', async () => {
+    await initI18n('zh_CN');
+    const savedKeys: string[] = [];
+    const outcomes: Array<'saved' | 'cancelled' | undefined> = [];
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [] });
+    connectionIpc.save.mockImplementation(async (input: SaveModelConnection) => ({
+      schemaVersion: 1,
+      id: '00000000-0000-4000-8000-000000000201',
+      revision: 1,
+      providerPresetId: input.providerPresetId,
+      displayName: input.displayName,
+      baseUrl: input.baseUrl,
+      enabled: input.enabled,
+      credentialRef: 'encrypted-ref',
+    }));
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionSetting, {
+          variant: 'panel',
+          surface: 'onboarding',
+          onSavedOpenAiDefaultKey: (key: string) => savedKeys.push(key),
+          onDone: (outcome?: 'saved' | 'cancelled') => outcomes.push(outcome),
+        })
+      )
+    );
+    const radios = [...host.querySelectorAll<HTMLButtonElement>('button[role="radio"]')];
+    expect(radios[0]?.textContent).toContain('Kimi Code');
+    expect(radios.some((btn) => btn.textContent?.includes('OpenRouter'))).toBe(false);
+
+    const openAiTile = radios.find((btn) => btn.textContent?.includes('OpenAI'))!;
+    await act(async () => openAiTile.click());
+    const keyInput = host.querySelector<HTMLInputElement>('input[type="password"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        keyInput,
+        'sk-onboarding-openai-test'
+      );
+      keyInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const submitBtn = host.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    await act(async () => submitBtn.click());
+    expect(savedKeys).toEqual(['sk-onboarding-openai-test']);
+    expect(outcomes).toEqual(['saved']);
+  });
 });

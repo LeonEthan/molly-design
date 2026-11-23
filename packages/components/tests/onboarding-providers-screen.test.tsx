@@ -123,29 +123,37 @@ describe('ProvidersScreenView', () => {
     return calls;
   }
 
-  it('shows the Connect your models copy as three rows with no Molly chip list', async () => {
+  it('shows the Connect your models copy as two rows with no browser row or Molly chip list', async () => {
     await renderView({ mollyAvailable: true });
     expect(container.querySelector('h1')?.textContent).toBe('Connect your models');
-    expect(container.textContent).toContain('Two models to design with. Sign-ins are optional.');
+    expect(container.textContent).toContain('Two models to start designing.');
     const rows = Array.from(container.querySelectorAll('button[aria-expanded]'));
     expect(rows.map((row) => row.textContent)).toEqual([
       expect.stringContaining('Language model'),
       expect.stringContaining('Image model'),
-      expect.stringContaining('Browser sign-ins'),
     ]);
-    expect(rows[2]?.textContent).toContain('Optional');
+    expect(container.textContent).not.toContain('Browser sign-ins');
     expect(container.textContent).not.toContain('Select the built-in Molly');
     expect(container.querySelector('[aria-pressed]')).toBeNull();
   });
 
-  it('swaps the artwork for the opened row panel and back again', async () => {
+  it('swaps the artwork for the opened row panel and auto-advances on save', async () => {
     await renderView({
-      languagePanel: (close) => (
-        <button type="button" onClick={close}>
-          Language form
+      languagePanel: (done) => (
+        <div>
+          <button type="button" onClick={() => done('saved')}>
+            Save language
+          </button>
+          <button type="button" onClick={() => done('cancelled')}>
+            Cancel language
+          </button>
+        </div>
+      ),
+      imagePanel: (done) => (
+        <button type="button" onClick={() => done('saved')}>
+          Save image
         </button>
       ),
-      imagePanel: () => <p>Image form</p>,
     });
     const aside = container.querySelector('aside')!;
     const panel = (name: string) =>
@@ -160,7 +168,7 @@ describe('ProvidersScreenView', () => {
     expect(panel('Image model').hidden).toBe(true);
     expect(findButton(container, 'Language model').getAttribute('aria-expanded')).toBe('true');
 
-    await act(async () => findButton(container, 'Image model').click());
+    await act(async () => findButton(container, 'Save language').click());
     expect(panel('Language model').hidden).toBe(true);
     expect(panel('Image model').hidden).toBe(false);
 
@@ -169,28 +177,25 @@ describe('ProvidersScreenView', () => {
     expect(container.querySelector('[data-testid="artwork"]')).not.toBeNull();
 
     await act(async () => findButton(container, 'Language model').click());
-    await act(async () => findButton(container, 'Language form').click());
+    await act(async () => findButton(container, 'Cancel language').click());
     expect(aside.hidden).toBe(true);
     expect(container.querySelector('[data-testid="artwork"]')).not.toBeNull();
   });
 
-  it('summarizes connected rows and keeps the browser row optional', async () => {
-    let closed = 0;
+  it('summarizes connected rows and closes panel when both models are ready', async () => {
     await renderView({
+      initialOpen: 'image',
       languageReady: true,
       imageReady: true,
       modelReady: true,
       mollyAvailable: true,
       languageSummary: 'DeepSeek · deepseek-chat',
       imageSummary: 'OpenAI Images · gpt-image-1',
-      browserPanel: (close) => (
-        <button type="button" onClick={close}>
-          Not now
+      imagePanel: (done) => (
+        <button type="button" onClick={() => done('saved')}>
+          Save image
         </button>
       ),
-      onBrowserPanelClosed: () => {
-        closed += 1;
-      },
     });
     expect(findButton(container, 'Language model').textContent).toContain(
       'DeepSeek · deepseek-chat'
@@ -199,15 +204,9 @@ describe('ProvidersScreenView', () => {
     expect(findButton(container, 'Image model').textContent).toContain(
       'OpenAI Images · gpt-image-1'
     );
-    expect(findButton(container, 'Browser sign-ins').textContent).toContain('Import');
     expect(findButton(container, 'Finish').disabled).toBe(false);
-
-    expect(container.textContent).not.toContain('Not now');
-    await act(async () => findButton(container, 'Browser sign-ins').click());
-    await act(async () => findButton(container, 'Not now').click());
-    expect(container.textContent).not.toContain('Not now');
-    expect(closed).toBe(1);
-    expect(findButton(container, 'Finish').disabled).toBe(false);
+    await act(async () => findButton(container, 'Save image').click());
+    expect(container.querySelector('[data-testid="artwork"]')).not.toBeNull();
   });
 
   it.each([

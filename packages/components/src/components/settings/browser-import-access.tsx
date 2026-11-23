@@ -50,6 +50,15 @@ export function BrowserImportAccess({
           { app: applicationName, browser }
         )}
       </p>
+      {!denied ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">
+            {t('settings.browserImport.permission.stepRead', { browser })}
+          </span>
+          <span aria-hidden>→</span>
+          <span>{t('settings.browserImport.permission.stepKeychain')}</span>
+        </div>
+      ) : null}
       <div className="mt-6 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
         <div className="flex items-center justify-between border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
           {t('settings.browserImport.permission.settingsGuide')}

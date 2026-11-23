@@ -56,17 +56,19 @@ export const Ready: Story = {
     mollyAvailable: true,
     languageSummary: 'DeepSeek · deepseek-chat',
     imageSummary: 'OpenAI Images · gpt-image-1',
-    browserSummary: 'Signed in on 2 websites',
   },
 };
 export const WithPanels: Story = {
   args: {
-    languagePanel: (close) => <ModelConnectionForm onSave={async () => close()} />,
-    imagePanel: (close) => (
+    languagePanel: (done) => (
+      <ModelConnectionForm surface="onboarding" onSave={async () => done('saved')} />
+    ),
+    imagePanel: (done) => (
       <ImageConnectionForm
+        surface="onboarding"
         stored={undefined}
-        onSave={close}
-        onCancel={close}
+        onSave={() => done('saved')}
+        onCancel={() => done('cancelled')}
         onClearApiKey={async () => undefined}
       />
     ),

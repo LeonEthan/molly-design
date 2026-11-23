@@ -32,7 +32,12 @@ import {
   type SaveModelConnection,
 } from '@molly/shared/embedded-harness';
 import { SegmentedControl } from '@/components/shared/segmented-control';
+import {
+  getOnboardingLanguageProviders,
+  PROVIDER_KEY_CONSOLE_URLS,
+} from '@/components/onboarding/onboarding-provider-guides';
 import { getIpcServices } from '@/lib/electron-ipc-client';
+import { openExternalUrl } from '@/lib/native-browser';
 import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
 import {
@@ -42,7 +47,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
-import { ChevronDown, CircleCheck, Ellipsis, LoaderCircle, Plus } from '@/ui/icons';
+import { ArrowUpRight, ChevronDown, CircleCheck, Ellipsis, LoaderCircle, Plus } from '@/ui/icons';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
@@ -216,13 +221,134 @@ export type ProviderChoice = { preset: ProviderPresetId; signIn: boolean };
 function ProviderPicker({
   signIn,
   disabled,
+  surface = 'settings',
   onChange,
 }: {
   signIn: boolean;
   disabled: boolean;
+  surface?: 'settings' | 'onboarding';
   onChange: (choice: ProviderChoice) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  if (surface === 'onboarding') {
+    const onboarding = getOnboardingLanguageProviders(i18n.resolvedLanguage ?? i18n.language);
+    return (
+      <div
+        role="radiogroup"
+        aria-label={t('settings.models.chooseProvider')}
+        className="@container space-y-4"
+      >
+        {signIn ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                {t('settings.models.groups.signIn')}
+              </p>
+              <span className="text-[11px] text-muted-foreground">
+                {t('onboarding.models.signInHint')}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {onboarding.signIn.map((entry, index) => (
+                <button
+                  key={`plan:${entry.preset}`}
+                  type="button"
+                  role="radio"
+                  aria-checked={false}
+                  disabled={disabled}
+                  onClick={() => onChange({ preset: entry.preset, signIn: true })}
+                  className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border/60 bg-background px-3 py-2.5 text-left transition-colors hover:border-foreground/35"
+                >
+                  <ProviderMark preset={entry.preset} size="md" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+                      <span className="truncate">{t(entry.labelKey)}</span>
+                      {index === 0 ? (
+                        <span
+                          aria-hidden
+                          className="size-[5px] shrink-0 rounded-full bg-[var(--signal)]"
+                        />
+                      ) : null}
+                    </span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {t(entry.metaKey)}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            {t('settings.models.groups.apiKey')}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {onboarding.apiKey.map((entry) => (
+              <button
+                key={`key:${entry.preset}`}
+                type="button"
+                role="radio"
+                aria-checked={false}
+                disabled={disabled}
+                onClick={() => onChange({ preset: entry.preset, signIn: false })}
+                className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border/60 bg-background px-3 py-2.5 text-left transition-colors hover:border-foreground/35"
+              >
+                <ProviderMark preset={entry.preset} size="md" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium text-foreground">
+                    {t(providerLabelKeys[entry.preset])}
+                  </span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {t(entry.metaKey)}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={disabled}
+              className="group gap-1.5 px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+            >
+              <ChevronDown
+                aria-hidden
+                className="h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180"
+              />
+              {t('onboarding.models.moreProviders')}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2">
+            <div className="flex flex-wrap gap-1.5">
+              {onboarding.more.map((preset) => (
+                <button
+                  key={`more:${preset}`}
+                  type="button"
+                  role="radio"
+                  aria-checked={false}
+                  disabled={disabled}
+                  onClick={() => onChange({ preset, signIn: false })}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/60 bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-foreground/35 hover:text-foreground"
+                >
+                  <span className="truncate">{t(providerLabelKeys[preset])}</span>
+                </button>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+    );
+  }
+
   const tile = (preset: ProviderPresetId, label: string, viaSignIn: boolean) => (
     <button
       key={`${viaSignIn ? 'plan' : 'key'}:${preset}`}
@@ -284,6 +410,7 @@ export function ModelConnectionForm({
   onDelete,
   pinActions = false,
   grow = true,
+  surface = 'settings',
 }: {
   stored?: ModelConnection;
   initialProvider?: ProviderPresetId;
@@ -305,6 +432,7 @@ export function ModelConnectionForm({
   /** Keep Connect/Save visible and scroll the fields above it. */
   pinActions?: boolean;
   grow?: boolean;
+  surface?: 'settings' | 'onboarding';
 }) {
   const { t } = useTranslation();
   const id = useId();
@@ -704,10 +832,11 @@ export function ModelConnectionForm({
       >
         {provider === '' ? (
           <div className="space-y-3">
-            <Label>{t('settings.models.chooseProvider')}</Label>
+            {surface === 'settings' ? <Label>{t('settings.models.chooseProvider')}</Label> : null}
             <ProviderPicker
               signIn={onOpenAiAuth !== undefined}
               disabled={busy}
+              surface={surface}
               onChange={chooseProvider}
             />
           </div>
@@ -878,15 +1007,28 @@ export function ModelConnectionForm({
             ) : null}
             {!(oauthProvider && onOpenAiAuth && isOAuthConnection) && !signInOnly ? (
               <div className="space-y-2">
-                <Label htmlFor={`${id}-key`}>
-                  {t('settings.models.apiKey')}
-                  {keylessInput ? (
-                    <span className="font-normal text-muted-foreground">
-                      {' · '}
-                      {t('settings.models.optional')}
-                    </span>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor={`${id}-key`}>
+                    {t('settings.models.apiKey')}
+                    {keylessInput ? (
+                      <span className="font-normal text-muted-foreground">
+                        {' · '}
+                        {t('settings.models.optional')}
+                      </span>
+                    ) : null}
+                  </Label>
+                  {surface === 'onboarding' && PROVIDER_KEY_CONSOLE_URLS[provider] ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void openExternalUrl(PROVIDER_KEY_CONSOLE_URLS[provider]!)}
+                      className="inline-flex items-center gap-0.5 text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+                    >
+                      {t('onboarding.models.getKey')}
+                      <ArrowUpRight aria-hidden className="h-3 w-3" />
+                    </button>
                   ) : null}
-                </Label>
+                </div>
                 <Input
                   id={`${id}-key`}
                   type="password"
@@ -1103,7 +1245,11 @@ export function ModelConnectionForm({
               type="submit"
               disabled={busy || !parsed.success || missingRequiredKey || !dirty}
             >
-              {stored ? t('common.save') : t('settings.models.connect')}
+              {stored
+                ? t('common.save')
+                : surface === 'onboarding'
+                  ? t('onboarding.models.nextStep')
+                  : t('settings.models.connect')}
             </Button>
           ) : null}
         </div>
@@ -1137,13 +1283,20 @@ const panelFormSlotClass = (variant: 'section' | 'panel', extra = ''): string =>
 export function ModelConnectionSetting({
   onConnectionsChange,
   variant = 'section',
+  surface = 'settings',
   onDone,
+  onSavedOpenAiDefaultKey,
+  onOpenAiConnectionChanged,
 }: {
   onConnectionsChange?: (connections: readonly ModelConnection[]) => void;
   /** `panel` drops the Settings card chrome so onboarding can show the same body. */
   variant?: 'section' | 'panel';
+  surface?: 'settings' | 'onboarding';
   /** Called after a connection is saved or signed in, or when a first connection is cancelled. */
-  onDone?: () => void;
+  onDone?: (outcome?: 'saved' | 'cancelled') => void;
+  /** Ephemeral handoff of a freshly saved default-endpoint OpenAI API key during onboarding. */
+  onSavedOpenAiDefaultKey?: (apiKey: string) => void;
+  onOpenAiConnectionChanged?: () => void;
 } = {}) {
   const { t } = useTranslation();
   const [connections, setConnections] = useState<ModelConnection[]>([]);
@@ -1245,7 +1398,7 @@ export function ModelConnectionSetting({
           // The flow saved the connection in main; refresh the list so it appears now.
           const snapshot = await ipc.modelConnections.getSnapshot();
           setConnections(ModelConnectionSchema.array().parse(snapshot.connections));
-          onDoneRef.current?.();
+          onDoneRef.current?.('saved');
         }
         return result;
       },
@@ -1305,8 +1458,19 @@ export function ModelConnectionSetting({
     const saved = await persist(input);
     if (!saved) return;
     if (check?.phase === 'done') recordCheck(saved, check);
+    if (
+      surface === 'onboarding' &&
+      input.providerPresetId === 'openai' &&
+      typeof input.apiKey === 'string' &&
+      input.apiKey.trim().length > 0 &&
+      isProviderPresetDefaultEndpoint('openai', input.baseUrl)
+    ) {
+      onSavedOpenAiDefaultKey?.(input.apiKey.trim());
+    } else if (saved.providerPresetId === 'openai') {
+      onOpenAiConnectionChanged?.();
+    }
     setEditing(null);
-    onDone?.();
+    onDone?.('saved');
   };
   const remove = async (connection: ModelConnection) => {
     if (!ipc || busy) return;
@@ -1320,6 +1484,7 @@ export function ModelConnectionSetting({
         expectedRevision: connection.revision,
       });
       setConnections((current) => current.filter((entry) => entry.id !== connection.id));
+      if (connection.providerPresetId === 'openai') onOpenAiConnectionChanged?.();
       setEditing(null);
     } catch {
       setError(true);
@@ -1411,6 +1576,7 @@ export function ModelConnectionSetting({
                   <ModelConnectionForm
                     key={`${editingPanelConnection.id}:${editingPanelConnection.revision}`}
                     pinActions
+                    surface={surface}
                     stored={editingPanelConnection}
                     catalog={catalog}
                     metadataSnapshot={metadataSnapshot}
@@ -1436,6 +1602,7 @@ export function ModelConnectionSetting({
                     <ModelConnectionForm
                       key={`${editing.id}:${editing.revision}`}
                       pinActions={variant === 'panel'}
+                      surface={surface}
                       stored={editing}
                       catalog={catalog}
                       metadataSnapshot={metadataSnapshot}
@@ -1459,6 +1626,7 @@ export function ModelConnectionSetting({
               <ModelConnectionForm
                 key={`new:${editing.provider ?? ''}`}
                 pinActions={variant === 'panel'}
+                surface={surface}
                 initialProvider={editing.provider}
                 catalog={catalog}
                 metadataSnapshot={metadataSnapshot}
@@ -1475,11 +1643,12 @@ export function ModelConnectionSetting({
               key="first"
               grow={false}
               pinActions={variant === 'panel'}
+              surface={surface}
               catalog={catalog}
               metadataSnapshot={metadataSnapshot}
               busy={busy}
               onSave={save}
-              onCancel={variant === 'panel' ? onDone : undefined}
+              onCancel={variant === 'panel' ? () => onDone?.('cancelled') : undefined}
               onCheck={onCheck}
               onDiscover={onDiscover}
               onOpenAiAuth={onOpenAiAuth}

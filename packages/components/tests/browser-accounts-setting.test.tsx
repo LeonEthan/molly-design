@@ -687,3 +687,27 @@ it('keeps a manual settings path available when the system pane cannot open', as
   expect(picker('browser-import-profile-label').textContent).toBe('Designer');
   expect(dialog().querySelector('[role="alert"]')).toBeNull();
 });
+
+it('shows a concise synced summary with expandable details when all imported sites have zero failures', async () => {
+  bridge.importBrowserAccount.mockResolvedValue({
+    ok: true,
+    report: {
+      sites: [
+        { siteId: 'pinterest', discovered: 10, imported: 8, skipped: 2, failed: 0 },
+        { siteId: 'behance', discovered: 5, imported: 5, skipped: 0, failed: 0 },
+        { siteId: 'amazon', discovered: 0, imported: 0, skipped: 0, failed: 0 },
+      ],
+    },
+  });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
+  await act(async () => button(zh['settings.browserImport.import']).click());
+  expect(dialog().textContent).toContain(
+    zh['settings.browserImport.summarySynced'].replace('{{count}}', '2')
+  );
+  expect(dialog().textContent).toContain('Pinterest');
+  expect(dialog().textContent).toContain('Behance');
+  expect(dialog().querySelector('tbody tr')).toBeNull();
+  await act(async () => button(zh['settings.browserImport.viewDetails']).click());
+  expect(dialog().querySelectorAll('tbody tr')).toHaveLength(3);
+});

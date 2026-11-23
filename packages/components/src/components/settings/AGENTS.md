@@ -73,9 +73,7 @@ Preserve historical catalog fields when editing unrelated values.
   from a viewport breakpoint — settings render in a panel far narrower than the window,
   and the panel clips its overflow, so a `md:`-width label column silently hides the
   control.
-- Onboarding reuses the model, image and browser-import forms as `panel` variants;
-  neither onboarding nor settings mounts
-  `AgentConfigDialog`. Remaining legacy stories are not runtime support.
+- Onboarding reuses the model and image forms (`panel` + `onboarding` surface); browser import is on demand in the browser panel and Settings. Neither mounts `AgentConfigDialog`. Legacy stories are not runtime support.
 - Keep optional three.js/R3F usage behind the lazy usage-calendar module so lightweight
   and SSR consumers do not evaluate its renderer graph.
 - Interface and terminal font choices exclude the known symbol families in

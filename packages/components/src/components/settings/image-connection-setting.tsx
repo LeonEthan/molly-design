@@ -23,8 +23,15 @@ import {
   type ImageConnectionProtocol,
 } from '@molly/shared';
 import { imageKeyMigrationNoticeDismissedAtom } from '@/atoms';
+import {
+  getOnboardingImageProtocols,
+  IMAGE_MODEL_ONBOARDING_CARDS,
+  IMAGE_PROTOCOL_KEY_URLS,
+  IMAGE_PROTOCOL_ONBOARDING_COPY,
+} from '@/components/onboarding/onboarding-provider-guides';
 import { SegmentedControl } from '@/components/shared/segmented-control';
 import { getIpcServices } from '@/lib/electron-ipc-client';
+import { openExternalUrl } from '@/lib/native-browser';
 import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
 import {
@@ -35,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
 import {
+  ArrowUpRight,
   CircleCheck,
   ChevronDown,
   Ellipsis,
@@ -171,13 +179,21 @@ export type ImageConnectionFormDraft = {
 
 export type ImageConnectionCheck = (input: CheckImageConnection) => Promise<ConnectionCheckResult>;
 
+export type ReusableOpenAiKey = {
+  available: boolean;
+  read: () => string | null;
+  clear: () => void;
+};
+
 export function createImageConnectionFormDraft(
-  stored: Pick<ImageConnectionView, 'enabled' | 'protocol' | 'baseUrl' | 'model'> | undefined
+  stored: Pick<ImageConnectionView, 'enabled' | 'protocol' | 'baseUrl' | 'model'> | undefined,
+  defaultProtocol: ImageConnectionProtocol = 'openai-images'
 ): ImageConnectionFormDraft {
+  const protocol = stored ? imageConnectionProtocol(stored) : defaultProtocol;
   return {
     enabled: stored?.enabled ?? true,
-    protocol: imageConnectionProtocol(stored ?? {}),
-    baseUrl: stored?.baseUrl ?? PROTOCOL_COPY['openai-images'].defaultBaseUrl,
+    protocol,
+    baseUrl: stored?.baseUrl ?? PROTOCOL_COPY[protocol].defaultBaseUrl,
     apiKey: '',
     clearApiKey: false,
     model: stored?.model ?? '',
@@ -339,6 +355,8 @@ export function ImageConnectionForm({
   notice,
   className,
   pinActions = false,
+  surface = 'settings',
+  reusableOpenAiKey,
 }: {
   stored: (ImageConnectionView & { revision?: number }) | undefined;
   saving?: boolean;
@@ -353,10 +371,24 @@ export function ImageConnectionForm({
   className?: string;
   /** Keep Connect/Save visible and scroll the fields above it. */
   pinActions?: boolean;
+  surface?: 'settings' | 'onboarding';
+  reusableOpenAiKey?: ReusableOpenAiKey;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const fieldId = useId();
-  const [draft, setDraft] = useState(() => createImageConnectionFormDraft(stored));
+  const isOnboarding = surface === 'onboarding';
+  const onboardingProtocols = getOnboardingImageProtocols(i18n.resolvedLanguage ?? i18n.language);
+  const initialDefaultProtocol: ImageConnectionProtocol = isOnboarding
+    ? reusableOpenAiKey?.available
+      ? 'openai-images'
+      : onboardingProtocols[0]!
+    : 'openai-images';
+  const [draft, setDraft] = useState(() =>
+    createImageConnectionFormDraft(stored, initialDefaultProtocol)
+  );
+  const [reuseOpenAiKey, setReuseOpenAiKey] = useState(
+    Boolean(isOnboarding && !stored && reusableOpenAiKey?.available)
+  );
   const [addressWhenKeyTyped, setAddressWhenKeyTyped] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(() =>
     isCustomBaseUrl(draft.protocol, draft.baseUrl)
@@ -364,8 +396,9 @@ export function ImageConnectionForm({
 
   useEffect(() => {
     setAddressWhenKeyTyped(null);
-    setDraft(createImageConnectionFormDraft(stored));
-  }, [stored]);
+    setDraft(createImageConnectionFormDraft(stored, initialDefaultProtocol));
+    setReuseOpenAiKey(Boolean(isOnboarding && !stored && reusableOpenAiKey?.available));
+  }, [initialDefaultProtocol, isOnboarding, reusableOpenAiKey?.available, stored]);
 
   const issues = useMemo(() => imageConnectionDraftIssues(draft), [draft]);
   const dirty = isDirty(draft, stored);
@@ -373,37 +406,56 @@ export function ImageConnectionForm({
   const baseUrl = draft.baseUrl.trim();
   const typedKey = draft.apiKey.trim();
   const usesStoredKey = imageConnectionUsesStoredKey(draft, stored);
-  const destinationNeedsKey = Boolean(
-    !usesStoredKey &&
-    !draft.clearApiKey &&
-    !typedKey &&
-    (stored
-      ? stored.baseUrl !== baseUrl || imageConnectionProtocol(stored) !== draft.protocol
-      : isCustomBaseUrl(draft.protocol, draft.baseUrl))
+  const reusingKey = Boolean(
+    isOnboarding &&
+    !stored &&
+    reusableOpenAiKey?.available &&
+    reuseOpenAiKey &&
+    draft.protocol === 'openai-images' &&
+    !isCustomBaseUrl('openai-images', draft.baseUrl)
   );
+  const destinationNeedsKey = reusingKey
+    ? false
+    : Boolean(
+        !usesStoredKey &&
+        !draft.clearApiKey &&
+        !typedKey &&
+        (stored
+          ? stored.baseUrl !== baseUrl || imageConnectionProtocol(stored) !== draft.protocol
+          : isCustomBaseUrl(draft.protocol, draft.baseUrl))
+      );
   const protocolCopy = PROTOCOL_COPY[draft.protocol];
   const checkRequest = useMemo<CheckImageConnection | null>(() => {
-    if (draft.protocol === 'dashscope' || !ImageConnectionEndpointSchema.safeParse(baseUrl).success)
+    if (
+      reusingKey ||
+      draft.protocol === 'dashscope' ||
+      !ImageConnectionEndpointSchema.safeParse(baseUrl).success
+    )
       return null;
     if (typedKey && typedKeyMatchesAddress(addressWhenKeyTyped, baseUrl))
       return { protocol: draft.protocol, baseUrl, apiKey: typedKey };
     if (stored?.revision && imageConnectionUsesStoredKey(draft, stored))
       return { protocol: draft.protocol, baseUrl, expectedRevision: stored.revision };
     return null;
-  }, [addressWhenKeyTyped, baseUrl, draft, stored, typedKey]);
+  }, [addressWhenKeyTyped, baseUrl, draft, reusingKey, stored, typedKey]);
   const check = useConnectionCheck(checkRequest, onCheck);
   const checkMessageKey =
     check.phase === 'done' && !check.result.ok
       ? imageConnectionCheckMessageKey(check.result)
       : null;
   const blockEmptyBaseUrl =
-    baseUrl.length === 0 && (typedKey.length > 0 || (hasStoredKey && !draft.clearApiKey));
+    !reusingKey &&
+    baseUrl.length === 0 &&
+    (typedKey.length > 0 || (hasStoredKey && !draft.clearApiKey));
   const checkMessage = blockEmptyBaseUrl
     ? t('settings.imageConnection.check.enterBaseUrl')
     : checkMessageKey
       ? t(checkMessageKey)
       : undefined;
-  const canSave = imageConnectionCanSave(draft, stored);
+  const canSave = reusingKey
+    ? !issues.baseUrl && !issues.model
+    : imageConnectionCanSave(draft, stored);
+  const effectiveDirty = reusingKey ? draft.model.trim().length > 0 : dirty;
   const hasModelList =
     check.phase === 'done' && check.result.ok && check.result.models !== undefined;
   const listed = check.phase === 'done' && check.result.ok ? (check.result.models ?? []) : [];
@@ -413,7 +465,14 @@ export function ImageConnectionForm({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!canSave || !dirty || destinationNeedsKey || saving) return;
+    if (!canSave || !effectiveDirty || destinationNeedsKey || saving) return;
+    if (reusingKey) {
+      const reused = reusableOpenAiKey?.read()?.trim();
+      if (!reused) return;
+      setAddressWhenKeyTyped(null);
+      void onSave({ ...draft, apiKey: reused, clearApiKey: false }, check);
+      return;
+    }
     setAddressWhenKeyTyped(null);
     setDraft((current) => ({ ...current, apiKey: '' }));
     void onSave(draft, check);
@@ -440,31 +499,122 @@ export function ImageConnectionForm({
         className={pinActions ? 'min-h-0 flex-1 space-y-5 overflow-y-auto' : 'space-y-5'}
       >
         {notice}
-        <Field label={t('settings.imageConnection.protocol')}>
-          <SegmentedControl
-            ariaLabel={t('settings.imageConnection.protocol')}
-            size="sm"
-            value={draft.protocol}
-            disabled={saving}
-            options={IMAGE_CONNECTION_PROTOCOLS.map((protocol) => ({
-              value: protocol,
-              label: t(PROTOCOL_COPY[protocol].label),
-            }))}
-            onChange={(protocol) => {
-              const next = applyImageProtocolChoice(draft, protocol);
-              setAddressWhenKeyTyped(null);
-              setDraft(next);
-              if (isCustomBaseUrl(next.protocol, next.baseUrl)) setAdvancedOpen(true);
-            }}
-          />
-        </Field>
+        {isOnboarding && !stored && reusableOpenAiKey?.available ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background px-3 py-2.5">
+            <span className="text-xs font-medium text-foreground">
+              {t('onboarding.models.image.reuseOpenAiKey')}
+            </span>
+            <Switch
+              aria-label={t('onboarding.models.image.reuseOpenAiKey')}
+              checked={reuseOpenAiKey}
+              disabled={saving}
+              onCheckedChange={(checked) => {
+                setReuseOpenAiKey(checked);
+                if (checked) {
+                  setAddressWhenKeyTyped(null);
+                  setDraft((current) => ({
+                    ...current,
+                    protocol: 'openai-images',
+                    baseUrl: PROTOCOL_COPY['openai-images'].defaultBaseUrl,
+                    apiKey: '',
+                    model: current.protocol === 'openai-images' ? current.model : '',
+                  }));
+                }
+              }}
+            />
+          </div>
+        ) : null}
 
-        <Field
-          htmlFor={`${fieldId}-api-key`}
-          label={t('settings.imageConnection.apiKey')}
-          hint={destinationNeedsKey ? t('settings.models.keyRequired') : undefined}
-        >
+        {isOnboarding ? (
+          <div className="space-y-2">
+            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              {t('onboarding.models.image.provider')}
+            </p>
+            <div
+              role="radiogroup"
+              aria-label={t('onboarding.models.image.provider')}
+              className="grid grid-cols-2 gap-2"
+            >
+              {onboardingProtocols.map((protocol) => {
+                const selected = draft.protocol === protocol;
+                const copy = IMAGE_PROTOCOL_ONBOARDING_COPY[protocol];
+                return (
+                  <button
+                    key={protocol}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={saving}
+                    onClick={() => {
+                      const next = applyImageProtocolChoice(draft, protocol);
+                      setAddressWhenKeyTyped(null);
+                      setDraft(next);
+                      if (protocol !== 'openai-images') setReuseOpenAiKey(false);
+                      if (isCustomBaseUrl(next.protocol, next.baseUrl)) setAdvancedOpen(true);
+                    }}
+                    className={cn(
+                      'flex min-w-0 items-center gap-2.5 rounded-xl border border-border/60 bg-background px-3 py-2.5 text-left transition-colors hover:border-foreground/35',
+                      selected && 'border-foreground ring-1 ring-inset ring-foreground'
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.06] text-[10px] font-semibold tracking-tight text-foreground"
+                    >
+                      {copy.mark}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium text-foreground">
+                        {t(copy.nameKey)}
+                      </span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {t(copy.metaKey)}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <Field label={t('settings.imageConnection.protocol')}>
+            <SegmentedControl
+              ariaLabel={t('settings.imageConnection.protocol')}
+              size="sm"
+              value={draft.protocol}
+              disabled={saving}
+              options={IMAGE_CONNECTION_PROTOCOLS.map((protocol) => ({
+                value: protocol,
+                label: t(PROTOCOL_COPY[protocol].label),
+              }))}
+              onChange={(protocol) => {
+                const next = applyImageProtocolChoice(draft, protocol);
+                setAddressWhenKeyTyped(null);
+                setDraft(next);
+                if (isCustomBaseUrl(next.protocol, next.baseUrl)) setAdvancedOpen(true);
+              }}
+            />
+          </Field>
+        )}
+
+        {!reusingKey ? (
           <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor={`${fieldId}-api-key`} className="text-xs font-medium">
+                {t('settings.imageConnection.apiKey')}
+              </Label>
+              {isOnboarding ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void openExternalUrl(IMAGE_PROTOCOL_KEY_URLS[draft.protocol])}
+                  className="inline-flex items-center gap-0.5 text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+                >
+                  {t('onboarding.models.getKey')}
+                  <ArrowUpRight aria-hidden className="h-3 w-3" />
+                </button>
+              ) : null}
+            </div>
             <div className="flex items-center gap-1.5">
               <Input
                 id={`${fieldId}-api-key`}
@@ -505,10 +655,14 @@ export function ImageConnectionForm({
                 </Button>
               ) : null}
             </div>
-            <p className="text-xs text-muted-foreground">{t('settings.models.keyLocalHint')}</p>
+            {destinationNeedsKey ? (
+              <p className="text-xs text-muted-foreground">{t('settings.models.keyRequired')}</p>
+            ) : !isOnboarding ? (
+              <p className="text-xs text-muted-foreground">{t('settings.models.keyLocalHint')}</p>
+            ) : null}
             <ConnectionCheckError state={check} baseUrl={baseUrl} message={checkMessage} />
           </div>
-        </Field>
+        ) : null}
 
         <Field
           label={t('settings.imageConnection.modelCandidates')}
@@ -526,10 +680,41 @@ export function ImageConnectionForm({
             <div
               role="radiogroup"
               aria-label={t('settings.imageConnection.modelCandidates')}
-              className="flex flex-wrap gap-1.5"
+              className={isOnboarding ? 'grid grid-cols-2 gap-2' : 'flex flex-wrap gap-1.5'}
             >
               {protocolCopy.candidateModels.map((candidate) => {
                 const selected = draft.model === candidate;
+                const cardMeta = IMAGE_MODEL_ONBOARDING_CARDS[candidate];
+                if (isOnboarding && cardMeta) {
+                  return (
+                    <button
+                      key={candidate}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      disabled={saving}
+                      onClick={() => setDraft((current) => ({ ...current, model: candidate }))}
+                      className={cn(
+                        'flex min-w-0 flex-col rounded-xl border border-border/60 bg-background px-3 py-2.5 text-left transition-colors hover:border-foreground/35',
+                        selected && 'border-foreground ring-1 ring-inset ring-foreground'
+                      )}
+                    >
+                      <span className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+                        <span className="truncate">{t(cardMeta.labelKey)}</span>
+                        {selected || (!draft.model && cardMeta.recommended) ? (
+                          <span
+                            aria-hidden
+                            data-signal-dot=""
+                            className="size-[5px] shrink-0 rounded-full bg-[var(--signal)]"
+                          />
+                        ) : null}
+                      </span>
+                      <span className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                        {candidate}
+                      </span>
+                    </button>
+                  );
+                }
                 return (
                   <button
                     key={candidate}
@@ -554,6 +739,11 @@ export function ImageConnectionForm({
                 );
               })}
             </div>
+            {isOnboarding && draft.protocol === 'dashscope' ? (
+              <p className="text-xs text-muted-foreground">
+                {t('onboarding.models.image.dashscopeNoProbe')}
+              </p>
+            ) : null}
             {modelNotListed ? (
               <p className="text-xs leading-relaxed text-muted-foreground">
                 {t('settings.imageConnection.modelNotListed', { count: listed.length })}
@@ -709,7 +899,7 @@ export function ImageConnectionForm({
           <Button
             type="submit"
             size="sm"
-            disabled={saving || !dirty || !canSave || destinationNeedsKey}
+            disabled={saving || !effectiveDirty || !canSave || destinationNeedsKey}
           >
             {saving ? (
               <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -822,11 +1012,15 @@ export function ImageConnectionSummary({
 export function ImageConnectionSetting({
   onConnectionChange,
   variant = 'section',
+  surface = 'settings',
+  reusableOpenAiKey,
   onDone,
 }: {
   onConnectionChange?: (connection: ProtectedImageConnection | null) => void;
   variant?: 'section' | 'panel';
-  onDone?: () => void;
+  surface?: 'settings' | 'onboarding';
+  reusableOpenAiKey?: ReusableOpenAiKey;
+  onDone?: (outcome?: 'saved' | 'cancelled') => void;
 } = {}) {
   const { t } = useTranslation();
   const ipc = useMemo(() => getIpcServices(), []);
@@ -919,6 +1113,9 @@ export function ImageConnectionSetting({
         return false;
       }
       const connection = await ipc.modelConnections.saveImage(input);
+      if (reusableOpenAiKey?.available && input.protocol === 'openai-images') {
+        reusableOpenAiKey.clear();
+      }
       setStored(connection);
       setCheck(
         checked?.phase === 'done' ? { revision: connection.revision, state: checked } : undefined
@@ -999,6 +1196,8 @@ export function ImageConnectionSetting({
         <ImageConnectionForm
           className={variant === 'panel' ? undefined : 'bg-foreground/[0.015] p-5'}
           pinActions={variant === 'panel'}
+          surface={surface}
+          reusableOpenAiKey={reusableOpenAiKey}
           stored={stored}
           saving={saving}
           saveError={saveError}
@@ -1007,12 +1206,12 @@ export function ImageConnectionSetting({
           onCancel={() => {
             setSaveError(undefined);
             setEditing(false);
-            if (!stored) onDone?.();
+            if (!stored) onDone?.('cancelled');
           }}
           onSave={async (draft, checked) => {
             if (!(await save(draft, checked))) return;
             setEditing(false);
-            onDone?.();
+            onDone?.('saved');
           }}
           onDelete={stored ? () => void remove(stored) : undefined}
           onClearApiKey={async () => {

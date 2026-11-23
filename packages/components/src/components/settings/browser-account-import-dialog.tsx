@@ -74,6 +74,7 @@ function ImportSession({
   );
   const [error, setError] = useState<BrowserAccountImportErrorCode | null>(null);
   const [report, setReport] = useState<ElectronBrowserImportReport | null>(null);
+  const [reportDetailsOpen, setReportDetailsOpen] = useState(false);
   const operation = useRef<string | null>(null);
   const listing = useRef<string | null>(null);
   const live = useRef(true);
@@ -308,6 +309,40 @@ function ImportSession({
         name: BROWSER_ACCOUNT_SITES.find((site) => site.id === row.siteId)?.name ?? row.siteId,
       }))
     : [];
+  const reportHasFailures = reportRows.some(({ row }) => row.failed > 0);
+  const syncedSiteNames = reportRows
+    .filter(({ row }) => row.imported > 0)
+    .map(({ name }) => name);
+  const reportTable = (
+    <table className="w-full text-sm tabular-nums">
+      <thead>
+        <tr className="text-xs text-muted-foreground">
+          <th scope="col" className="pb-2 text-left font-medium">
+            {t('settings.browserImport.websites')}
+          </th>
+          {REPORT_COLUMNS.map((column) => (
+            <th key={column} scope="col" className="pb-2 pl-3 text-right font-medium">
+              {t(`settings.browserImport.columns.${column}`)}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {reportRows.map(({ row, name }) => (
+          <tr key={row.siteId} data-site-id={row.siteId}>
+            <th scope="row" className="py-1 text-left font-normal">
+              {name}
+            </th>
+            {REPORT_COLUMNS.map((column) => (
+              <td key={column} className="py-1 pl-3 text-right">
+                {row[column]}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 
   const fields = (
     <>
@@ -403,39 +438,39 @@ function ImportSession({
         </div>
       ) : null}
       {report ? (
-        <div
-          role="status"
-          className="max-h-72 overflow-y-auto rounded-lg border border-border px-4 py-3"
-        >
-          <table className="w-full text-sm tabular-nums">
-            <thead>
-              <tr className="text-xs text-muted-foreground">
-                <th scope="col" className="pb-2 text-left font-medium">
-                  {t('settings.browserImport.websites')}
-                </th>
-                {REPORT_COLUMNS.map((column) => (
-                  <th key={column} scope="col" className="pb-2 pl-3 text-right font-medium">
-                    {t(`settings.browserImport.columns.${column}`)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {reportRows.map(({ row, name }) => (
-                <tr key={row.siteId} data-site-id={row.siteId}>
-                  <th scope="row" className="py-1 text-left font-normal">
-                    {name}
-                  </th>
-                  {REPORT_COLUMNS.map((column) => (
-                    <td key={column} className="py-1 pl-3 text-right">
-                      {row[column]}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        reportHasFailures ? (
+          <div
+            role="status"
+            className="max-h-72 overflow-y-auto rounded-lg border border-border px-4 py-3"
+          >
+            {reportTable}
+          </div>
+        ) : (
+          <div role="status" className="space-y-3 rounded-lg border border-border px-4 py-3">
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-foreground">
+                {syncedSiteNames.length > 0
+                  ? t('settings.browserImport.summarySynced', { count: syncedSiteNames.length })
+                  : t('settings.browserImport.summaryNone')}
+              </div>
+              {syncedSiteNames.length > 0 ? (
+                <div className="text-xs text-muted-foreground">{syncedSiteNames.join(' · ')}</div>
+              ) : null}
+            </div>
+            <Collapsible open={reportDetailsOpen} onOpenChange={setReportDetailsOpen}>
+              <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">
+                <ChevronDown
+                  aria-hidden
+                  className={`h-3.5 w-3.5 transition-transform ${reportDetailsOpen ? 'rotate-180' : ''}`}
+                />
+                {t('settings.browserImport.viewDetails')}
+              </CollapsibleTrigger>
+              <CollapsibleContent className="max-h-60 overflow-y-auto pt-3">
+                {reportTable}
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        )
       ) : (
         <Collapsible
           open={expanded}

@@ -3,7 +3,7 @@
 Status: draft
 Previous approval before the Pi 0.99.2 Node-floor revision: [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
 Date: 2026-09-17
-Translation: current
+Translation: stale
 
 [中文](lody-upstream-adoption.zh.md)
 

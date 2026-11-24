@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import sharp from 'sharp';
 import { z } from 'zod';
+import { callMollyCoreIpc, getMollyCoreIpcSocketPath } from '@/mcp/molly-core-ipc';
 
 const RegionSchema = z
   .object({
@@ -352,10 +353,33 @@ async function fontRows(input: z.infer<typeof ViewImageInputSchema>, scope: Desi
   };
 }
 
+type CoreViewImageResult = {
+  mimeType: 'image/jpeg';
+  data: string;
+  metadata: Record<string, unknown>;
+};
+
 export async function viewImage(
   input: z.infer<typeof ViewImageInputSchema>,
   scope: DesignImageViewScope
 ) {
+  const coreSocket = getMollyCoreIpcSocketPath();
+  if (coreSocket) {
+    const result = await callMollyCoreIpc<CoreViewImageResult>(coreSocket, 'view_image.inspect', {
+      scope,
+      ...(input.path === undefined ? {} : { path: input.path }),
+      ...(input.paths === undefined ? {} : { paths: input.paths }),
+      ...(input.region === undefined ? {} : { region: input.region }),
+      ...(input.fonts === undefined ? {} : { fonts: input.fonts }),
+      ...(input.text === undefined ? {} : { text: input.text }),
+    });
+    return {
+      content: [
+        { type: 'text' as const, text: JSON.stringify(result.metadata) },
+        { type: 'image' as const, data: result.data, mimeType: result.mimeType },
+      ],
+    };
+  }
   if (input.fonts !== undefined) return fontRows(input, scope);
   if (input.path !== undefined) {
     const image = await readImage(input.path, scope);

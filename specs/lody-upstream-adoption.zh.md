@@ -7,6 +7,8 @@ Translation: current
 
 [English](lody-upstream-adoption.md)
 
+2026-11-23 终止声明：自 2026-11-23 起，Molly 停止跟踪与采纳 Lody 上游新提交，不再要求代码形态与 Lody 对齐；已落地的 U1–U9 行为语义保留为 Molly 向 Go/MyGo 演进期间的兼容性验收基线（详见[Stage 1 设计提案](../.agents/notes/proposed/architecture/2026-11-23-mygo-stack-stage1-design.zh.md)）。本 Spec 保持 draft。
+
 ## 场景与目标
 
 用户在 Molly 中输入设计需求、附加参考图并持续修改同一作品。会话变长、连接中断、凭据过期，或用户在压缩上下文及执行工具时点击停止，都不应导致未发送输入消失、会话上下文被静默替换、旧事件结束新回合，或 Agent 尚未停止而画布提前允许编辑。升级后，用户仍能离线打开原有会话、画稿、素材和设计版本，并在原有桌面工作流中继续创作。

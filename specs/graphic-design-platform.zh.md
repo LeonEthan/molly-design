@@ -56,6 +56,8 @@ Translation: pending
 
 2026-10-24 侧栏跟随修订：owner 在会话中批准右侧栏随当前查看的 Agent 执行在浏览器与画布之间切换，并批准运行中隐藏画布保留实时构建订阅的有限例外。规则见「唯一画布与实时构建」及「侧栏跟随」；本修订保持 draft，待链接批准记录。
 
+2026-11-23 Stage 1 技术演进修订：owner 确认停止复用 Lody 上游代码并启动 Go/MyGo 分阶段演进（见[Stage 1 设计提案](../.agents/notes/proposed/architecture/2026-11-23-mygo-stack-stage1-design.zh.md)）。其一，离屏渲染与导出不依赖隐藏窗口的 `requestAnimationFrame` 栅栏，支持按渲染引擎维护视觉基线及大尺寸有界瓦片拼接导出；其二，macOS 内置浏览器的受控 `WKWebView` 降级方向见[浏览器独立 Spec](agent-browser-webmcp.zh.md)；其三，本阶段不改动既有 Loro/Flock 会话数据面与单写者约束，Loro 替换另行立项评审。本修订保持 draft。
+
 ## 使用场景
 
 用户发起设计会话，输入需求并添加参考图，使用本机 Agent 生成可编辑的平面设计；随后通过选中元素对话或手工修改，保存、重开并导出图片。用户通过会话历史查找历史产出，不管理独立作品目录。正常创作不要求 Git 仓库、分支、终端命令或代码审查知识。

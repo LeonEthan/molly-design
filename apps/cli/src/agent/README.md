@@ -229,10 +229,12 @@ failed-close recovery and canvas release; ordinary ACP cancel remains a separate
 
 ## Personal memory
 
-Design workers use the private run-bound memory callback. The daemon's single
-`PersonalMemoryService` owns `memory/preferences.sqlite` under Molly's data root.
-It uses mem0ai 3.3.1's public SQLite store with telemetry disabled before import.
-Recall lists the complete bounded preference set; sentinel vectors are not semantic
-embeddings. Settings uses `memory/preferences` RPC with snapshot revisions. Serialized
+Design workers use the private run-bound memory callback. The single
+`PersonalMemoryService` owns `memory/preferences.sqlite` under Molly's data root
+(delegating to pure-Go `molly-core` `internal/memory` over local IPC when configured,
+or opening the same Molly SQLite schema directly without `mem0ai`, with one-time
+zero-loss migration of legacy `mem0` `vectors` rows).
+Recall lists the complete bounded preference set without vector embeddings.
+Settings uses `memory/preferences` RPC with snapshot revisions. Serialized
 mutations reject stale state; automatic capture checks the active run's cancellation
 immediately before the atomic batch. See [personal memory](../../../../specs/personal-memory.md).

@@ -52,6 +52,46 @@ jobs:
           path: e2e/artifacts/helper-cleanup
           if-no-files-found: warn
 
+  go-core:
+    name: Go core
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check Go formatting
+        run: |
+          unformatted="$(gofmt -l cmd internal)"
+          if [ -n "$unformatted" ]; then
+            echo "Unformatted Go files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Build and test Go core (CGO_ENABLED=0)
+        env:
+          CGO_ENABLED: 0
+          GOFLAGS: -mod=readonly
+        run: |
+          go vet ./cmd/... ./internal/...
+          go build ./cmd/... ./internal/...
+          go test -v ./cmd/... ./internal/...
+
+      - name: Run Go race detector tests (CGO_ENABLED=1)
+        env:
+          CGO_ENABLED: 1
+          GOFLAGS: -mod=readonly
+        run: go test -race -v ./cmd/... ./internal/...
+
   static:
     name: Static checks
     runs-on: ubuntu-latest

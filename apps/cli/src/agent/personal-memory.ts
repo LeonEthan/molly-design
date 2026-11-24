@@ -1,12 +1,112 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { MemoryVectorStore } from 'mem0ai/oss';
+import { mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import Database from 'better-sqlite3';
 import {
   PersonalMemoryEntrySchema as EntrySchema,
   PersonalMemoryChangesSchema,
   PERSONAL_MEMORY_LIMIT,
+  type PersonalMemorySnapshot,
 } from '@molly/shared/personal-memory';
 import { getMollyDataDir } from '@molly/shared/node/installation-profile';
-import { join } from 'node:path';
+import { callMollyCoreIpc, getMollyCoreIpcSocketPath } from '@/mcp/molly-core-ipc';
+
+const LEGACY_MEM0_MIGRATION_NAME = 'mem0_vectors_v1';
+
+type PreferenceRow = { id: string; text: string };
+type MetaRow = { enabled: number; revision_nonce: string };
+type LegacyVectorRow = { id: string; payload: string };
+
+function computeRevision(entries: PreferenceRow[], enabled: boolean, nonce: string): string {
+  return createHash('sha256').update(JSON.stringify({ entries, enabled, nonce })).digest('hex');
+}
+
+function initMemorySchema(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS personal_preferences (
+      id TEXT PRIMARY KEY,
+      text TEXT NOT NULL CHECK(length(text) >= 1 AND length(text) <= 300),
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS personal_memory_meta (
+      id INTEGER PRIMARY KEY CHECK(id = 1),
+      enabled INTEGER NOT NULL DEFAULT 1,
+      revision_nonce TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS personal_memory_migrations (
+      name TEXT PRIMARY KEY,
+      imported_count INTEGER NOT NULL,
+      migrated_at INTEGER NOT NULL
+    );
+  `);
+  db.prepare(
+    `INSERT OR IGNORE INTO personal_memory_meta (id, enabled, revision_nonce, updated_at) VALUES (1, 1, 'initial', ?)`
+  ).run(Date.now());
+  importLegacyMem0VectorsIfNeeded(db);
+}
+
+function importLegacyMem0VectorsIfNeeded(db: Database.Database): void {
+  const migrate = db.transaction(() => {
+    const already = db
+      .prepare(`SELECT COUNT(1) AS count FROM personal_memory_migrations WHERE name = ?`)
+      .get(LEGACY_MEM0_MIGRATION_NAME) as { count: number } | undefined;
+    if ((already?.count ?? 0) > 0) return;
+
+    const hasVectors = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vectors'`)
+      .get() as { name: string } | undefined;
+    if (!hasVectors) return;
+
+    const legacyRows = db
+      .prepare(`SELECT id, payload FROM vectors ORDER BY id ASC`)
+      .all() as LegacyVectorRow[];
+    const existing = new Set(
+      (db.prepare(`SELECT id FROM personal_preferences`).all() as { id: string }[]).map((r) => r.id)
+    );
+    const now = Date.now();
+    const insertPref = db.prepare(
+      `INSERT INTO personal_preferences (id, text, created_at, updated_at) VALUES (?, ?, ?, ?)`
+    );
+    let imported = 0;
+    let importedEnabled: boolean | undefined;
+
+    for (const row of legacyRows) {
+      let parsed: { kind?: unknown; text?: unknown; enabled?: unknown };
+      try {
+        parsed = JSON.parse(row.payload) as { kind?: unknown; text?: unknown; enabled?: unknown };
+      } catch {
+        continue;
+      }
+      if (row.id === 'settings' || parsed.kind === 'settings') {
+        if (typeof parsed.enabled === 'boolean') importedEnabled = parsed.enabled;
+        continue;
+      }
+      if (parsed.kind !== 'preference') continue;
+      const entry = EntrySchema.safeParse({ id: row.id, text: parsed.text });
+      if (!entry.success) continue;
+      if (existing.has(entry.data.id) || existing.size >= PERSONAL_MEMORY_LIMIT) continue;
+      insertPref.run(entry.data.id, entry.data.text, now, now);
+      existing.add(entry.data.id);
+      imported++;
+    }
+
+    if (importedEnabled !== undefined) {
+      db.prepare(
+        `UPDATE personal_memory_meta SET enabled = ?, revision_nonce = ?, updated_at = ? WHERE id = 1`
+      ).run(importedEnabled ? 1 : 0, randomUUID(), now);
+    } else if (imported > 0) {
+      db.prepare(
+        `UPDATE personal_memory_meta SET revision_nonce = ?, updated_at = ? WHERE id = 1`
+      ).run(randomUUID(), now);
+    }
+    db.prepare(
+      `INSERT INTO personal_memory_migrations (name, imported_count, migrated_at) VALUES (?, ?, ?)`
+    ).run(LEGACY_MEM0_MIGRATION_NAME, imported, now);
+  });
+  migrate.immediate();
+}
 
 export class PersonalMemoryService {
   private pending: Promise<unknown> = Promise.resolve();
@@ -17,104 +117,185 @@ export class PersonalMemoryService {
     return result;
   }
 
-  private constructor(private readonly store: MemoryVectorStore) {}
+  private constructor(
+    private readonly dbPath: string,
+    private readonly db: Database.Database | null,
+    private readonly coreSocket: string | undefined
+  ) {}
 
   static async open(dbPath: string): Promise<PersonalMemoryService> {
-    process.env.MEM0_TELEMETRY = 'false';
-    const { MemoryVectorStore } = await import('mem0ai/oss');
-    return new PersonalMemoryService(
-      new MemoryVectorStore({ dbPath, dimension: 1, collectionName: 'personal_preferences' })
-    );
+    const coreSocket = dbPath === ':memory:' ? undefined : getMollyCoreIpcSocketPath();
+    if (coreSocket) {
+      await callMollyCoreIpc<PersonalMemorySnapshot>(coreSocket, 'memory.read', { dbPath });
+      return new PersonalMemoryService(dbPath, null, coreSocket);
+    }
+    if (dbPath !== ':memory:') {
+      mkdirSync(dirname(dbPath), { recursive: true });
+    }
+    const db = new Database(dbPath);
+    if (dbPath !== ':memory:') {
+      db.pragma('journal_mode = WAL');
+      db.pragma('synchronous = NORMAL');
+    }
+    db.pragma('busy_timeout = 5000');
+    initMemorySchema(db);
+    return new PersonalMemoryService(dbPath, db, undefined);
   }
 
-  async read() {
-    const [records] = await this.store.list({ kind: 'preference' }, 32);
-    const entries = records
-      .map((record) => EntrySchema.parse({ id: record.id, text: record.payload.text }))
-      .sort((a, b) => a.id.localeCompare(b.id));
-    const settings = await this.store.get('settings');
-    const enabled = settings?.payload.enabled !== false;
+  private readLocal(): PersonalMemorySnapshot {
+    if (!this.db) throw new Error('memory store is delegated to molly-core');
+    const entries = (
+      this.db
+        .prepare(`SELECT id, text FROM personal_preferences ORDER BY id ASC LIMIT ?`)
+        .all(PERSONAL_MEMORY_LIMIT) as PreferenceRow[]
+    ).map((row) => EntrySchema.parse(row));
+    const meta = this.db
+      .prepare(`SELECT enabled, revision_nonce FROM personal_memory_meta WHERE id = 1`)
+      .get() as MetaRow;
+    const enabled = meta.enabled !== 0;
     return {
-      revision: createHash('sha256')
-        .update(JSON.stringify([entries, settings?.payload]))
-        .digest('hex'),
+      revision: computeRevision(entries, enabled, meta.revision_nonce),
       enabled,
       entries,
     };
   }
 
+  async read(): Promise<PersonalMemorySnapshot> {
+    if (this.coreSocket) {
+      return await callMollyCoreIpc<PersonalMemorySnapshot>(this.coreSocket, 'memory.read', {
+        dbPath: this.dbPath,
+      });
+    }
+    return this.readLocal();
+  }
+
   async setEnabled(enabled: boolean, revision: string): Promise<void> {
+    if (this.coreSocket) {
+      await callMollyCoreIpc(this.coreSocket, 'memory.set_enabled', {
+        dbPath: this.dbPath,
+        enabled,
+        revision,
+      });
+      return;
+    }
     return this.serialize(async () => {
-      if ((await this.read()).revision !== revision) throw new Error('memory_stale');
-      await this.store.insert(
-        [[1]],
-        ['settings'],
-        [{ kind: 'settings', enabled, revision: randomUUID() }]
-      );
+      if (!this.db) throw new Error('memory store unavailable');
+      const tx = this.db.transaction(() => {
+        if (this.readLocal().revision !== revision) throw new Error('memory_stale');
+        this.db!.prepare(
+          `UPDATE personal_memory_meta SET enabled = ?, revision_nonce = ?, updated_at = ? WHERE id = 1`
+        ).run(enabled ? 1 : 0, randomUUID(), Date.now());
+      });
+      tx.immediate();
     });
   }
 
   async edit(id: string, text: string, revision: string): Promise<void> {
     const entry = EntrySchema.parse({ id, text });
+    if (this.coreSocket) {
+      await callMollyCoreIpc(this.coreSocket, 'memory.edit', {
+        dbPath: this.dbPath,
+        id: entry.id,
+        text: entry.text,
+        revision,
+      });
+      return;
+    }
     return this.serialize(async () => {
-      const snapshot = await this.read();
-      if (snapshot.revision !== revision) throw new Error('memory_stale');
-      if (!snapshot.entries.some((item) => item.id === id)) throw new Error('memory_missing');
-      await this.store.insert(
-        [[1], [1]],
-        [id, 'settings'],
-        [
-          { ...entry, kind: 'preference' },
-          { kind: 'settings', enabled: snapshot.enabled, revision: randomUUID() },
-        ]
-      );
+      if (!this.db) throw new Error('memory store unavailable');
+      const tx = this.db.transaction(() => {
+        const snapshot = this.readLocal();
+        if (snapshot.revision !== revision) throw new Error('memory_stale');
+        if (!snapshot.entries.some((item) => item.id === entry.id))
+          throw new Error('memory_missing');
+        const now = Date.now();
+        this.db!.prepare(
+          `UPDATE personal_preferences SET text = ?, updated_at = ? WHERE id = ?`
+        ).run(entry.text, now, entry.id);
+        this.db!.prepare(
+          `UPDATE personal_memory_meta SET revision_nonce = ?, updated_at = ? WHERE id = 1`
+        ).run(randomUUID(), now);
+      });
+      tx.immediate();
     });
   }
 
   async remove(id: string, revision: string): Promise<void> {
+    if (this.coreSocket) {
+      await callMollyCoreIpc(this.coreSocket, 'memory.remove', {
+        dbPath: this.dbPath,
+        id,
+        revision,
+      });
+      return;
+    }
     return this.serialize(async () => {
-      const snapshot = await this.read();
-      if (snapshot.revision !== revision) throw new Error('memory_stale');
-      if (!snapshot.entries.some((entry) => entry.id === id)) throw new Error('memory_missing');
-      await this.store.insert(
-        [[1]],
-        ['settings'],
-        [{ kind: 'settings', enabled: snapshot.enabled, revision: randomUUID() }]
-      );
-      await this.store.delete(id);
+      if (!this.db) throw new Error('memory store unavailable');
+      const tx = this.db.transaction(() => {
+        const snapshot = this.readLocal();
+        if (snapshot.revision !== revision) throw new Error('memory_stale');
+        if (!snapshot.entries.some((entry) => entry.id === id)) throw new Error('memory_missing');
+        const now = Date.now();
+        this.db!.prepare(`DELETE FROM personal_preferences WHERE id = ?`).run(id);
+        this.db!.prepare(
+          `UPDATE personal_memory_meta SET revision_nonce = ?, updated_at = ? WHERE id = 1`
+        ).run(randomUUID(), now);
+      });
+      tx.immediate();
     });
   }
 
   async capture(revision: string, rawChanges: unknown, signal: AbortSignal): Promise<void> {
-    return this.serialize(async () => {
-      const changes = PersonalMemoryChangesSchema.parse(rawChanges);
-      const snapshot = await this.read();
-      signal.throwIfAborted();
-      if (snapshot.revision !== revision) throw new Error('memory_stale');
-      if (!snapshot.enabled) throw new Error('memory_disabled');
-      if (
-        changes.some(
-          (change) => change.id && !snapshot.entries.some((entry) => entry.id === change.id)
-        )
-      )
-        throw new Error('memory_missing');
-      if (
-        snapshot.entries.length + changes.filter((change) => !change.id).length >
-        PERSONAL_MEMORY_LIMIT
-      )
-        throw new Error('memory_full');
-      if (changes.length === 0) return;
-      const records = changes.map((change) => ({
-        id: change.id ?? randomUUID(),
-        text: change.text,
-        kind: 'preference',
-      }));
-      signal.throwIfAborted();
-      await this.store.insert(
-        [...records.map(() => [1]), [1]],
-        [...records.map((entry) => entry.id), 'settings'],
-        [...records, { kind: 'settings', enabled: snapshot.enabled, revision: randomUUID() }]
+    const changes = PersonalMemoryChangesSchema.parse(rawChanges);
+    if (this.coreSocket) {
+      await callMollyCoreIpc(
+        this.coreSocket,
+        'memory.capture',
+        { dbPath: this.dbPath, revision, changes },
+        signal
       );
+      return;
+    }
+    return this.serialize(async () => {
+      if (!this.db) throw new Error('memory store unavailable');
+      signal.throwIfAborted();
+      const tx = this.db.transaction(() => {
+        signal.throwIfAborted();
+        const snapshot = this.readLocal();
+        if (snapshot.revision !== revision) throw new Error('memory_stale');
+        if (!snapshot.enabled) throw new Error('memory_disabled');
+        if (
+          changes.some(
+            (change) => change.id && !snapshot.entries.some((entry) => entry.id === change.id)
+          )
+        )
+          throw new Error('memory_missing');
+        if (
+          snapshot.entries.length + changes.filter((change) => !change.id).length >
+          PERSONAL_MEMORY_LIMIT
+        )
+          throw new Error('memory_full');
+        if (changes.length === 0) return;
+        signal.throwIfAborted();
+        const now = Date.now();
+        const insertPref = this.db!.prepare(
+          `INSERT INTO personal_preferences (id, text, created_at, updated_at) VALUES (?, ?, ?, ?)`
+        );
+        const updatePref = this.db!.prepare(
+          `UPDATE personal_preferences SET text = ?, updated_at = ? WHERE id = ?`
+        );
+        for (const change of changes) {
+          if (change.id) {
+            updatePref.run(change.text, now, change.id);
+          } else {
+            insertPref.run(randomUUID(), change.text, now, now);
+          }
+        }
+        this.db!.prepare(
+          `UPDATE personal_memory_meta SET revision_nonce = ?, updated_at = ? WHERE id = 1`
+        ).run(randomUUID(), now);
+      });
+      tx.immediate();
     });
   }
 }

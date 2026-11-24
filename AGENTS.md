@@ -18,9 +18,9 @@ Question requirements, delete unnecessary mechanisms, then simplify and optimize
   **reuse ladder**: reuse an existing component, then reuse with adaptation,
   then borrow the pattern, custom-build last. Name the existing options
   checked and why each higher rung was rejected, in the reply or PR body.
-  Reuse Lody's architecture, UI and agent lifecycle with Bento. Migration
-  only reduces scope; additions need explicit confirmation. Reuse modules
-  before adding protocols/storage.
+  Keep Bento, existing React UI and Pi boundaries; stop adopting upstream
+  Lody code. Target Go/MyGo for local core & shell; additions need explicit
+  confirmation. Reuse modules before adding protocols/storage.
 - Keep one editable truth: BentoDoc. YAML projections and Agent drafts serve
   different purposes. Recompute derived views where feasible; justify persistence
   by current use. Keep exposed Bento edits lossless in YAML with minimal adaptation.
@@ -31,7 +31,7 @@ Question requirements, delete unnecessary mechanisms, then simplify and optimize
 
 ## Design platform: agent-naive environment
 
-Lody owns execution; Bento owns independent editing/rendering and snapshot/flush;
+Agent runtime owns execution; Bento owns independent editing/rendering and snapshot/flush;
 design services own conversion/storage. The product Agent owns creation,
 review and completion. Expose honest capabilities; tool absence does not imply
 absence of other agent capabilities. Preserve rendering previews and image
@@ -77,7 +77,7 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
 
 ## Repository boundary
 
-- Public source is `apps/{cli,electron}` and their packages. Exclude hosted backends,
+- Public source is `apps/{cli,electron}`, `cmd/`, `internal/` and packages. Exclude hosted backends,
   operator/billing config, secrets/private records and Web/mobile app sources.
   Never commit captured user/agent transcripts; use synthetic fixtures.
 - No `@lody/convex`, private workspace packages or generated backend APIs.
@@ -101,9 +101,9 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
 - Identify once: Molly maintainer if the user says so or GitHub login is
   `LeonEthan`; otherwise community. Read [.github/AGENTS.md](.github/AGENTS.md)
   before planning community contributions and before any PR/Issue work.
-- Node `>=22.19.0 <23 || >=23.6.0` (Node-API 10); pnpm from `package.json`. Run `pnpm install` (skip nested checkouts);
-  standalone work uses a separate clone. `pnpm start:local` and root `pnpm build`
-  use local desktop composition.
+- Node `>=22.19.0 <23 || >=23.6.0` (Node-API 10), pnpm (`package.json`), Go `>=1.27.3` (`CGO_ENABLED=0`).
+  Run `pnpm install` (skip nested checkouts); standalone work uses a separate clone.
+  `pnpm start:local` and root `pnpm build` use local desktop composition.
 - Before commit, run `pnpm check` and `pnpm format`. If tests are skipped, report
   type/build/static checks. Manifest changes update `pnpm-lock.yaml`.
 - Use Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `test:`);

@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dependencyFields = [
@@ -23,7 +23,7 @@ const forbiddenPathPrefixes = [
   'site/',
   'tasks/',
 ];
-const sourceExtensions = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx']);
+const sourceExtensions = new Set(['.cjs', '.cts', '.go', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx']);
 const documentationExtensions = new Set(['.md', '.mdx']);
 const privateRecordPathPrefixes = ['context/', 'docs/', 'plans/', 'tasks/'];
 const publishableTextExtensions = new Set([
@@ -31,11 +31,19 @@ const publishableTextExtensions = new Set([
   ...documentationExtensions,
   '.json',
   '.jsonc',
+  '.mod',
+  '.sum',
   '.toml',
   '.txt',
   '.yaml',
   '.yml',
 ]);
+const forbiddenGoModulePattern =
+  /(?:@lody\/convex|github\.com\/LodyAI\/|backend\/(?:convex|server|do)|github\.com\/getsentry\/sentry-go|github\.com\/posthog\/posthog-go|github\.com\/mixpanel\/mixpanel-go)/u;
+const forbiddenGoReplacePattern = /^\s*replace\b[^\n]*(?:=>\s*(?:\/|\.\.\/.*backend\/))/gmu;
+const forbiddenGoImportPattern =
+  /"[^"]*(?:backend\/(?:convex|server|do)|github\.com\/getsentry\/sentry-go|github\.com\/posthog\/posthog-go|github\.com\/mixpanel\/mixpanel-go)[^"]*"/u;
+const forbiddenGoCloudBuildTagPattern = /^\/\/go:build\s+cloud\b/mu;
 const documentationBoundaryAllowlist = new Set(['AGENTS.md']);
 // Real developer/machine identities observed in this project's history. The
 // repo's placeholder convention (alice, developer, x, …) stays allowed, so a
@@ -49,6 +57,29 @@ const publicRuntimeArtifactHostAllowlist = new Set([
   'packages/platform/src/runtime-artifacts.ts',
 ]);
 const hostedScriptNamePattern = /(?:^|:)(?:cloud|prod|production|staging)(?:$|:)/u;
+
+export function checkGoModContent(file, content) {
+  const issues = [];
+  if (forbiddenGoModulePattern.test(content)) {
+    issues.push(`${file}: Go module references a private, closed or telemetry package`);
+  }
+  forbiddenGoReplacePattern.lastIndex = 0;
+  if (forbiddenGoReplacePattern.test(content)) {
+    issues.push(`${file}: Go module replace targets an internal absolute or closed backend path`);
+  }
+  return issues;
+}
+
+export function checkGoSourceContent(file, content) {
+  const issues = [];
+  if (forbiddenGoImportPattern.test(content)) {
+    issues.push(`${file}: Go source imports a closed backend or telemetry package`);
+  }
+  if (forbiddenGoCloudBuildTagPattern.test(content)) {
+    issues.push(`${file}: cloud-tagged Go source is not allowed in the public OSS repository`);
+  }
+  return issues;
+}
 
 function listRepositoryFiles() {
   return execFileSync('git', ['ls-files', '-co', '--exclude-standard', '-z'], {
@@ -113,9 +144,18 @@ async function main() {
   }
 
   for (const file of files) {
+    if (path.posix.basename(file) === 'go.mod') {
+      const content = await readFile(path.join(repoRoot, file), 'utf8');
+      violations.push(...checkGoModContent(file, content));
+      continue;
+    }
     if (!sourceExtensions.has(path.extname(file))) continue;
     if (file === 'scripts/check-public-boundary.mjs') continue;
     const content = await readFile(path.join(repoRoot, file), 'utf8');
+    if (path.extname(file) === '.go') {
+      violations.push(...checkGoSourceContent(file, content));
+      continue;
+    }
     if (/['"]@lody\/convex['"]/u.test(content)) {
       violations.push(`${file}: source imports private @lody/convex`);
     }
@@ -189,7 +229,9 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

@@ -11,7 +11,9 @@ import {
   describeImageFailure,
   editImageAsset,
   generateImageAsset,
+  type GeneratedImageAsset,
 } from '@/mcp/image-generation';
+import { CoreIpcRpcError, callMollyCoreIpc, getMollyCoreIpcSocketPath } from '@/mcp/molly-core-ipc';
 import { EMPTY_DESIGN_GATE, resolveDesignGate, type McpDesignGate } from '@/mcp/design-tools';
 import { getMcpSessionContext } from '@/mcp/molly-mcp-server';
 import { MOLLY_IMAGE_MCP_SERVER_NAME } from '@/mcp/molly-mcp-http-protocol';
@@ -137,6 +139,7 @@ export function buildMollyImageMcpServer(config: MollyImageMcpServerConfig = {})
   ) => {
     let dispatched = false;
     let rejected = false;
+    let delegatedToCore = false;
     try {
       signal.throwIfAborted();
       const gate = config.resolveGate ? await config.resolveGate() : snapshot;
@@ -148,30 +151,77 @@ export function buildMollyImageMcpServer(config: MollyImageMcpServerConfig = {})
         );
       if (!gate.artworkWorkdir || !gate.workspaceRoot)
         return failure('Design workspace is unavailable; no image request was sent.');
-      const common = {
-        settings: connection,
-        prompt: args.prompt,
-        ...(args.size === undefined ? {} : { size: args.size }),
-        ...(args.background === undefined ? {} : { background: args.background }),
-        ...(args.output_format === undefined ? {} : { outputFormat: args.output_format }),
-        workdir: gate.artworkWorkdir,
-        transport: (async (request) => {
-          if (request.method === 'POST') dispatched = true;
-          const response = await (config.imageTransport ?? fetchImageHttpTransport)(request);
-          if (request.method === 'POST' && (response.status < 200 || response.status >= 300))
-            rejected = true;
-          return response;
-        }) satisfies ImageHttpTransport,
-        signal,
-      };
-      const asset = await ('images' in args
-        ? editImageAsset({
-            ...common,
-            sourceWorkdir: gate.workspaceRoot,
-            images: args.images,
-            ...(args.mask === undefined ? {} : { mask: args.mask }),
-          })
-        : generateImageAsset(common));
+      const coreSocket = config.imageTransport ? undefined : getMollyCoreIpcSocketPath();
+      delegatedToCore = coreSocket !== undefined;
+      const asset: GeneratedImageAsset = coreSocket
+        ? await callMollyCoreIpc<GeneratedImageAsset>(
+            coreSocket,
+            'images' in args ? 'image_mcp.edit' : 'image_mcp.generate',
+            {
+              workdir: gate.artworkWorkdir,
+              ...('images' in args ? { sourceWorkdir: gate.workspaceRoot } : {}),
+              connection: {
+                protocol: connection.protocol ?? 'openai-images',
+                baseUrl: connection.baseUrl,
+                apiKey: connection.apiKey,
+                model: connection.model,
+              },
+              prompt: args.prompt,
+              ...(args.size === undefined ? {} : { size: args.size }),
+              ...(args.background === undefined ? {} : { background: args.background }),
+              ...(args.output_format === undefined ? {} : { outputFormat: args.output_format }),
+              ...('images' in args ? { imagePaths: args.images } : {}),
+              ...('images' in args && args.mask !== undefined ? { maskPath: args.mask } : {}),
+            },
+            signal,
+            { requireMutualAuth: true }
+          )
+        : await ('images' in args
+            ? editImageAsset({
+                settings: connection,
+                prompt: args.prompt,
+                ...(args.size === undefined ? {} : { size: args.size }),
+                ...(args.background === undefined ? {} : { background: args.background }),
+                ...(args.output_format === undefined ? {} : { outputFormat: args.output_format }),
+                workdir: gate.artworkWorkdir,
+                sourceWorkdir: gate.workspaceRoot,
+                images: args.images,
+                ...(args.mask === undefined ? {} : { mask: args.mask }),
+                transport: (async (request) => {
+                  if (request.method === 'POST') dispatched = true;
+                  const response = await (config.imageTransport ?? fetchImageHttpTransport)(
+                    request
+                  );
+                  if (
+                    request.method === 'POST' &&
+                    (response.status < 200 || response.status >= 300)
+                  )
+                    rejected = true;
+                  return response;
+                }) satisfies ImageHttpTransport,
+                signal,
+              })
+            : generateImageAsset({
+                settings: connection,
+                prompt: args.prompt,
+                ...(args.size === undefined ? {} : { size: args.size }),
+                ...(args.background === undefined ? {} : { background: args.background }),
+                ...(args.output_format === undefined ? {} : { outputFormat: args.output_format }),
+                workdir: gate.artworkWorkdir,
+                transport: (async (request) => {
+                  if (request.method === 'POST') dispatched = true;
+                  const response = await (config.imageTransport ?? fetchImageHttpTransport)(
+                    request
+                  );
+                  if (
+                    request.method === 'POST' &&
+                    (response.status < 200 || response.status >= 300)
+                  )
+                    rejected = true;
+                  return response;
+                }) satisfies ImageHttpTransport,
+                signal,
+              }));
       const structuredContent = {
         path: asset.path,
         absolutePath: asset.absolutePath,
@@ -186,12 +236,21 @@ export function buildMollyImageMcpServer(config: MollyImageMcpServerConfig = {})
         structuredContent,
       };
     } catch (error) {
-      return failure(
-        describeImageFailure(
-          error instanceof Error ? error.message : `Image generation failed: ${String(error)}`,
-          { dispatched, rejected }
-        )
-      );
+      const message =
+        error instanceof Error ? error.message : `Image generation failed: ${String(error)}`;
+      if (delegatedToCore) {
+        if (error instanceof CoreIpcRpcError) {
+          if (error.code === 'image_generate_failed' || error.code === 'image_edit_failed') {
+            return failure(message);
+          }
+          if (error.code === 'unauthorized' || error.code === 'invalid_params') {
+            return failure(describeImageFailure(message, { dispatched: false, rejected: false }));
+          }
+          return failure(describeImageFailure(message, { dispatched: true, rejected: false }));
+        }
+        return failure(describeImageFailure(message, { dispatched: true, rejected: false }));
+      }
+      return failure(describeImageFailure(message, { dispatched, rejected }));
     }
   };
 

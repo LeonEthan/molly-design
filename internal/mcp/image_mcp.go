@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -91,7 +92,10 @@ type ImageClient struct {
 type ImageError struct {
 	Dispatched bool
 	Message    string
+	Cause      error
 }
+
+func (e *ImageError) Unwrap() error { return e.Cause }
 
 func (e *ImageError) Error() string {
 	return e.Message
@@ -187,7 +191,11 @@ func (c *ImageClient) Edit(ctx context.Context, req EditRequest) (AssetResult, e
 		}
 		decoded, decErr := imaging.InspectAndDecodeBounded(raw, true)
 		if decErr != nil {
-			return AssetResult{}, &ImageError{Dispatched: false, Message: fmt.Sprintf("invalid input image: %v. Nothing was billed.", decErr)}
+			return AssetResult{}, &ImageError{
+				Dispatched: false,
+				Message:    fmt.Sprintf("invalid input image: %v. Nothing was billed.", decErr),
+				Cause:      decErr,
+			}
 		}
 		if idx == 0 {
 			firstW, firstH = decoded.Width, decoded.Height
@@ -392,6 +400,9 @@ func (c *ImageClient) doSingleRequest(
 		TLSHandshakeTimeout: timeout,
 		ForceAttemptHTTP2:   true,
 	}
+	if !publicDestinationOnly {
+		transport.Proxy = proxyFromCurrentEnv
+	}
 	defer transport.CloseIdleConnections()
 
 	httpClient := &http.Client{
@@ -428,6 +439,88 @@ func (c *ImageClient) doSingleRequest(
 		return resp.StatusCode, nil, fmt.Errorf("response exceeded maximum allowed %d bytes", maxBytes)
 	}
 	return resp.StatusCode, respBytes, nil
+}
+
+func getEnvAny(keys ...string) string {
+	for _, k := range keys {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func shouldBypassProxy(host string, noProxy string) bool {
+	h := security.StripIPv6Brackets(host)
+	if h == "" || h == "localhost" || h == "127.0.0.1" || h == "::1" {
+		return true
+	}
+	if strings.TrimSpace(noProxy) == "" {
+		return false
+	}
+	parsedIP, ipErr := netip.ParseAddr(h)
+	hasIP := ipErr == nil
+	for _, rawEntry := range strings.Split(noProxy, ",") {
+		entry := strings.TrimSpace(rawEntry)
+		if entry == "" {
+			continue
+		}
+		if entry == "*" {
+			return true
+		}
+		if hasIP {
+			if pfx, err := netip.ParsePrefix(entry); err == nil && pfx.Contains(parsedIP) {
+				return true
+			}
+		}
+		if epHost, _, err := net.SplitHostPort(entry); err == nil {
+			entry = epHost
+		}
+		entry = security.StripIPv6Brackets(entry)
+		if entry == "" {
+			continue
+		}
+		if strings.HasPrefix(entry, ".") {
+			if h == entry[1:] || strings.HasSuffix(h, entry) {
+				return true
+			}
+			continue
+		}
+		if h == entry || strings.HasSuffix(h, "."+entry) {
+			return true
+		}
+	}
+	return false
+}
+
+func proxyFromCurrentEnv(req *http.Request) (*url.URL, error) {
+	if req == nil || req.URL == nil {
+		return nil, nil
+	}
+	noProxy := getEnvAny("NO_PROXY", "no_proxy")
+	if shouldBypassProxy(req.URL.Hostname(), noProxy) {
+		return nil, nil
+	}
+	var rawProxy string
+	switch strings.ToLower(req.URL.Scheme) {
+	case "https":
+		rawProxy = getEnvAny("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")
+	case "http":
+		rawProxy = getEnvAny("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy")
+	default:
+		return nil, nil
+	}
+	if rawProxy == "" {
+		return nil, nil
+	}
+	if !strings.Contains(rawProxy, "://") {
+		rawProxy = "http://" + rawProxy
+	}
+	parsed, err := url.Parse(rawProxy)
+	if err != nil {
+		return nil, errors.New("invalid proxy URL in environment")
+	}
+	return parsed, nil
 }
 
 func validateConnection(conn Connection) (Connection, *url.URL, error) {
@@ -570,7 +663,7 @@ func decodeBase64Image(b64 string) ([]byte, error) {
 	return decoded, nil
 }
 
-var embeddedURLPattern = regexp.MustCompile(`(?i)https?://[^\s"<>]+`)
+var embeddedURLPattern = regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*://[^\s"<>]+`)
 
 func sanitizeTransportError(err error) string {
 	if err == nil {

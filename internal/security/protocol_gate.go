@@ -12,14 +12,17 @@ import (
 )
 
 const (
-	CapabilityTokenHeader = "X-Molly-Capability-Token"
-	MaxWriteBodyBytes     = 4 << 20
+	CapabilityTokenHeader   = "X-Molly-Capability-Token"
+	MaxWriteBodyBytes       = 4 << 20
+	MaxDesignWriteBodyBytes = 64 << 20
 )
 
 type ProtocolWriteGateConfig struct {
-	CapabilityToken string
-	AllowedOrigin   string
-	RequireBaseRev  bool
+	CapabilityToken               string
+	AllowedOrigin                 string
+	AllowOpaqueCustomSchemeOrigin bool
+	RequireBaseRev                bool
+	MaxBodyBytes                  int64
 }
 
 type ProtocolWriteGateError struct {
@@ -51,8 +54,15 @@ func ValidateProtocolWriteRequest(r *http.Request, cfg ProtocolWriteGateConfig) 
 
 	if cfg.AllowedOrigin != "" {
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
-		if origin == "" || !strings.EqualFold(origin, cfg.AllowedOrigin) {
+		opaqueAllowed := cfg.AllowOpaqueCustomSchemeOrigin && (origin == "" || strings.EqualFold(origin, "null"))
+		if !opaqueAllowed && (origin == "" || !strings.EqualFold(origin, cfg.AllowedOrigin)) {
 			return nil, &ProtocolWriteGateError{Status: http.StatusForbidden, Code: "invalid_origin", Reason: "request origin is not the trusted workbench"}
+		}
+		if opaqueAllowed {
+			referer := strings.TrimSpace(r.Header.Get("Referer"))
+			if referer != "" && !strings.HasPrefix(strings.ToLower(referer), strings.ToLower(cfg.AllowedOrigin)+"/") && !strings.EqualFold(referer, cfg.AllowedOrigin) {
+				return nil, &ProtocolWriteGateError{Status: http.StatusForbidden, Code: "invalid_referer", Reason: "request referer does not match trusted surface origin"}
+			}
 		}
 	}
 	secFetchSite := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
@@ -60,11 +70,18 @@ func ValidateProtocolWriteRequest(r *http.Request, cfg ProtocolWriteGateConfig) 
 		return nil, &ProtocolWriteGateError{Status: http.StatusForbidden, Code: "cross_site_blocked", Reason: "cross-site write request refused"}
 	}
 
-	body, readErr := io.ReadAll(io.LimitReader(r.Body, MaxWriteBodyBytes+1))
+	maxBody := cfg.MaxBodyBytes
+	if maxBody <= 0 {
+		maxBody = MaxWriteBodyBytes
+	}
+	if r.ContentLength > maxBody {
+		return nil, &ProtocolWriteGateError{Status: http.StatusRequestEntityTooLarge, Code: "body_too_large", Reason: "write payload exceeds maximum size"}
+	}
+	body, readErr := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
 	if readErr != nil {
 		return nil, &ProtocolWriteGateError{Status: http.StatusBadRequest, Code: "read_failed", Reason: readErr.Error()}
 	}
-	if int64(len(body)) > MaxWriteBodyBytes {
+	if int64(len(body)) > maxBody {
 		return nil, &ProtocolWriteGateError{Status: http.StatusRequestEntityTooLarge, Code: "body_too_large", Reason: "write payload exceeds maximum size"}
 	}
 

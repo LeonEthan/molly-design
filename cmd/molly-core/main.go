@@ -28,7 +28,7 @@ import (
 	"github.com/LeonEthan/molly-design/internal/platform"
 )
 
-const coreVersion = "0.1.0-m1.3"
+const coreVersion = "0.2.0-m2.1"
 
 type localCompositionReport struct {
 	Name        string               `json:"name"`
@@ -133,6 +133,9 @@ func registerCoreHandlers(srv *ipc.Server, imageClient *mcp.ImageClient, fetcher
 		}
 		res, err := handleViewImage(in)
 		if err != nil {
+			if errors.Is(err, imaging.ErrUnsupportedImageFormat) {
+				return nil, &ipc.RPCError{Code: "unsupported_image_format", Message: err.Error()}
+			}
 			return nil, &ipc.RPCError{Code: "view_image_failed", Message: err.Error()}
 		}
 		return viewImageInspectResult{
@@ -167,6 +170,10 @@ func registerCoreHandlers(srv *ipc.Server, imageClient *mcp.ImageClient, fetcher
 		}
 		res, err := imageClient.Edit(ctx, in)
 		if err != nil {
+			var imgErr *mcp.ImageError
+			if errors.As(err, &imgErr) && !imgErr.Dispatched && errors.Is(err, imaging.ErrUnsupportedImageFormat) {
+				return nil, &ipc.RPCError{Code: "unsupported_image_format", Message: err.Error()}
+			}
 			return nil, &ipc.RPCError{Code: "image_edit_failed", Message: err.Error()}
 		}
 		return res, nil
@@ -396,11 +403,16 @@ func handleViewImage(in viewImageInspectParams) (imaging.ViewResult, error) {
 }
 
 func run(args []string, stdout io.Writer, stderr io.Writer) int {
+	return runWithInput(args, os.Stdin, stdout, stderr)
+}
+
+func runWithInput(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
 	fs := flag.NewFlagSet("molly-core", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	showVersion := fs.Bool("version", false, "print molly-core version")
 	checkLocal := fs.Bool("check-local-composition", false, "print local composition JSON and exit")
 	serveIPC := fs.String("serve-ipc", "", "serve local authenticated IPC on unix socket or windows named pipe")
+	watchStdin := fs.Bool("watch-stdin", false, "exit when stdin reaches EOF (parent-death signal)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -445,15 +457,23 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		memReg := newMemoryRegistry()
 		defer memReg.closeAll()
 		registerCoreHandlers(srv, &mcp.ImageClient{}, &browserfetch.Fetcher{}, memReg)
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+		ctx, cancel := context.WithCancel(sigCtx)
+		defer cancel()
+		if *watchStdin && stdin != nil {
+			go func() {
+				_, _ = io.Copy(io.Discard, stdin)
+				cancel()
+			}()
+		}
 		if err := srv.Serve(ctx); err != nil {
 			_, _ = fmt.Fprintf(stderr, "serve ipc: %v\n", err)
 			return 1
 		}
 		return 0
 	}
-	_, _ = fmt.Fprintln(stderr, "usage: molly-core --version | --check-local-composition | --serve-ipc <socket-path>")
+	_, _ = fmt.Fprintln(stderr, "usage: molly-core --version | --check-local-composition | --serve-ipc <socket-path> [--watch-stdin]")
 	return 2
 }
 

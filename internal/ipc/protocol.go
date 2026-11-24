@@ -80,6 +80,10 @@ type Server struct {
 	wg               sync.WaitGroup
 }
 
+func DialLocal(ctx context.Context, endpoint string) (net.Conn, error) {
+	return dialLocal(ctx, endpoint)
+}
+
 func NewServer(address string) (*Server, error) {
 	return newServer(address, "")
 }

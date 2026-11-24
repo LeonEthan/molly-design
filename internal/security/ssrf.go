@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type HostClass string
@@ -247,4 +248,62 @@ func NewPublicDialContext(resolver IPResolver, baseDialer *net.Dialer) func(ctx 
 		}
 		return nil, lastErr
 	}
+}
+
+func ValidatePublicHTTPURL(ctx context.Context, raw string) error {
+	return ValidatePublicHTTPURLWithResolver(ctx, raw, nil)
+}
+
+func ValidatePublicHTTPURLWithResolver(ctx context.Context, raw string, resolver IPResolver) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || len(trimmed) > 16384 {
+		return errors.New("public browser URL must be non-empty")
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("public browser URL must use http or https")
+	}
+	if parsed.Host == "" || parsed.User != nil {
+		return errors.New("public browser URL must include a host without credentials")
+	}
+	host := StripIPv6Brackets(parsed.Hostname())
+	if host == "" {
+		return errors.New("public browser URL missing host")
+	}
+	if ip, err := netip.ParseAddr(host); err == nil {
+		if !IsPublicIP(ip) {
+			return &NonPublicDestinationError{Host: host, Addr: ip.String()}
+		}
+		return nil
+	}
+	if ClassifyHostname(host) != ClassPublic {
+		return &NonPublicDestinationError{Host: host}
+	}
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+	}
+	addrs, lookupErr := resolver.LookupNetIP(ctx, "ip", host)
+	if lookupErr != nil {
+		return fmt.Errorf("failed to resolve public destination %s: %w", host, lookupErr)
+	}
+	if len(addrs) == 0 {
+		return &NonPublicDestinationError{Host: host}
+	}
+	for _, ip := range addrs {
+		if !IsPublicIP(ip) {
+			return &NonPublicDestinationError{Host: host, Addr: ip.String()}
+		}
+	}
+	return nil
 }

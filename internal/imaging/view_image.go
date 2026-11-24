@@ -57,6 +57,9 @@ func ReadScopedImage(scope Scope, target string) (string, []byte, DecodedImage, 
 	}
 	decoded, err := InspectAndDecodeBounded(raw, true)
 	if err != nil {
+		if errors.Is(err, ErrUnsupportedImageFormat) {
+			return "", nil, DecodedImage{}, fmt.Errorf("Cannot decode %s: %w", target, ErrUnsupportedImageFormat)
+		}
 		return "", nil, DecodedImage{}, fmt.Errorf("Cannot decode %s.", target)
 	}
 	return absPath, raw, decoded, nil

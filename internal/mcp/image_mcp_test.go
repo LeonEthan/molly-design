@@ -390,3 +390,72 @@ func TestWriteGeneratedImageAssetIdempotentAndCollisionRefusal(t *testing.T) {
 		t.Fatal("expected collision with unrelated file to be refused")
 	}
 }
+
+func TestImageClientUsesEnvironmentProxyForConfiguredEndpoint(t *testing.T) {
+	pngBytes := samplePNGBytes(t, 16, 16, color.RGBA{R: 10, G: 120, B: 220, A: 255})
+	var proxied atomic.Int32
+	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxied.Add(1)
+		if r.Host != "192.168.10.20" {
+			t.Errorf("proxy saw host %q, want 192.168.10.20", r.Host)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]string{
+				{"b64_json": base64.StdEncoding.EncodeToString(pngBytes)},
+			},
+		})
+	}))
+	defer proxyServer.Close()
+
+	t.Setenv("HTTP_PROXY", proxyServer.URL)
+	t.Setenv("http_proxy", proxyServer.URL)
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
+
+	client := &ImageClient{}
+	asset, err := client.Generate(context.Background(), GenerateRequest{
+		Workdir: t.TempDir(),
+		Connection: Connection{
+			Protocol: ProtocolOpenAIImages,
+			BaseURL:  "http://192.168.10.20/v1",
+			APIKey:   "sk-proxy-test-key",
+			Model:    "gpt-image-1",
+		},
+		Prompt: "proxy routed",
+	})
+	if err != nil {
+		t.Fatalf("expected proxied Generate to succeed, got %v", err)
+	}
+	if proxied.Load() != 1 {
+		t.Fatalf("expected proxy hit count 1, got %d", proxied.Load())
+	}
+	if asset.Width != 16 || asset.Height != 16 {
+		t.Fatalf("unexpected asset dimensions: %+v", asset)
+	}
+}
+
+func TestImageClientNeverLeaksMalformedProxyCredentials(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "socks5://proxyuser:TOP_SECRET_PROXY_PASS@bad host:1080")
+	t.Setenv("http_proxy", "socks5://proxyuser:TOP_SECRET_PROXY_PASS@bad host:1080")
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
+
+	client := &ImageClient{}
+	_, err := client.Generate(context.Background(), GenerateRequest{
+		Workdir: t.TempDir(),
+		Connection: Connection{
+			Protocol: ProtocolOpenAIImages,
+			BaseURL:  "http://192.168.10.20/v1",
+			APIKey:   "sk-proxy-cred-test",
+			Model:    "gpt-image-1",
+		},
+		Prompt: "malformed proxy cred check",
+	})
+	if err == nil {
+		t.Fatal("expected error for malformed proxy URL")
+	}
+	if strings.Contains(err.Error(), "TOP_SECRET_PROXY_PASS") || strings.Contains(err.Error(), "proxyuser") {
+		t.Fatalf("proxy credentials leaked in error message: %s", err.Error())
+	}
+}

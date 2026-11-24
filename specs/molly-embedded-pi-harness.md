@@ -3,7 +3,7 @@
 Status: draft
 Previous approval (before PR #55 trust correction): [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
 Previous approval (before Role retirement): [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
-Translation: current
+Translation: stale
 
 [中文](molly-embedded-pi-harness.zh.md)
 

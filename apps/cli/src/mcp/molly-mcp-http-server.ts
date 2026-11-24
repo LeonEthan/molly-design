@@ -5,6 +5,10 @@ import type { Readable } from 'node:stream';
 import { Logger } from '@/utils/logger';
 import { formatErrorMessage } from '@/utils/format-error';
 import {
+  getMollyCoreConfiguredEndpoint,
+  onMollyCorePermanentFailure,
+} from './molly-core-supervisor';
+import {
   MCP_HTTP_PREFERRED_PORT_ENV,
   MCP_HTTP_TOKEN_ENV,
   McpHttpHostHandshakeSchema,
@@ -50,8 +54,20 @@ class McpHttpHostSupervisor {
   private attempts = 0;
   private stopping = false;
   private wakeBackoffSleep: (() => void) | null = null;
+  private detachCoreListener: (() => void) | null = null;
 
-  constructor(private readonly logger: Logger) {}
+  constructor(private readonly logger: Logger) {
+    this.detachCoreListener = onMollyCorePermanentFailure(() => {
+      if (this.stopping) return;
+      const child = this.child;
+      if (child && child.exitCode === null && child.signalCode === null) {
+        this.logger.info(
+          '[mcp-http] recycling host after permanent molly-core failure to clear stale IPC env'
+        );
+        child.kill('SIGTERM');
+      }
+    });
+  }
 
   getEndpoint(): MollyMcpHttpEndpoint | null {
     return this.endpoint;
@@ -111,6 +127,8 @@ class McpHttpHostSupervisor {
 
   async stop(): Promise<void> {
     this.stopping = true;
+    this.detachCoreListener?.();
+    this.detachCoreListener = null;
     this.wakeBackoffSleep?.();
     const child = this.child;
     if (!child || child.exitCode !== null) {
@@ -129,6 +147,7 @@ class McpHttpHostSupervisor {
   }
 
   private spawnChild(cliEntrypoint: string): ChildProcess {
+    const coreEndpoint = getMollyCoreConfiguredEndpoint();
     const child = spawn(process.execPath, [cliEntrypoint, '__internal', 'molly-mcp-http-host'], {
       // stdin held open as the daemon-death signal; fd 3 is the handshake
       // pipe. The token goes through the environment (owner-readable only),
@@ -138,6 +157,12 @@ class McpHttpHostSupervisor {
         ...process.env,
         [MCP_HTTP_TOKEN_ENV]: this.token,
         [MCP_HTTP_PREFERRED_PORT_ENV]: String(this.lastPort),
+        ...(coreEndpoint
+          ? {
+              MOLLY_CORE_IPC_SOCKET: coreEndpoint.socketPath,
+              MOLLY_CORE_IPC_TOKEN: coreEndpoint.authToken,
+            }
+          : {}),
       },
       windowsHide: true,
     });

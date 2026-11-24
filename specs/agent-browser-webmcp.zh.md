@@ -11,6 +11,8 @@ Translation: pending
 
 2026-11-23 MyGo 演进修订：面向后续 Go/MyGo 桌面壳迁移，owner 明确 macOS 侧优先放弃绑定 Chromium/`agent-browser` 与原生 WebMCP，改由受控系统 `WKWebView`（`Untrusted` 隔离 + 独立持久 `Session`）承载并在运行时诚实声明 WebMCP 不可用；参考图获取须继续继承现有安全抓图契约（手动处理重定向上限、仅 HTTPS 同站携带 ≤16 KB Cookie、沿用会话代理）并叠加宿主侧私网 IP 拦截；同会话 OAuth 登录弹窗与 Chrome Cookie 注入仍在 Stage 2 门禁待验证清单中，暂不作为已承诺能力（见[Stage 1 设计提案](../.agents/notes/proposed/architecture/2026-11-23-mygo-stack-stage1-design.zh.md)）。在 Stage 2 正式切壳前，现行 Electron 路径保持原实现不变。本修订保持 draft。
 
+2026-11-24 Stage 2 进展：实验性 MyGo 桌面壳（`internal/shell/ipc_bridge.go` 与 `internal/shell/app.go`）已接入基于 `mygo.PageOptions{Untrusted: true}` 的受控浏览窗口启动与 `internal/browserfetch` 私网 IP 拦截，并在运行时明确返回 `hasNativeWebMCP: false` 及 `importAvailable: false`（`importUnavailableReason: 'signing-required'`）；无窗口宿主时诚实返回 `public_browser_webview_unavailable`。Windows WebView2 实机与真实站点 OAuth/Cookie 注入验证在当前 macOS arm64 宿主机仍为 `BLOCKED`，不构成已验证承诺。本修订保持 `draft`。
+
 ## 职责与范围
 
 Electron 持有页面、网站 profile、用户网络配置和人工交互。agent-browser 承担快照、元素引用、定位与操作，以及 WebMCP 发现和调用。Molly 持有任务权限、页面租约、取消、结果归属和设计素材发布；现有产品 Agent 自主选择工具和后续步骤。

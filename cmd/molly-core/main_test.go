@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/LeonEthan/molly-design/internal/browserfetch"
 	"github.com/LeonEthan/molly-design/internal/fonts"
@@ -51,6 +53,53 @@ func TestServeIPCRequiresToken(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "MOLLY_CORE_IPC_TOKEN") {
 		t.Fatalf("expected stderr to mention MOLLY_CORE_IPC_TOKEN, got %q", stderr.String())
+	}
+}
+
+func TestServeIPCExitsOnStdinEOF(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix socket stdin EOF test runs on unix")
+	}
+	sockDir, err := os.MkdirTemp("/tmp", "mc-eof-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	socketPath := filepath.Join(sockDir, "c.sock")
+	const token = "stdin-eof-parent-death-token-0123456789"
+	t.Setenv("MOLLY_CORE_IPC_TOKEN", token)
+
+	pr, pw := io.Pipe()
+	var stdout, stderr bytes.Buffer
+	exitCh := make(chan int, 1)
+	go func() {
+		exitCh <- runWithInput([]string{"--serve-ipc", socketPath, "--watch-stdin"}, pr, &stdout, &stderr)
+	}()
+
+	deadline := time.Now().Add(3 * time.Second)
+	var client *ipc.Client
+	for time.Now().Before(deadline) {
+		c, dialErr := ipc.DialWithAuth(context.Background(), socketPath, token)
+		if dialErr == nil {
+			client = c
+			break
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	if client == nil {
+		_ = pw.Close()
+		t.Fatalf("timed out waiting for --serve-ipc socket: stderr=%q", stderr.String())
+	}
+	_ = client.Close()
+
+	_ = pw.Close()
+	select {
+	case code := <-exitCh:
+		if code != 0 {
+			t.Fatalf("expected clean exit 0 on stdin EOF, got %d stderr=%q", code, stderr.String())
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("molly-core did not exit promptly after stdin EOF")
 	}
 }
 

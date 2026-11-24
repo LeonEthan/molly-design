@@ -1,6 +1,7 @@
 import { PI_ENGINE_VERSION } from '../../../packages/shared/src/embedded-harness.ts'
 import { verifyBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { verifyAgentBrowser } from './agent-browser-resources.mjs'
+import { probeMollyCoreComposition, verifyMollyCore } from './molly-core-resources.mjs'
 import { verifyLegalResources } from './legal-resources.mjs'
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript packaging hook. */
 import fs from 'node:fs'
@@ -116,6 +117,22 @@ export default async function afterPack(context) {
     platform: platform === 'mas' ? 'darwin' : platform,
     arch: archName
   })
+
+  const mollyCoreDir = path.join(resourcesDir, 'app.asar.unpacked', 'resources', 'molly-core')
+  const mollyCoreTargetPlatform = platform === 'mas' ? 'darwin' : platform
+  const mollyCoreManifest = verifyMollyCore(mollyCoreDir, {
+    platform: mollyCoreTargetPlatform,
+    arch: archName
+  })
+  if (mollyCoreTargetPlatform === process.platform && archName === process.arch) {
+    const coreBinary = path.join(mollyCoreDir, mollyCoreManifest.files[0].path)
+    probeMollyCoreComposition(coreBinary)
+    console.log(`[molly-core] verified local composition probe for ${platform}-${archName}`)
+  } else {
+    console.log(
+      `[molly-core] verified manifest for cross-host target ${platform}-${archName} (runtime probe skipped)`
+    )
+  }
 
   // Verify the bytes actually collected by Builder, on cross-host targets too.
   const designProbe = spawnSync(

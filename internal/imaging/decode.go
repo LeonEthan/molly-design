@@ -31,6 +31,8 @@ const (
 	MimeWebP = "image/webp"
 )
 
+var ErrUnsupportedImageFormat = errors.New("unsupported image format")
+
 type DecodedImage struct {
 	Image  image.Image
 	MIME   string
@@ -66,6 +68,39 @@ func SniffViewMIME(data []byte) string {
 		return MimeWebP
 	}
 	return ""
+}
+
+func isAnimatedWebP(data []byte) bool {
+	if SniffViewMIME(data) != MimeWebP || len(data) < 20 {
+		return false
+	}
+	offset := 12
+	for offset+8 <= len(data) {
+		fourCC := string(data[offset : offset+4])
+		chunkSize := int(binary.LittleEndian.Uint32(data[offset+4 : offset+8]))
+		payloadStart := offset + 8
+		if chunkSize < 0 || payloadStart > len(data) {
+			return false
+		}
+		switch fourCC {
+		case "VP8X":
+			if payloadStart+10 <= len(data) && (data[payloadStart]&0x02) != 0 {
+				return true
+			}
+		case "ANIM", "ANMF":
+			return true
+		}
+		step := chunkSize
+		if step%2 == 1 {
+			step++
+		}
+		nextOffset := payloadStart + step
+		if nextOffset <= offset || nextOffset > len(data) {
+			break
+		}
+		offset = nextOffset
+	}
+	return false
 }
 
 func ExtensionForStaticMIME(mime string) (string, bool) {
@@ -149,9 +184,12 @@ func InspectAndDecodeBounded(data []byte, allowWebP bool) (DecodedImage, error) 
 	}
 	if mime == "" {
 		if allowWebP {
-			return DecodedImage{}, errors.New("unsupported or invalid image format (expected PNG, JPEG, GIF, or WebP)")
+			return DecodedImage{}, fmt.Errorf("%w (expected PNG, JPEG, GIF, or WebP)", ErrUnsupportedImageFormat)
 		}
-		return DecodedImage{}, errors.New("unsupported or invalid image format (expected PNG, JPEG, or GIF)")
+		return DecodedImage{}, fmt.Errorf("%w (expected PNG, JPEG, or GIF)", ErrUnsupportedImageFormat)
+	}
+	if mime == MimeWebP && isAnimatedWebP(data) {
+		return DecodedImage{}, fmt.Errorf("%w (animated WebP requires fallback decoder)", ErrUnsupportedImageFormat)
 	}
 
 	var cfg image.Config

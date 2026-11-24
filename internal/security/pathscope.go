@@ -161,8 +161,11 @@ func ReadBoundedFileFromRoot(root *os.Root, relPath string, maxBytes int64) ([]b
 	if maxBytes <= 0 {
 		return nil, errors.New("maxBytes must be positive")
 	}
-	file, err := root.Open(relPath)
+	file, err := openFileInRootNonBlock(root, relPath)
 	if err != nil {
+		if errors.Is(err, os.ErrInvalid) {
+			return nil, errors.New("refusing to read non-regular file")
+		}
 		return nil, err
 	}
 	defer file.Close()

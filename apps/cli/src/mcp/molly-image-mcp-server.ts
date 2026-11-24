@@ -13,7 +13,12 @@ import {
   generateImageAsset,
   type GeneratedImageAsset,
 } from '@/mcp/image-generation';
-import { CoreIpcRpcError, callMollyCoreIpc, getMollyCoreIpcSocketPath } from '@/mcp/molly-core-ipc';
+import {
+  CoreIpcRpcError,
+  callMollyCoreIpc,
+  getMollyCoreIpcSocketPath,
+  isMollyCorePreConnectError,
+} from '@/mcp/molly-core-ipc';
 import { EMPTY_DESIGN_GATE, resolveDesignGate, type McpDesignGate } from '@/mcp/design-tools';
 import { getMcpSessionContext } from '@/mcp/molly-mcp-server';
 import { MOLLY_IMAGE_MCP_SERVER_NAME } from '@/mcp/molly-mcp-http-protocol';
@@ -153,8 +158,48 @@ export function buildMollyImageMcpServer(config: MollyImageMcpServerConfig = {})
         return failure('Design workspace is unavailable; no image request was sent.');
       const coreSocket = config.imageTransport ? undefined : getMollyCoreIpcSocketPath();
       delegatedToCore = coreSocket !== undefined;
-      const asset: GeneratedImageAsset = coreSocket
-        ? await callMollyCoreIpc<GeneratedImageAsset>(
+      const runTsImage = async (): Promise<GeneratedImageAsset> =>
+        await ('images' in args
+          ? editImageAsset({
+              settings: connection,
+              prompt: args.prompt,
+              ...(args.size === undefined ? {} : { size: args.size }),
+              ...(args.background === undefined ? {} : { background: args.background }),
+              ...(args.output_format === undefined ? {} : { outputFormat: args.output_format }),
+              workdir: gate.artworkWorkdir!,
+              sourceWorkdir: gate.workspaceRoot!,
+              images: args.images,
+              ...(args.mask === undefined ? {} : { mask: args.mask }),
+              transport: (async (request) => {
+                if (request.method === 'POST') dispatched = true;
+                const response = await (config.imageTransport ?? fetchImageHttpTransport)(request);
+                if (request.method === 'POST' && (response.status < 200 || response.status >= 300))
+                  rejected = true;
+                return response;
+              }) satisfies ImageHttpTransport,
+              signal,
+            })
+          : generateImageAsset({
+              settings: connection,
+              prompt: args.prompt,
+              ...(args.size === undefined ? {} : { size: args.size }),
+              ...(args.background === undefined ? {} : { background: args.background }),
+              ...(args.output_format === undefined ? {} : { outputFormat: args.output_format }),
+              workdir: gate.artworkWorkdir!,
+              transport: (async (request) => {
+                if (request.method === 'POST') dispatched = true;
+                const response = await (config.imageTransport ?? fetchImageHttpTransport)(request);
+                if (request.method === 'POST' && (response.status < 200 || response.status >= 300))
+                  rejected = true;
+                return response;
+              }) satisfies ImageHttpTransport,
+              signal,
+            }));
+
+      let asset: GeneratedImageAsset;
+      if (coreSocket) {
+        try {
+          asset = await callMollyCoreIpc<GeneratedImageAsset>(
             coreSocket,
             'images' in args ? 'image_mcp.edit' : 'image_mcp.generate',
             {
@@ -175,53 +220,21 @@ export function buildMollyImageMcpServer(config: MollyImageMcpServerConfig = {})
             },
             signal,
             { requireMutualAuth: true }
-          )
-        : await ('images' in args
-            ? editImageAsset({
-                settings: connection,
-                prompt: args.prompt,
-                ...(args.size === undefined ? {} : { size: args.size }),
-                ...(args.background === undefined ? {} : { background: args.background }),
-                ...(args.output_format === undefined ? {} : { outputFormat: args.output_format }),
-                workdir: gate.artworkWorkdir,
-                sourceWorkdir: gate.workspaceRoot,
-                images: args.images,
-                ...(args.mask === undefined ? {} : { mask: args.mask }),
-                transport: (async (request) => {
-                  if (request.method === 'POST') dispatched = true;
-                  const response = await (config.imageTransport ?? fetchImageHttpTransport)(
-                    request
-                  );
-                  if (
-                    request.method === 'POST' &&
-                    (response.status < 200 || response.status >= 300)
-                  )
-                    rejected = true;
-                  return response;
-                }) satisfies ImageHttpTransport,
-                signal,
-              })
-            : generateImageAsset({
-                settings: connection,
-                prompt: args.prompt,
-                ...(args.size === undefined ? {} : { size: args.size }),
-                ...(args.background === undefined ? {} : { background: args.background }),
-                ...(args.output_format === undefined ? {} : { outputFormat: args.output_format }),
-                workdir: gate.artworkWorkdir,
-                transport: (async (request) => {
-                  if (request.method === 'POST') dispatched = true;
-                  const response = await (config.imageTransport ?? fetchImageHttpTransport)(
-                    request
-                  );
-                  if (
-                    request.method === 'POST' &&
-                    (response.status < 200 || response.status >= 300)
-                  )
-                    rejected = true;
-                  return response;
-                }) satisfies ImageHttpTransport,
-                signal,
-              }));
+          );
+        } catch (error) {
+          const isPreDispatchUnsupportedEditInput =
+            'images' in args &&
+            error instanceof CoreIpcRpcError &&
+            error.code === 'unsupported_image_format';
+          if (!isMollyCorePreConnectError(error) && !isPreDispatchUnsupportedEditInput) {
+            throw error;
+          }
+          delegatedToCore = false;
+          asset = await runTsImage();
+        }
+      } else {
+        asset = await runTsImage();
+      }
       const structuredContent = {
         path: asset.path,
         absolutePath: asset.absolutePath,

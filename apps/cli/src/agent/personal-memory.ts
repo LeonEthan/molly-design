@@ -9,7 +9,17 @@ import {
   type PersonalMemorySnapshot,
 } from '@molly/shared/personal-memory';
 import { getMollyDataDir } from '@molly/shared/node/installation-profile';
-import { callMollyCoreIpc, getMollyCoreIpcSocketPath } from '@/mcp/molly-core-ipc';
+import {
+  callMollyCoreIpc,
+  getMollyCoreIpcSocketPath,
+  getMollyCoreIpcToken,
+} from '@/mcp/molly-core-ipc';
+import {
+  getMollyCoreConfiguredEndpoint,
+  onMollyCorePermanentFailure,
+  waitForMollyCoreEndpoint,
+  type MollyCoreEndpoint,
+} from '@/mcp/molly-core-supervisor';
 
 const LEGACY_MEM0_MIGRATION_NAME = 'mem0_vectors_v1';
 
@@ -120,14 +130,48 @@ export class PersonalMemoryService {
   private constructor(
     private readonly dbPath: string,
     private readonly db: Database.Database | null,
-    private readonly coreSocket: string | undefined
+    private readonly coreEndpoint: MollyCoreEndpoint | undefined
   ) {}
 
-  static async open(dbPath: string): Promise<PersonalMemoryService> {
-    const coreSocket = dbPath === ':memory:' ? undefined : getMollyCoreIpcSocketPath();
-    if (coreSocket) {
-      await callMollyCoreIpc<PersonalMemorySnapshot>(coreSocket, 'memory.read', { dbPath });
-      return new PersonalMemoryService(dbPath, null, coreSocket);
+  static async open(
+    dbPath: string,
+    options?: { coreEndpoint?: MollyCoreEndpoint | null }
+  ): Promise<PersonalMemoryService> {
+    let coreEndpoint: MollyCoreEndpoint | undefined;
+    if (dbPath !== ':memory:') {
+      if (options?.coreEndpoint !== undefined) {
+        coreEndpoint = options.coreEndpoint ?? undefined;
+      } else {
+        const configured = getMollyCoreConfiguredEndpoint();
+        if (configured) {
+          const ready = await waitForMollyCoreEndpoint(1_500);
+          if (!ready) {
+            if (getMollyCoreConfiguredEndpoint()) {
+              throw new Error('molly_core_starting');
+            }
+          } else {
+            coreEndpoint = ready;
+          }
+        } else {
+          const envSocket = getMollyCoreIpcSocketPath();
+          if (envSocket) {
+            coreEndpoint = {
+              socketPath: envSocket,
+              authToken: getMollyCoreIpcToken() ?? '',
+            };
+          }
+        }
+      }
+    }
+    if (coreEndpoint) {
+      await callMollyCoreIpc<PersonalMemorySnapshot>(
+        coreEndpoint.socketPath,
+        'memory.read',
+        { dbPath },
+        undefined,
+        coreEndpoint.authToken ? { authToken: coreEndpoint.authToken, requireMutualAuth: true } : {}
+      );
+      return new PersonalMemoryService(dbPath, null, coreEndpoint);
     }
     if (dbPath !== ':memory:') {
       mkdirSync(dirname(dbPath), { recursive: true });
@@ -140,6 +184,21 @@ export class PersonalMemoryService {
     db.pragma('busy_timeout = 5000');
     initMemorySchema(db);
     return new PersonalMemoryService(dbPath, db, undefined);
+  }
+
+  private callCore<T>(method: string, params: unknown, signal?: AbortSignal): Promise<T> {
+    if (!this.coreEndpoint) {
+      throw new Error('memory store is not delegated to molly-core');
+    }
+    return callMollyCoreIpc<T>(
+      this.coreEndpoint.socketPath,
+      method,
+      params,
+      signal,
+      this.coreEndpoint.authToken
+        ? { authToken: this.coreEndpoint.authToken, requireMutualAuth: true }
+        : {}
+    );
   }
 
   private readLocal(): PersonalMemorySnapshot {
@@ -161,8 +220,8 @@ export class PersonalMemoryService {
   }
 
   async read(): Promise<PersonalMemorySnapshot> {
-    if (this.coreSocket) {
-      return await callMollyCoreIpc<PersonalMemorySnapshot>(this.coreSocket, 'memory.read', {
+    if (this.coreEndpoint) {
+      return await this.callCore<PersonalMemorySnapshot>('memory.read', {
         dbPath: this.dbPath,
       });
     }
@@ -170,8 +229,8 @@ export class PersonalMemoryService {
   }
 
   async setEnabled(enabled: boolean, revision: string): Promise<void> {
-    if (this.coreSocket) {
-      await callMollyCoreIpc(this.coreSocket, 'memory.set_enabled', {
+    if (this.coreEndpoint) {
+      await this.callCore('memory.set_enabled', {
         dbPath: this.dbPath,
         enabled,
         revision,
@@ -192,8 +251,8 @@ export class PersonalMemoryService {
 
   async edit(id: string, text: string, revision: string): Promise<void> {
     const entry = EntrySchema.parse({ id, text });
-    if (this.coreSocket) {
-      await callMollyCoreIpc(this.coreSocket, 'memory.edit', {
+    if (this.coreEndpoint) {
+      await this.callCore('memory.edit', {
         dbPath: this.dbPath,
         id: entry.id,
         text: entry.text,
@@ -221,8 +280,8 @@ export class PersonalMemoryService {
   }
 
   async remove(id: string, revision: string): Promise<void> {
-    if (this.coreSocket) {
-      await callMollyCoreIpc(this.coreSocket, 'memory.remove', {
+    if (this.coreEndpoint) {
+      await this.callCore('memory.remove', {
         dbPath: this.dbPath,
         id,
         revision,
@@ -247,13 +306,8 @@ export class PersonalMemoryService {
 
   async capture(revision: string, rawChanges: unknown, signal: AbortSignal): Promise<void> {
     const changes = PersonalMemoryChangesSchema.parse(rawChanges);
-    if (this.coreSocket) {
-      await callMollyCoreIpc(
-        this.coreSocket,
-        'memory.capture',
-        { dbPath: this.dbPath, revision, changes },
-        signal
-      );
+    if (this.coreEndpoint) {
+      await this.callCore('memory.capture', { dbPath: this.dbPath, revision, changes }, signal);
       return;
     }
     return this.serialize(async () => {
@@ -301,6 +355,9 @@ export class PersonalMemoryService {
 }
 
 let service: Promise<PersonalMemoryService> | undefined;
+onMollyCorePermanentFailure(() => {
+  service = undefined;
+});
 export function getPersonalMemory(): Promise<PersonalMemoryService> {
   return (service ??= PersonalMemoryService.open(
     join(getMollyDataDir(), 'memory', 'preferences.sqlite')

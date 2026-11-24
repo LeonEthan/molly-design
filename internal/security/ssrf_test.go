@@ -140,3 +140,34 @@ func TestNewPublicDialContextBlocksNonPublic(t *testing.T) {
 		}
 	}
 }
+
+func TestValidatePublicHTTPURLResolvesDNSAndBlocksPrivateTargets(t *testing.T) {
+	ctx := context.Background()
+	publicResolver := stubResolver{addrs: []netip.Addr{netip.MustParseAddr("93.184.216.34")}}
+	if err := ValidatePublicHTTPURLWithResolver(ctx, "https://example.com/gallery", publicResolver); err != nil {
+		t.Fatalf("expected public domain to pass, got %v", err)
+	}
+
+	privateResolver := stubResolver{addrs: []netip.Addr{netip.MustParseAddr("127.0.0.1")}}
+	if err := ValidatePublicHTTPURLWithResolver(ctx, "https://rebind.example.com/", privateResolver); err == nil {
+		t.Fatal("expected domain resolving to loopback IP to be rejected")
+	} else {
+		var nonPublic *NonPublicDestinationError
+		if !errors.As(err, &nonPublic) {
+			t.Fatalf("expected NonPublicDestinationError, got %T: %v", err, err)
+		}
+	}
+
+	mixedResolver := stubResolver{addrs: []netip.Addr{
+		netip.MustParseAddr("93.184.216.34"),
+		netip.MustParseAddr("10.0.0.8"),
+	}}
+	if err := ValidatePublicHTTPURLWithResolver(ctx, "https://mixed.example.com/", mixedResolver); err == nil {
+		t.Fatal("expected domain resolving to mixed public+private IPs to be rejected")
+	}
+
+	emptyResolver := stubResolver{}
+	if err := ValidatePublicHTTPURLWithResolver(ctx, "https://empty.example.com/", emptyResolver); err == nil {
+		t.Fatal("expected domain with no resolved IPs to be rejected")
+	}
+}

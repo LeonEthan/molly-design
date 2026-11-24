@@ -16,6 +16,8 @@ Translation: pending
 
 2026-09-21 起退役 Linux 桌面支持。正式发布范围仍为 macOS arm64；Intel macOS 与 Windows 保留本地实验构建。下文 Linux 构建证据保留为历史事实；Ubuntu CI 与跨平台 Bento 资源检查不表示桌面支持。
 
+2026-11-24 Stage 2 演进修订：在保持 Bento 唯一权威编辑与 `design/canvas-host` 串行只读回合门禁不变的前提下，Electron 生产链启用由 CLI daemon 托管的纯 Go `molly-core`（承载 `molly_view_image`、`molly_image` 与 `PersonalMemoryService` SQLite），同时新增并存的实验性 MyGo 桌面壳（`cmd/molly-desktop/` + `internal/shell/`），复用 64 MiB `molly-design://` 能力令牌门禁、按元素阴影动态出血的离屏分块导出以及受 `CallerPage` 与文档代际保护的 IPC 桥。本修订保持 `draft`。
+
 产品只保留桌面交互，包括窄 Electron 窗口；移动端导航、触摸手势和键盘适配退出。新回合不采集代码 diff、派生 All Changes 或运行 PR/commit/push 后台工作。既有代码历史的 diff 可兼容读取，Files、附件预览、文本保存和冲突保护继续使用原有能力；设计版本仍由 Molly 管理的独立 Git 仓库保存。
 
 2026-09-15 已批准修订：用户已确认先清理旧转换语义并将画稿投影合并为单个 `design.yaml`，类型区块重组以完整往返及 Agent 可操作性为条件；增加指定参考图与固定提示词的真实 Kimi Code CLI 黄金复刻验收。本修订的第一阶段方案已于 2026-09-15 获用户明确批准。已确认方向、第一阶段实施及验收见单画布重构记录。

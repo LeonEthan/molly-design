@@ -254,6 +254,81 @@ describe.skipIf(process.platform === 'win32')('molly-core Node IPC bridge (M1.1)
         })
       );
       expect(errorText(badFace)).toBe(`Face "Unknown Face" is not in ${fontFile}.`);
+
+      const svgPath = path.join(scope.workdir, 'vector-logo.svg');
+      await writeFile(
+        svgPath,
+        '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80" fill="#2266cc"/></svg>'
+      );
+      const svgResult = imageResult(
+        CallToolResultSchema.parse(
+          await client.callTool({
+            name: 'molly_view_image',
+            arguments: { path: 'vector-logo.svg' },
+          })
+        )
+      );
+      expect(svgResult.metadata).toMatchObject({
+        path: 'vector-logo.svg',
+        originalWidth: 120,
+        originalHeight: 80,
+      });
+
+      const tiffPath = path.join(scope.workdir, 'raster.tiff');
+      const tiffBytes = await sharp({
+        create: { width: 96, height: 64, channels: 3, background: '#33aa55' },
+      })
+        .tiff()
+        .toBuffer();
+      await writeFile(tiffPath, tiffBytes);
+      const tiffResult = imageResult(
+        CallToolResultSchema.parse(
+          await client.callTool({
+            name: 'molly_view_image',
+            arguments: { path: 'raster.tiff' },
+          })
+        )
+      );
+      expect(tiffResult.metadata).toMatchObject({
+        path: 'raster.tiff',
+        originalWidth: 96,
+        originalHeight: 64,
+      });
+
+      const animatedWebpPath = path.join(scope.workdir, 'animated.webp');
+      const framePixels = Buffer.alloc(64 * 96 * 4);
+      for (let i = 0; i < 64 * 48; i++) {
+        framePixels[i * 4] = 220;
+        framePixels[i * 4 + 1] = 30;
+        framePixels[i * 4 + 2] = 60;
+        framePixels[i * 4 + 3] = 255;
+      }
+      for (let i = 64 * 48; i < 64 * 96; i++) {
+        framePixels[i * 4] = 30;
+        framePixels[i * 4 + 1] = 120;
+        framePixels[i * 4 + 2] = 240;
+        framePixels[i * 4 + 3] = 255;
+      }
+      const animatedWebpBytes = await sharp(framePixels, {
+        raw: { width: 64, height: 96, channels: 4, pageHeight: 48 },
+      })
+        .webp({ delay: [100, 100] })
+        .toBuffer();
+      expect(animatedWebpBytes.includes(Buffer.from('ANMF'))).toBe(true);
+      await writeFile(animatedWebpPath, animatedWebpBytes);
+      const webpResult = imageResult(
+        CallToolResultSchema.parse(
+          await client.callTool({
+            name: 'molly_view_image',
+            arguments: { path: 'animated.webp' },
+          })
+        )
+      );
+      expect(webpResult.metadata).toMatchObject({
+        path: 'animated.webp',
+        originalWidth: 64,
+        originalHeight: 48,
+      });
     } finally {
       await client.close();
       await server.close();
@@ -332,6 +407,33 @@ describe.skipIf(process.platform === 'win32')('molly-core Node IPC bridge (M1.1)
         );
         expect(edited.isError).not.toBe(true);
         expect(hits).toBe(2);
+
+        const animPixels = Buffer.alloc(32 * 48 * 4);
+        for (let i = 0; i < 32 * 24; i++) {
+          animPixels[i * 4] = 200;
+          animPixels[i * 4 + 3] = 255;
+        }
+        for (let i = 32 * 24; i < 32 * 48; i++) {
+          animPixels[i * 4 + 2] = 200;
+          animPixels[i * 4 + 3] = 255;
+        }
+        const animWebp = await sharp(animPixels, {
+          raw: { width: 32, height: 48, channels: 4, pageHeight: 24 },
+        })
+          .webp({ delay: [100, 100] })
+          .toBuffer();
+        expect(animWebp.includes(Buffer.from('ANMF'))).toBe(true);
+        const animPath = path.join(scope.workdir, 'edit-ref.webp');
+        await writeFile(animPath, animWebp);
+
+        const editedAnim = CallToolResultSchema.parse(
+          await client.callTool({
+            name: 'edit',
+            arguments: { prompt: 'keep frame', images: ['edit-ref.webp'] },
+          })
+        );
+        expect(editedAnim.isError).not.toBe(true);
+        expect(hits).toBe(3);
       } finally {
         await client.close();
         await server.close();

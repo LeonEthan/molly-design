@@ -24,6 +24,7 @@ import {
   stopLocalIpcSocketServers,
 } from '@/lib/local-ipc-socket-server';
 import { startMollyMcpHttpServer, stopMollyMcpHttpServer } from '@/mcp/molly-mcp-http-server';
+import { startMollyCoreSupervisor, stopMollyCoreSupervisor } from '@/mcp/molly-core-supervisor';
 import type { LocalProbeConfig } from '@/lib/local-probe';
 import type { LocalSessionControlConfig } from '@/lib/local-session-control';
 import {
@@ -169,6 +170,7 @@ export class MollyFleet {
         version: pkg.version,
       });
     });
+    await startMollyCoreSupervisor({ logger: this.logger });
     await Promise.all([
       traceAsync(this.logger, 'startup.local_data_plane', undefined, async () => {
         await startLocalLoroDataPlaneServer({
@@ -245,6 +247,7 @@ export class MollyFleet {
       stopLocalIpcSocketServers(),
       stopLocalLoroDataPlaneServer(),
       stopMollyMcpHttpServer(),
+      stopMollyCoreSupervisor(),
     ]);
 
     for (const timer of this.retryTimers.values()) {

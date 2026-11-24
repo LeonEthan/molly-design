@@ -17,3 +17,14 @@ func openRegularNoFollow(path string) (*os.File, error) {
 	}
 	return os.Open(path)
 }
+
+func openFileInRootNonBlock(root *os.Root, relPath string) (*os.File, error) {
+	info, err := root.Lstat(relPath)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("refusing to read non-regular file")
+	}
+	return root.Open(relPath)
+}

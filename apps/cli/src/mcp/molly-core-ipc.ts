@@ -29,6 +29,19 @@ export class CoreIpcRpcError extends Error {
   }
 }
 
+export class MollyCorePreConnectError extends Error {
+  readonly code = 'MOLLY_CORE_UNREACHABLE';
+
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'MollyCorePreConnectError';
+  }
+}
+
+export function isMollyCorePreConnectError(error: unknown): error is MollyCorePreConnectError {
+  return error instanceof MollyCorePreConnectError;
+}
+
 export function getMollyCoreIpcSocketPath(): string | undefined {
   const value = process.env.MOLLY_CORE_IPC_SOCKET?.trim();
   return value && value.length > 0 ? value : undefined;
@@ -102,6 +115,7 @@ export async function callMollyCoreIpc<T>(
     const socket = net.createConnection(socketPath);
     let buffer = Buffer.alloc(0);
     let settled = false;
+    let connected = false;
     let stage: 'challenge' | 'handshake' | 'request' = authToken ? 'challenge' : 'request';
     const clientNonce = authToken ? randomBytes(16).toString('hex') : '';
     let serverNonce = '';
@@ -140,6 +154,7 @@ export async function callMollyCoreIpc<T>(
     }
 
     socket.once('connect', () => {
+      connected = true;
       if (stage === 'request') {
         socket.write(requestFrame);
       }
@@ -245,7 +260,12 @@ export async function callMollyCoreIpc<T>(
     });
 
     socket.once('error', (error) => {
-      finish(error instanceof Error ? error : new Error(String(error)));
+      const err = error instanceof Error ? error : new Error(String(error));
+      if (!connected) {
+        finish(new MollyCorePreConnectError(err.message, { cause: err }));
+        return;
+      }
+      finish(err);
     });
 
     socket.once('end', () => {

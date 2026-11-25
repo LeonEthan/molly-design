@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/LeonEthan/molly-design/internal/security"
 	"io"
 	"net/http"
 	"os"
@@ -189,5 +190,23 @@ func TestSettingsCrashUnlock(t *testing.T) {
 	}
 	if e = s.DeleteImage(settingsObject{"expectedRevision": 1}); e != nil {
 		t.Fatal(e)
+	}
+}
+
+func TestLegacyChangePreventsVaultWrite(t *testing.T) {
+	s, err := NewModelConnectionsService(settingsTestDir(t), "workspace", fixtureSettingsKey{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	legacy := []byte("synthetic legacy")
+	if err = s.root.WriteFile("model-connections.enc", legacy, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.SaveImage(settingsObject{}); !errors.Is(err, security.ErrStaleV2Vault) {
+		t.Fatal(err)
+	}
+	if _, err = s.root.Stat(settingsVault); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
 	}
 }

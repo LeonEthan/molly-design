@@ -66,3 +66,42 @@ void test(
     )
   }
 )
+
+void test('signing modes and notarization credentials', async () => {
+  const { signingOptions, developerIdentity } = await import('./package-mygo-desktop.mjs')
+  assert.equal(signingOptions([], {}).adHocSign, true)
+  assert.equal(signingOptions(['--developer-id'], {}).signIdentity, developerIdentity)
+  assert.equal(
+    signingOptions(['--sign-identity', developerIdentity], {}).signIdentity,
+    developerIdentity
+  )
+  assert.equal(
+    signingOptions(['--ad-hoc'], { MOLLY_MACOS_SIGN_IDENTITY: developerIdentity }).signIdentity,
+    undefined
+  )
+  assert.throws(() => signingOptions(['--developer-id', '--no-sign'], {}), /Conflicting/)
+  assert.throws(
+    () => signingOptions(['--developer-id', '--notarize'], {}),
+    /Missing notarization credentials/
+  )
+  assert.deepEqual(
+    signingOptions(['--notarize', '--notary-profile', 'test'], {
+      MOLLY_MACOS_SIGN_IDENTITY: developerIdentity
+    }).notaryArgs,
+    ['--keychain-profile', 'test']
+  )
+})
+
+void test('rejects a signature with a different team or missing hardened runtime', async () => {
+  const { developerIdentity, verifyDeveloperSignatureDetails } =
+    await import('./package-mygo-desktop.mjs')
+  const stderr = `Authority=${developerIdentity}\nTeamIdentifier=Q96C8424X6\nCodeDirectory flags=0x10000(runtime)\n`
+  const inspect = (details) =>
+    verifyDeveloperSignatureDetails({ status: 0, stderr: details }, 'fixture', developerIdentity)
+  assert.equal(inspect(stderr).hardenedRuntime, true)
+  assert.throws(
+    () => inspect(stderr.replace('TeamIdentifier=Q96C8424X6', 'TeamIdentifier=OTHER')),
+    /Invalid Developer ID/
+  )
+  assert.throws(() => inspect(stderr.replace('(runtime)', '(adhoc)')), /Invalid Developer ID/)
+})

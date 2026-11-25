@@ -29,7 +29,13 @@ export async function decodePng(bytes) {
 export function compare(
   ref,
   cand,
-  { tileEdge = 1536, captureDPR = 1, hostNativeDPR = null, targetScale = 1 } = {}
+  {
+    tileEdge = 1536,
+    captureDPR = 1,
+    hostNativeDPR = null,
+    targetScale = 1,
+    crossEngine = false,
+  } = {}
 ) {
   const { width, height } = ref;
   for (const image of [ref, cand]) {
@@ -95,9 +101,16 @@ export function compare(
     resamplingMode: captureDPR === targetScale ? 'direct-1to1' : 'area-resampled',
     rgbMAE,
     alphaMAE,
-    seamMax,
+    ...(crossEngine
+      ? {
+          crossEngineSeamWindowMax: seamMax,
+          legacyStage3ACrossEngineSeamPassed: seamMax <= 1.5 / 255,
+        }
+      : { seamMax }),
     worstWindow,
-    passed: rgbMAE <= 2 / 255 && alphaMAE <= 0.5 / 255 && seamMax <= 1.5 / 255,
+    passed:
+      alphaMAE <= 0.5 / 255 &&
+      (crossEngine ? rgbMAE <= 2 / 255 : rgbMAE <= 0.5 / 255 && seamMax <= 1.5 / 255),
   };
 }
 
@@ -121,14 +134,18 @@ async function areaHalf(image) {
   return { width: width / 2, height: height / 2, data: output };
 }
 
-export async function compareScales(ref, cand, meta = {}, areaCandidate) {
+export async function compareScales(ref, cand, meta = {}, areaCandidate, areaReference) {
   const direct = compare(ref, cand, meta);
 
-  const area = compare(await areaHalf(ref), areaCandidate ?? (await areaHalf(cand)), {
-    ...meta,
-    tileEdge: (meta.tileEdge ?? 1536) / 2,
-    targetScale: direct.targetScale / 2,
-  });
+  const area = compare(
+    areaReference ?? (await areaHalf(ref)),
+    areaCandidate ?? (await areaHalf(cand)),
+    {
+      ...meta,
+      tileEdge: (meta.tileEdge ?? 1536) / 2,
+      targetScale: direct.targetScale / 2,
+    }
+  );
   return { direct, area, passed: direct.passed && area.passed };
 }
 
@@ -307,6 +324,10 @@ function sandbox(root, name) {
   return env;
 }
 
+export function detectsSeamMutation(controlPassed, mutation) {
+  return controlPassed && mutation.seamMax > 1.5 / 255;
+}
+
 export async function verifyTruncatedShadow() {
   const fixture = JSON.parse(readFileSync(join(fixtureDir, fixtures[2] + '.json')));
   const { width, height } = fixture.doc.canvas;
@@ -361,12 +382,12 @@ export async function verifyTruncatedShadow() {
     control,
     mutantBleedPx: 0,
     mutation,
-    passed: control.passed && mutation.seamMax > 1.5 / 255,
+    passed: detectsSeamMutation(control.passed, mutation),
   };
 }
 
-function buildMygo(root, zeroBleed = false) {
-  const output = join(root, zeroBleed ? 'mygo-zero' : 'mygo');
+function buildMygo(root, variant = 'tiled') {
+  const output = join(root, 'mygo-' + variant);
   const args = ['build', '-mod=readonly', '-o', output];
   const replacements = {};
   function instrument(file, edits) {
@@ -380,7 +401,25 @@ function buildMygo(root, zeroBleed = false) {
     writeFileSync(replacement, code);
     replacements[source] = replacement;
   }
-  if (zeroBleed) {
+  if (variant === 'single') {
+    instrument('exporter.go', [['DefaultTileEdge      = 1536', 'DefaultTileEdge      = 8192']]);
+  }
+  if (variant === 'zero') {
+    const anchor = 'const bounds = stage.getBoundingClientRect();';
+    instrument('app.go', [
+      [
+        anchor,
+        `
+      document.body.style.cssText += ';position:fixed;inset:0;overflow:hidden';
+      for (const source of stage.querySelectorAll('.bento-el')) {
+        const rect = source.getBoundingClientRect();
+        const outside = rect.right <= 0 || rect.bottom <= 0 ||
+          rect.left >= innerWidth || rect.top >= innerHeight;
+        source.style.clipPath = outside ? 'inset(50%%)' : '';
+      }
+      ` + anchor,
+      ],
+    ]);
     const signature = 'func ComputeDynamicBleedPx(docJSON []byte) int {';
     instrument('exporter.go', [[signature, signature + '\n if docJSON != nil {return 0}']]);
   }
@@ -391,11 +430,28 @@ function buildMygo(root, zeroBleed = false) {
   return output;
 }
 
+export function summarizeBenchmark(reports, nativeMutation) {
+  const passed =
+    reports.every((report) => report.passed) && nativeMutation?.mutationDetected === true;
+  return {
+    reports,
+    nativeMutation,
+    gateProfile: 'stage3b-two-tier',
+    stage3bTwoTierPassed: passed,
+    legacyStage3ACrossEngineSeamPassed: reports.every(
+      (report) => report.legacyStage3ACrossEngineSeamPassed
+    ),
+    passed,
+  };
+}
+
 async function benchmark(options) {
   const root = mkdtempSync(join(tmpdir(), 'molly-g3-'));
   const reports = [];
+  let nativeMutation;
   try {
     const binary = options.mygo ?? buildMygo(root);
+    const singleBinary = buildMygo(root, 'single');
     const electron = electronRequire('electron');
     for (const name of options['native-mutation'] ? [fixtures[2]] : fixtures) {
       const fixture = join(fixtureDir, name + '.json'),
@@ -409,22 +465,27 @@ async function benchmark(options) {
         '--self-test-g3-out',
       ];
       const env = sandbox(root, name + '-mygo');
-      let report = JSON.parse(run(binary, [...mygoArgs, candidate], env));
-      assert(
-        [1, 2].includes(report.captureDPR),
-        'Unsupported MyGo captureDPR for ' + name + ': ' + String(report.captureDPR)
-      );
-      const areaOutput = await decodePng(readFileSync(candidate));
-      const scale = report.captureDPR;
-      if (scale === 2) {
-        env.MOLLY_G3_SCALE = '2';
-        report = JSON.parse(run(binary, [...mygoArgs, candidate], env));
-      }
-      assert(report.passed);
-      const actual = await decodePng(readFileSync(candidate));
       const { width, height } = JSON.parse(readFileSync(fixture)).doc.canvas;
-      assert.equal(actual.width, width * scale);
-      assert.equal(actual.height, height * scale);
+      async function capture(executable, targetScale, tileCount) {
+        const receipt = JSON.parse(
+          run(executable, [...mygoArgs, candidate], {
+            ...env,
+            MOLLY_G3_SCALE: String(targetScale),
+          })
+        );
+        assert(receipt.passed && receipt.captureDPR === 2 && receipt.targetScale === targetScale);
+        assert.equal(receipt.tileCount, tileCount);
+        const image = await decodePng(readFileSync(candidate));
+        assert.equal(image.width, width * targetScale);
+        assert.equal(image.height, height * targetScale);
+        return { receipt, image };
+      }
+      const scale = 2;
+      const tiles = Math.ceil(width / 1536) * Math.ceil(height / 1536);
+      const { receipt: report, image: actual } = await capture(binary, scale, tiles);
+      const { image: areaOutput } = await capture(binary, 1, tiles);
+      const { image: single } = await capture(singleBinary, scale, 1);
+      const { image: singleArea } = await capture(singleBinary, 1, 1);
       const electronEnv = sandbox(root, name + '-electron');
       electronEnv.MOLLY_G3_REFERENCE_SCALE = String(scale);
       run(
@@ -445,22 +506,34 @@ async function benchmark(options) {
       assert.equal(ref.width, width * meta.captureDPR);
       assert.equal(ref.height, height * meta.captureDPR);
       assert.equal(meta.captureDPR, scale);
-      const results = await compareScales(
+      const comparison = {
+        hostNativeDPR: report.hostNativeDPR,
+        tileEdge: 1536 * scale,
+        captureDPR: scale,
+        targetScale: scale,
+      };
+      const sameEngine = await compareScales(single, actual, comparison, areaOutput, singleArea);
+      const crossEngine = await compareScales(
         ref,
         actual,
-        {
-          hostNativeDPR: report.hostNativeDPR ?? meta.hostNativeDPR,
-          tileEdge: 1536 * scale,
-          captureDPR: scale,
-          targetScale: scale,
-        },
-        scale === 2 ? areaOutput : undefined
+        { ...comparison, crossEngine: true },
+        areaOutput
       );
-      reports.push({ name, reference: meta, ...results });
-      if (options['native-mutation'] && name === fixtures[2]) {
+      reports.push({
+        name,
+        reference: meta,
+        sameEngine,
+        crossEngine,
+        stage3bTwoTierPassed: sameEngine.passed && crossEngine.passed,
+        legacyStage3ACrossEngineSeamPassed:
+          crossEngine.direct.legacyStage3ACrossEngineSeamPassed &&
+          crossEngine.area.legacyStage3ACrossEngineSeamPassed,
+        passed: sameEngine.passed && crossEngine.passed,
+      });
+      if (name === fixtures[2]) {
         assert(report.bleedPx >= 180, 'Missing dynamic bleed on control');
         const mutated = join(root, 'zero.png');
-        const mutant = options['mutant-mygo'] ?? buildMygo(root, true);
+        const mutant = options['mutant-mygo'] ?? buildMygo(root, 'zero');
         const receipt = JSON.parse(
           run(mutant, [...mygoArgs, mutated], {
             ...sandbox(root, 'mutant'),
@@ -476,16 +549,17 @@ async function benchmark(options) {
         });
         reports.at(-1).mutation = {
           ...diff,
+          mutationMode: 'zero-bleed-with-tile-clipping',
+          note: 'Pure bleedPx=0 measured 0/255 because WKWebView does not clip off-tile shadows by default.',
           controlBleedPx: report.bleedPx,
           mutantBleedPx: receipt.bleedPx,
         };
-        reports.at(-1).mutationDetected = diff.seamMax > 1.5 / 255;
+        const mutationDetected = detectsSeamMutation(sameEngine.passed, diff);
+        reports.at(-1).mutationDetected = mutationDetected;
+        nativeMutation = { ...reports.at(-1).mutation, mutationDetected };
       }
     }
-    return {
-      reports,
-      passed: reports.every((r) => r.passed && (!options['native-mutation'] || r.mutationDetected)),
-    };
+    return summarizeBenchmark(reports, nativeMutation);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

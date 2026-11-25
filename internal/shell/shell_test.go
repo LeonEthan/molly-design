@@ -598,7 +598,8 @@ func TestMollyBridgeAllowlistDocGenAndConservativeGates(t *testing.T) {
 		t.Fatalf("expected preview namespace in control socket, got %s", prevCtrl)
 	}
 
-	b := NewMollyBridge(BridgeConfig{DataDir: dataDir, AppVersion: "0.2.0-test"})
+	t.Setenv("MOLLY_MYGO_ENABLE_UNTRUSTED_BROWSER", "1")
+	b := newDesktopBridge(DesktopOptions{EnablePublicBrowser: true, AppVersion: "0.2.0-test"}, BridgeConfig{DataDir: dataDir})
 	gen := b.CurrentDocGeneration()
 	syncedGen, err := b.SyncDocGen(context.Background())
 	if err != nil || syncedGen != gen {

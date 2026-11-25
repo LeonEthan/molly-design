@@ -866,7 +866,50 @@ func migrateVault(
 	legacyDecrypt func(blob []byte) ([]byte, error),
 	masterKeys MasterKeyProvider,
 	forceRemigrate bool,
-) (*VaultMigrationResult, error) {
+) (result *VaultMigrationResult, err error) {
+	dir := filepath.Dir(paths.LegacyEncPath)
+	if filepath.Dir(paths.V2VaultPath) != dir || (paths.BackupEncPath != "" && filepath.Dir(paths.BackupEncPath) != dir) {
+		return nil, errors.New("vault paths must share the writer lease directory")
+	}
+	if err = os.Mkdir(dir, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+		return nil, err
+	}
+	root, _, err := OpenPathRoot(PathRoot{Dir: dir, RejectSymlinkRoot: true})
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	writer, err := AcquireVaultWriter(root)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, writer.Release()) }()
+	return writer.Migrate(paths, legacyDecrypt, masterKeys, forceRemigrate)
+}
+
+func (w *VaultWriter) Migrate(paths VaultPaths, legacyDecrypt func([]byte) ([]byte, error), masterKeys MasterKeyProvider, forceRemigrate bool) (*VaultMigrationResult, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.release == nil {
+		return nil, errors.New("vault writer released")
+	}
+	for _, p := range []string{paths.LegacyEncPath, paths.V2VaultPath, paths.BackupEncPath} {
+		if p == "" {
+			continue
+		}
+		dir, err := filepath.Abs(filepath.Dir(p))
+		if err != nil {
+			return nil, err
+		}
+		info, err := os.Stat(dir)
+		if err != nil {
+			return nil, err
+		}
+		held, err := w.root.Stat(".")
+		if err != nil || !os.SameFile(info, held) {
+			return nil, errors.New("path outside leased vault directory")
+		}
+	}
 	if masterKeys == nil {
 		return nil, errors.New("master key provider is required")
 	}

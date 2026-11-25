@@ -344,7 +344,7 @@ func TestQuitCancellationPreservesResourcesUntilShutdown(t *testing.T) {
 	if surface.IsRevoked() || worker.stopping || ctx.Err() != nil || resources.closed || g.IsReadonly("art") || c.exit.phase != quitIdle || len(c.instances) != 1 {
 		t.Fatal("cancellation tore down live resources")
 	}
-	b.shutdownDesktop(cancel, nil)
+	b.shutdownDesktop(cancel)
 	if !surface.IsRevoked() || !worker.stopping || ctx.Err() == nil || !resources.closed {
 		t.Fatal("incomplete irreversible cleanup")
 	}

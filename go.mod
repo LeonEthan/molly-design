@@ -24,3 +24,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
+
+replace github.com/egoist/mygo => github.com/LeonEthan/mygo v0.10.1-0.20261125123958-3a0110a8ee88

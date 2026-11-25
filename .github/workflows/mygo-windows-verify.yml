@@ -1,0 +1,78 @@
+name: MyGo Windows verification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'scripts/**'
+      - 'apps/electron/src/main/services/model-connection-store*'
+      - 'apps/cli/**'
+      - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/mygo-windows-verify.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CGO_ENABLED: '0'
+      GOFLAGS: -mod=readonly
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verify native Go packages
+        run: |
+          go vet ./... 2>&1 | Tee-Object vet.log
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          go build ./cmd/molly-core ./cmd/molly-desktop 2>&1 | Tee-Object build.log
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          go test -v -count=1 ./cmd/... ./internal/... -skip 'TestChunkedBentoFlushRealWorker|TestWorkerChildEnvironment|TestRecoveryWorkerFrames|TestOffscreenTileWaitsForImageDecodingWithoutAnimationFrames' 2>&1 | Tee-Object go-test.log
+          exit $LASTEXITCODE
+      - name: Verify pinned WebView2 protocol mapping and streams
+        run: |
+          go test -v -count=1 github.com/egoist/mygo/internal/schemehost github.com/egoist/mygo/internal/windows -run 'Test(AppURL|WebURL|.*Scheme.*|EnvOptionsArguments|BodyStream.*)' 2>&1 | Tee-Object webview2.log
+          exit $LASTEXITCODE
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install --frozen-lockfile
+      - name: Verify Node-backed shell fixtures
+        run: go test -v -count=1 ./internal/shell -run 'TestWorkerChildEnvironment|TestRecoveryWorkerFrames|TestOffscreenTileWaitsForImageDecodingWithoutAnimationFrames'
+      - name: Verify real Bento worker
+        env:
+          MOLLY_TEST_REAL_BENTO_WORKER: '1'
+        run: go test -v -count=1 ./internal/shell -run TestChunkedBentoFlushRealWorker
+      - name: Verify Electron and Go vault lease handoff
+        env:
+          MOLLY_TEST_ELECTRON_CROSS_SHELL: '1'
+        run: go test -v -count=1 ./internal/security -run TestVaultWriterLeaseCrossProcessWithElectronStore
+      - name: Verify shared IPC and CLI isolation
+        run: |
+          pnpm --dir packages/shared test 2>&1 | Tee-Object shared.log
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          pnpm --dir apps/cli test cli-platform operation-store sqlite-repo-store 2>&1 | Tee-Object cli.log
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mygo-windows-verification
+          path: |
+            vet.log
+            build.log
+            go-test.log
+            webview2.log
+            shared.log
+            cli.log

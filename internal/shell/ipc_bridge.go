@@ -1332,7 +1332,10 @@ func (b *MollyBridge) handlePublicBrowser(ctx context.Context, method string, ar
 		b.mu.Unlock()
 		return map[string]any{"ok": true, "state": rec}, nil
 	case "navigate":
-		if b.cfg.PublicBrowserHost == nil {
+		b.mu.Lock()
+		host := b.cfg.PublicBrowserHost
+		b.mu.Unlock()
+		if host == nil {
 			return map[string]any{"ok": false, "error": "public_browser_disabled_pending_g4"}, nil
 		}
 		var in struct {
@@ -1357,7 +1360,7 @@ func (b *MollyBridge) handlePublicBrowser(ctx context.Context, method string, ar
 			return map[string]any{"ok": false, "error": err.Error(), "state": copyRec}, nil
 		}
 		parsed, _ := url.Parse(strings.TrimSpace(in.URL))
-		if err := b.cfg.PublicBrowserHost.OpenAndNavigate(ctx, in.BrowserID, parsed.String()); err != nil {
+		if err := host.OpenAndNavigate(ctx, in.BrowserID, parsed.String()); err != nil {
 			return map[string]any{"ok": false, "error": err.Error()}, nil
 		}
 		b.mu.Lock()
@@ -1395,8 +1398,11 @@ func (b *MollyBridge) handlePublicBrowser(ctx context.Context, method string, ar
 			BrowserID string `json:"browserId"`
 		}
 		if len(args) > 0 && json.Unmarshal(args[0], &in) == nil {
-			if b.cfg.PublicBrowserHost != nil {
-				b.cfg.PublicBrowserHost.CloseBrowser(in.BrowserID)
+			b.mu.Lock()
+			host := b.cfg.PublicBrowserHost
+			b.mu.Unlock()
+			if host != nil {
+				host.CloseBrowser(in.BrowserID)
 			}
 			b.mu.Lock()
 			delete(b.publicBrowsers, in.BrowserID)

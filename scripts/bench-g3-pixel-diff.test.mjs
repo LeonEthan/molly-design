@@ -6,7 +6,9 @@ import {
   compare,
   compareScales,
   decodePng,
+  detectsSeamMutation,
   fixtures,
+  summarizeBenchmark,
   verifyTruncatedShadow,
 } from './bench-g3-pixel-diff.mjs';
 
@@ -79,7 +81,7 @@ for (const [name, channel, value] of [
     const ref = blank(64, 64),
       cand = blank(64, 64);
     for (let i = channel; i < cand.data.length; i += 4) cand.data[i] = value;
-    assert.equal(compare(ref, cand).passed, false);
+    assert.equal(compare(ref, cand, { crossEngine: true }).passed, false);
   });
 for (const vertical of [true, false])
   test(
@@ -94,6 +96,11 @@ for (const vertical of [true, false])
       assert.equal(report.seamMax, 2 / 255);
       assert.equal(report.worstWindow.start, 41);
       assert.equal(report.passed, false);
+      const cross = compare(ref, cand, { crossEngine: true });
+      assert(cross.passed);
+      assert.equal(cross.legacyStage3ACrossEngineSeamPassed, false);
+      assert.equal(cross.crossEngineSeamWindowMax, report.seamMax);
+      assert.deepEqual(cross.worstWindow, report.worstWindow);
     }
   );
 
@@ -103,4 +110,41 @@ test('heavy shadow with zero input padding fails against a full-canvas convoluti
   assert(result.mutation.rgbMAE < 0.5 / 255);
   assert.equal(result.mutation.worstWindow.axis, 'x');
   assert.equal(result.mutation.worstWindow.seam, 1536);
+});
+
+test('same-engine RGB budget is stricter than cross-engine RGB budget', () => {
+  const ref = blank(64, 64);
+  const cand = blank(64, 64);
+  for (let i = 0; i < cand.data.length; i += 4) cand.data[i] = 6;
+  assert.equal(compare(ref, cand).passed, false);
+  const cross = compare(ref, cand, { crossEngine: true });
+  assert.equal(cross.passed, true);
+  assert.equal(cross.legacyStage3ACrossEngineSeamPassed, true);
+});
+
+test('negative control requires a passing baseline and a seam above threshold', () => {
+  assert.equal(detectsSeamMutation(true, { seamMax: 1.5 / 255 }), false);
+  assert.equal(detectsSeamMutation(false, { seamMax: 2 / 255 }), false);
+  assert.equal(detectsSeamMutation(true, { seamMax: 2 / 255 }), true);
+});
+
+test('full verdict requires native mutation detection alongside passing fixture gates', () => {
+  const ref = blank(3000, 96);
+  const cand = blank(ref.width, ref.height);
+  for (let y = 41; y < 73; y++) cand.data[4 * (y * ref.width + 1536)] = 16;
+  const cross = compare(ref, cand, { crossEngine: true });
+  assert.equal(cross.crossEngineSeamWindowMax, 2 / 255);
+  const reports = [
+    {
+      passed: compare(ref, ref).passed && cross.passed,
+      legacyStage3ACrossEngineSeamPassed: cross.legacyStage3ACrossEngineSeamPassed,
+    },
+  ];
+  for (const mutation of [undefined, { mutationDetected: false }, { mutationDetected: true }]) {
+    const result = summarizeBenchmark(reports, mutation);
+    const expected = mutation?.mutationDetected === true;
+    assert.equal(result.stage3bTwoTierPassed, expected);
+    assert.equal(result.passed, expected);
+    assert.equal(result.legacyStage3ACrossEngineSeamPassed, false);
+  }
 });

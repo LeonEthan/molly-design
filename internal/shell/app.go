@@ -70,91 +70,100 @@ func installGlobalBridge(b *MollyBridge) {
 }
 
 type mygoPublicBrowserHost struct {
-	mu      sync.Mutex
-	session *mygo.Session
-	windows map[string]*mygo.Window
+	closed   bool
+	proxy    *security.PublicEgressProxy
+	resolver security.IPResolver
+	session  *mygo.Session
+	windows  map[string]*mygo.Window
 }
 
-func newMygoPublicBrowserHost() *mygoPublicBrowserHost {
-	return &mygoPublicBrowserHost{
-		session: mygo.NewSession("molly-public-browser"),
-		windows: make(map[string]*mygo.Window),
+func openMygoPublicBrowserSession(proxy *security.PublicEgressProxy, resolver security.IPResolver) (*mygoPublicBrowserHost, error) {
+	session, err := mygo.NewProxiedSession("molly-public-browser", mygo.SessionProxyConfig{HTTPProxy: proxy.URL, Username: proxy.Username, Password: proxy.Password})
+	if err == nil {
+		_, err = session.Cookies.List(mygo.CookieFilter{URL: "https://molly.invalid/"})
 	}
+	if err != nil {
+		return nil, errors.Join(err, proxy.Close())
+	}
+	return &mygoPublicBrowserHost{proxy: proxy, resolver: resolver, session: session, windows: make(map[string]*mygo.Window)}, nil
 }
 
 func (h *mygoPublicBrowserHost) OpenAndNavigate(ctx context.Context, browserID string, targetURL string) error {
-	if err := security.ValidatePublicHTTPURL(ctx, targetURL); err != nil {
+	if err := security.ValidatePublicHTTPURLWithResolver(ctx, targetURL, h.resolver); err != nil {
 		return err
 	}
-	h.mu.Lock()
-	win := h.windows[browserID]
-	h.mu.Unlock()
-	if win == nil || win.IsDestroyed() {
-		win = mygo.NewWindow(mygo.WindowOptions{
-			Title:  "Molly Browser",
-			Width:  1024,
-			Height: 720,
-			Page: mygo.PageOptions{
-				Untrusted:            true,
-				Session:              h.session,
-				BackgroundThrottling: mygo.ThrottlingOff,
-			},
-		})
-		win.Page().OnWillNavigate(func(e *mygo.NavigateEvent) {
-			if err := security.ValidatePublicHTTPURL(context.Background(), e.URL); err != nil {
-				e.PreventDefault()
-			}
-		})
-		win.OnClosed(func() {
-			h.mu.Lock()
-			if h.windows[browserID] == win {
-				delete(h.windows, browserID)
-			}
-			h.mu.Unlock()
-		})
-		h.mu.Lock()
-		h.windows[browserID] = win
-		h.mu.Unlock()
-	}
-	win.Page().LoadURL(targetURL)
-	return nil
+	err := errors.New("public browser host is closed")
+	mygo.RunOnMain(func() {
+		if h.closed {
+			return
+		}
+		win := h.windows[browserID]
+		if win == nil || win.IsDestroyed() {
+			win = mygo.NewWindow(mygo.WindowOptions{
+				Title: "Molly Browser", Width: 1024, Height: 720,
+				Page: mygo.PageOptions{Untrusted: true, Session: h.session, BackgroundThrottling: mygo.ThrottlingOff},
+			})
+			win.Page().OnWillNavigate(func(e *mygo.NavigateEvent) {
+				if err := security.ValidatePublicHTTPURLWithResolver(context.Background(), e.URL, h.resolver); err != nil {
+					e.PreventDefault()
+				}
+			})
+			win.OnClosed(func() {
+				if h.windows[browserID] == win {
+					delete(h.windows, browserID)
+				}
+			})
+			h.windows[browserID] = win
+		}
+		err = win.Page().LoadURL(targetURL)
+	})
+	return err
 }
 
 func (h *mygoPublicBrowserHost) CloseBrowser(browserID string) {
-	h.mu.Lock()
-	win := h.windows[browserID]
-	delete(h.windows, browserID)
-	h.mu.Unlock()
-	if win != nil && !win.IsDestroyed() {
-		win.Close()
-	}
-}
-
-func (h *mygoPublicBrowserHost) CloseAll() {
-	h.mu.Lock()
-	all := make([]*mygo.Window, 0, len(h.windows))
-	for id, win := range h.windows {
-		all = append(all, win)
-		delete(h.windows, id)
-	}
-	h.mu.Unlock()
-	for _, win := range all {
+	mygo.RunOnMain(func() {
+		win := h.windows[browserID]
+		delete(h.windows, browserID)
 		if win != nil && !win.IsDestroyed() {
 			win.Close()
 		}
-	}
+	})
+}
+
+func (h *mygoPublicBrowserHost) CloseAll() {
+	mygo.RunOnMain(func() {
+		if h.closed {
+			return
+		}
+		h.closed = true
+		for id := range h.windows {
+			h.CloseBrowser(id)
+		}
+	})
+	_ = h.proxy.Close()
+}
+
+func configureDesktopSchemeLimits() error {
+	return mygo.Protocol.SetBodyLimits(mygo.SchemeBodyLimits{MaxRequestBodyBytes: 5 << 20, MaxInFlightRequestBodyBytes: 32 << 20})
 }
 
 type DesktopOptions struct {
-	RendererDir       string
-	DesignDir         string
-	DataDir           string
-	AppVersion        string
-	ControlSocketPath string
-	ProbeSocketPath   string
-	LoroSocketPath    string
-	NodeBin           string
-	DesignWorkerJS    string
+	EnablePublicBrowser bool
+	RendererDir         string
+	DesignDir           string
+	DataDir             string
+	AppVersion          string
+	ControlSocketPath   string
+	ProbeSocketPath     string
+	LoroSocketPath      string
+	NodeBin             string
+	DesignWorkerJS      string
+}
+
+func newDesktopBridge(opts DesktopOptions, cfg BridgeConfig) *MollyBridge {
+	cfg.AppVersion = opts.AppVersion
+	cfg.PublicBrowserHost = nil
+	return NewMollyBridge(cfg)
 }
 
 func installationNamespace() string {
@@ -922,6 +931,9 @@ func RunDesktop(opts DesktopOptions) (runErr error) {
 	if strings.TrimSpace(opts.RendererDir) == "" {
 		return errors.New("renderer directory is required")
 	}
+	if err := configureDesktopSchemeLimits(); err != nil {
+		return err
+	}
 	dataDir := resolveDefaultDataDir(opts.DataDir)
 	if err := ValidateIsolatedShellPaths(dataDir); err != nil {
 		return err
@@ -1038,13 +1050,6 @@ func RunDesktop(opts DesktopOptions) (runErr error) {
 		})
 	}
 
-	var browserHost *mygoPublicBrowserHost
-	var publicBrowserAdapter PublicBrowserHost
-	if os.Getenv("MOLLY_MYGO_ENABLE_UNTRUSTED_BROWSER") == "1" {
-		browserHost = newMygoPublicBrowserHost()
-		publicBrowserAdapter = browserHost
-	}
-
 	var designController DesignHostController
 	if designHost != nil {
 		designController = newMygoDesignController(designHost, gate, worker)
@@ -1057,10 +1062,9 @@ func RunDesktop(opts DesktopOptions) (runErr error) {
 	defer resources.RevokeAll()
 	appCtx, cancelApp := context.WithCancel(context.Background())
 	defer cancelApp()
-	bridge = NewMollyBridge(BridgeConfig{
+	bridge = newDesktopBridge(opts, BridgeConfig{
 		previewUI: mygo.RunOnMain, startPrivate: startPrivate, appContext: appCtx, Resources: resources, Bundled: NewBundledCapabilities(resolveCLIEntry(designWorkerJS)),
 		Supervisor:        supervisor,
-		AppVersion:        opts.AppVersion,
 		DataDir:           dataDir,
 		ControlSocketPath: controlSock,
 		ProbeSocketPath:   probeSock,
@@ -1068,9 +1072,8 @@ func RunDesktop(opts DesktopOptions) (runErr error) {
 		DesignHost:        designHost,
 		CanvasGate:        gate,
 
-		DesignController:  designController,
-		LoroRelay:         relay,
-		PublicBrowserHost: publicBrowserAdapter,
+		DesignController: designController,
+		LoroRelay:        relay,
 	})
 	if worker != nil {
 		bridge.cfg.DesignWorker = worker
@@ -1144,14 +1147,14 @@ func RunDesktop(opts DesktopOptions) (runErr error) {
 		})
 	})
 
-	mygo.App.OnQuit(func() { bridge.shutdownDesktop(cancelApp, browserHost) })
+	mygo.App.OnQuit(func() { bridge.shutdownDesktop(cancelApp) })
 	err = mygo.App.Run()
 	cancelApp()
 	bridge.renderHosts.Wait()
 	return err
 }
 
-func (bridge *MollyBridge) shutdownDesktop(cancelApp context.CancelFunc, browserHost *mygoPublicBrowserHost) {
+func (bridge *MollyBridge) shutdownDesktop(cancelApp context.CancelFunc) {
 	cancelApp()
 	bridge.clearPreviews()
 	designHost, gate, worker, relay := bridge.cfg.DesignHost, bridge.cfg.CanvasGate, bridge.cfg.DesignWorker, bridge.cfg.LoroRelay
@@ -1172,9 +1175,6 @@ func (bridge *MollyBridge) shutdownDesktop(cancelApp context.CancelFunc, browser
 	gate.mu.Lock()
 	clear(gate.closeFreezes)
 	gate.mu.Unlock()
-	if browserHost != nil {
-		browserHost.CloseAll()
-	}
 	if worker != nil {
 		_ = worker.Close()
 	}
@@ -1222,6 +1222,9 @@ func evalProbe(page *mygo.Page, script string) (any, error) {
 
 func RunSelfTestG5() (G5SelfTestReport, error) {
 	report := G5SelfTestReport{}
+	if err := configureDesktopSchemeLimits(); err != nil {
+		return report, err
+	}
 	gate := NewCanvasAccessGate()
 	gate.UpdateFromDaemon(nil, nil)
 

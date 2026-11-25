@@ -2,6 +2,7 @@ package shell
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"io"
@@ -159,7 +160,7 @@ func (s *ModelConnectionsService) transaction(change func(*settingsVaultState) (
 	return result, e
 }
 
-func (s *ModelConnectionsService) writeLocked(change func(*settingsVaultState) (settingsObject, error)) (settingsObject, error) {
+func (s *ModelConnectionsService) writeLocked(change func(*settingsVaultState) (settingsObject, error)) (output settingsObject, err error) {
 	const lock = settingsVault + ".lock"
 	f, e := s.root.OpenFile(lock, os.O_CREATE|os.O_RDWR, 0600)
 	if e != nil {
@@ -169,7 +170,33 @@ func (s *ModelConnectionsService) writeLocked(change func(*settingsVaultState) (
 	if e = lockVault(f); e != nil {
 		return nil, e
 	}
+	writer, e := security.AcquireVaultWriter(s.root)
+	if e != nil {
+		return nil, e
+	}
+	defer func() { err = errors.Join(err, writer.Release()) }()
 	v, e := s.load()
+	if e == nil {
+		legacy, readErr := security.ReadBoundedFileFromRoot(s.root, "model-connections.enc", security.MaxVaultSizeBytes)
+		var digest [32]byte
+		if readErr == nil {
+			digest = sha256.Sum256(legacy)
+		} else if !errors.Is(readErr, os.ErrNotExist) {
+			return nil, readErr
+		}
+		if digest != v.digest {
+			return nil, security.ErrStaleV2Vault
+		}
+		if readErr == nil {
+			_, backupErr := s.root.Lstat("model-connections.enc.bak")
+			if errors.Is(backupErr, os.ErrNotExist) {
+				backupErr = s.publish("model-connections.enc.bak", legacy)
+			}
+			if backupErr != nil {
+				return nil, backupErr
+			}
+		}
+	}
 	if e != nil {
 		return nil, e
 	}

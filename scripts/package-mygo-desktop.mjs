@@ -3,6 +3,8 @@
 
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
+import { parseArgs } from 'node:util'
+import os from 'node:os'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -42,6 +44,108 @@ function run(command, args, options = {}) {
   return res.stdout.trim()
 }
 
+export const developerIdentity = 'Developer ID Application: Leon Ethan (Q96C8424X6)'
+
+export function inspectDeveloperSignature(target, identity) {
+  const result = spawnSync('/usr/bin/codesign', ['--display', '--verbose=4', target], {
+    encoding: 'utf8'
+  })
+  return verifyDeveloperSignatureDetails(result, target, identity)
+}
+
+export function verifyDeveloperSignatureDetails(result, target, identity) {
+  const details = result.stderr ?? ''
+  const teamIdentifier = /^TeamIdentifier=([A-Z0-9]+)$/m.exec(details)?.[1]
+  if (
+    result.status !== 0 ||
+    !teamIdentifier ||
+    !details.includes(`Authority=${identity}\n`) ||
+    !identity.endsWith(`(${teamIdentifier})`) ||
+    !/flags=.*\([^)]*\bruntime\b/.test(details)
+  ) {
+    throw new Error(`Invalid Developer ID signature for ${target}: ${details}`)
+  }
+  return { teamIdentifier, hardenedRuntime: true }
+}
+
+function signMachOFiles(directory, sign) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name)
+    if (entry.isDirectory()) signMachOFiles(file, sign)
+    if (!entry.isFile()) continue
+    const fd = fs.openSync(file, 'r')
+    const magic = Buffer.alloc(4)
+    try {
+      fs.readSync(fd, magic, 0, 4, 0)
+    } finally {
+      fs.closeSync(fd)
+    }
+    if (
+      /^(feedface|cefaedfe|feedfacf|cffaedfe|cafebabe|bebafeca|cafebabf|bfbafeca)$/.test(
+        magic.toString('hex')
+      )
+    )
+      sign(file)
+  }
+}
+
+export function signingOptions(args, env = process.env) {
+  const { values } = parseArgs({
+    args,
+    options: {
+      'developer-id': { type: 'boolean' },
+      'sign-identity': { type: 'string' },
+      'ad-hoc': { type: 'boolean' },
+      'no-sign': { type: 'boolean' },
+      notarize: { type: 'boolean' },
+      'notary-profile': { type: 'string' },
+      out: { type: 'string' },
+      'no-node': { type: 'boolean' },
+      'require-standalone-node': { type: 'boolean' }
+    }
+  })
+  if (
+    [values['developer-id'] || values['sign-identity'], values['no-sign'], values['ad-hoc']].filter(
+      Boolean
+    ).length > 1
+  )
+    throw new Error('Conflicting signing modes')
+  const signIdentity =
+    values['no-sign'] || values['ad-hoc']
+      ? undefined
+      : (values['sign-identity'] ??
+        env.MOLLY_MACOS_SIGN_IDENTITY ??
+        (values['developer-id'] ? developerIdentity : undefined))
+  if (signIdentity && !/^Developer ID Application: .+ \([A-Z0-9]+\)$/.test(signIdentity))
+    throw new Error('Expected a Developer ID Application identity')
+  let notaryArgs
+  if (values.notarize) {
+    if (!signIdentity) throw new Error('Notarization requires Developer ID signing')
+    if (values['notary-profile']) notaryArgs = ['--keychain-profile', values['notary-profile']]
+    else if (env.APPLE_API_KEY && env.APPLE_API_KEY_ID && env.APPLE_API_ISSUER)
+      notaryArgs = [
+        '--key',
+        env.APPLE_API_KEY,
+        '--key-id',
+        env.APPLE_API_KEY_ID,
+        '--issuer',
+        env.APPLE_API_ISSUER
+      ]
+    else
+      throw new Error(
+        'Missing notarization credentials: provide --notary-profile or Apple API key credentials'
+      )
+  }
+  return {
+    signIdentity,
+    notaryArgs,
+    adHocSign: !signIdentity && !values['no-sign'],
+    outputDir: values.out,
+    bundleNode: !values['no-node'],
+    requireStandaloneNode: values['require-standalone-node']
+  }
+}
+
 function dirSizeBytes(target) {
   let total = 0
   if (!fs.existsSync(target)) return 0
@@ -75,11 +179,15 @@ export async function packageMyGoDesktop({
   requireStandaloneNode = false,
   nodeBin = process.env.MOLLY_STANDALONE_NODE_BIN,
   adHocSign = process.platform === 'darwin',
+  signIdentity,
+  notaryArgs,
   includeCliResources = true,
   cliResourcesDir = path.join(repoRoot, 'apps', 'electron', 'resources', 'cli')
 } = {}) {
   if (platform !== 'darwin') {
-    throw new Error(`Experimental MyGo .app packager currently targets darwin only (got ${platform})`)
+    throw new Error(
+      `Experimental MyGo .app packager currently targets darwin only (got ${platform})`
+    )
   }
   const goarch = arch === 'arm64' ? 'arm64' : arch === 'x64' ? 'amd64' : null
   if (!goarch) {
@@ -244,7 +352,10 @@ export async function packageMyGoDesktop({
     platform,
     arch,
     bundleId,
-    adHocSigned: adHocSign && process.platform === 'darwin',
+    signingMode: signIdentity ? 'developer-id' : adHocSign ? 'ad-hoc' : 'unsigned',
+    teamIdentifier: null,
+    hardenedRuntime: false,
+    adHocSigned: !signIdentity && adHocSign && process.platform === 'darwin',
     bundledNodeVersion,
     nodeRuntimeSelfContained,
     nodeExternalDylibs,
@@ -265,15 +376,30 @@ export async function packageMyGoDesktop({
     `${JSON.stringify(breakdown, null, 2)}\n`
   )
 
-  if (adHocSign && process.platform === 'darwin') {
+  if ((adHocSign || signIdentity) && process.platform === 'darwin') {
     const resealCore = prepareEmbeddedHarnessSigning(mollyCoreDir, verifyMollyCore, 'manifest.json')
     const resealHarness = harnessSealed
       ? prepareEmbeddedHarnessSigning(path.join(cliDst, 'harness'))
       : null
 
     const signTarget = (targetPath) => {
-      run('/usr/bin/codesign', ['--sign', '-', '--force', '--timestamp=none', targetPath])
+      run('/usr/bin/codesign', [
+        '--sign',
+        signIdentity ?? '-',
+        '--force',
+        ...(signIdentity
+          ? [
+              '--options',
+              'runtime',
+              '--timestamp',
+              '--entitlements',
+              path.join(repoRoot, 'apps/electron/build/entitlements.mac.plist')
+            ]
+          : ['--timestamp=none']),
+        targetPath
+      ])
     }
+    if (signIdentity && includeCliResources) signMachOFiles(cliDst, signTarget)
     signTarget(path.join(mollyCoreDir, 'molly-core'))
     if (bundleNode) {
       signTarget(path.join(resourcesDir, 'runtime', 'node'))
@@ -281,7 +407,15 @@ export async function packageMyGoDesktop({
     resealCore()
     if (resealHarness) resealHarness()
     signTarget(desktopBin)
-    run('/usr/bin/codesign', ['--sign', '-', '--force', '--timestamp=none', appPath])
+    if (signIdentity) {
+      Object.assign(breakdown, inspectDeveloperSignature(desktopBin, signIdentity))
+      fs.writeFileSync(
+        path.join(resourcesDir, 'bundle-manifest.json'),
+        JSON.stringify(breakdown, null, 2) + '\n'
+      )
+    }
+    signTarget(appPath)
+    if (signIdentity) inspectDeveloperSignature(appPath, signIdentity)
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath])
     verifyMollyCore(mollyCoreDir, { platform: 'darwin', arch })
     if (harnessSealed) {
@@ -289,21 +423,34 @@ export async function packageMyGoDesktop({
     }
   }
 
+  if (notaryArgs) {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'mygo-notary-'))
+    try {
+      const zip = path.join(temp, 'application.zip')
+      run('ditto', ['-c', '-k', '--keepParent', appPath, zip])
+      const receipt = JSON.parse(
+        run('xcrun', [
+          'notarytool',
+          'submit',
+          zip,
+          ...notaryArgs,
+          '--wait',
+          '--output-format',
+          'json'
+        ])
+      )
+      if (receipt.status !== 'Accepted') throw new Error(`Notarization status: ${receipt.status}`)
+      run('xcrun', ['stapler', 'staple', appPath])
+    } finally {
+      fs.rmSync(temp, { recursive: true, force: true })
+    }
+  }
   breakdown.sizesBytes.totalApp = dirSizeBytes(appPath)
   return breakdown
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const noNode = process.argv.includes('--no-node')
-  const noSign = process.argv.includes('--no-sign')
-  const requireStandaloneNode = process.argv.includes('--require-standalone-node')
-  const outIdx = process.argv.indexOf('--out')
-  const outputDir = outIdx >= 0 && process.argv[outIdx + 1] ? process.argv[outIdx + 1] : undefined
-  const result = await packageMyGoDesktop({
-    ...(outputDir ? { outputDir } : {}),
-    bundleNode: !noNode,
-    requireStandaloneNode,
-    adHocSign: !noSign && process.platform === 'darwin'
-  })
-  console.log(JSON.stringify(result, null, 2))
+  console.log(
+    JSON.stringify(await packageMyGoDesktop(signingOptions(process.argv.slice(2))), null, 2)
+  )
 }

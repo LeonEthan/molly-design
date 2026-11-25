@@ -302,7 +302,15 @@ func TestDarwinIsolatedTempKeychainRoundTripAndMigration(t *testing.T) {
 		t.Skip("security CLI unavailable")
 	}
 
-	tmpDir := t.TempDir()
+	tmpDir, err := os.MkdirTemp("/tmp", "molly-test-keychain-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Error(err)
+		}
+	})
 	kcPath := filepath.Join(tmpDir, "molly-test.keychain-db")
 	kcPass := "synthetic-temp-keychain-pass"
 
@@ -314,6 +322,7 @@ func TestDarwinIsolatedTempKeychainRoundTripAndMigration(t *testing.T) {
 		}
 	}
 	runSec("create-keychain", "-p", kcPass, kcPath)
+	t.Cleanup(func() { runSec("delete-keychain", kcPath) })
 	runSec("unlock-keychain", "-p", kcPass, kcPath)
 	runSec("set-keychain-settings", kcPath)
 
@@ -398,5 +407,33 @@ func TestVaultPublicationRejectsRedirectedSecretsDirectory(t *testing.T) {
 	entries, err := os.ReadDir(outside)
 	if err != nil || len(entries) != 0 {
 		t.Fatal(entries, err)
+	}
+}
+
+func TestMigrateWithHeldVaultWriter(t *testing.T) {
+	dir := t.TempDir()
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	writer, err := AcquireVaultWriter(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Release()
+	paths := DefaultVaultPaths(dir)
+	keys := &memoryMasterKeyProvider{}
+	if _, err = writer.Migrate(paths, nil, keys, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = writer.Migrate(DefaultVaultPaths(t.TempDir()), nil, keys, false); err == nil {
+		t.Fatal("accepted another directory")
+	}
+	if err = writer.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = writer.Migrate(paths, nil, keys, false); err == nil {
+		t.Fatal("accepted released lease")
 	}
 }

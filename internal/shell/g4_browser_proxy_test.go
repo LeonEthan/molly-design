@@ -1,0 +1,143 @@
+//go:build darwin
+
+package shell
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/netip"
+	"os"
+	"os/exec"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/LeonEthan/molly-design/internal/security"
+	"github.com/egoist/mygo"
+)
+
+const nativeTestEnv = "MOLLY_TEST_NATIVE_SHELL"
+
+func TestMain(m *testing.M) {
+	if os.Getenv(nativeTestEnv) != "1" {
+		os.Exit(m.Run())
+	}
+	code := make(chan int, 1)
+	mygo.App.OnWindowAllClosed(func() {})
+	mygo.App.OnReady(func() { go func() { code <- m.Run(); mygo.App.Quit() }() })
+	if err := mygo.App.Run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	os.Exit(<-code)
+}
+func nativeTestProcess(t *testing.T) bool {
+	t.Helper()
+	if os.Getenv(nativeTestEnv) == "1" {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^"+t.Name()+"$", "-test.v", "-test.timeout=75s")
+	cmd.Env = append(os.Environ(), nativeTestEnv+"=1", "HOME="+t.TempDir())
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	t.Logf("%s", out)
+	return false
+}
+
+type browserResolver func(string) ([]netip.Addr, error)
+
+func (f browserResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {
+	return f(host)
+}
+
+func TestG4PublicBrowserProxy(t *testing.T) {
+	if !nativeTestProcess(t) {
+		return
+	}
+	var deniedLookups, privateHits, publicHits atomic.Int32
+	private := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { privateHits.Add(1); fmt.Fprint(w, "private") }))
+	defer private.Close()
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Proxy-Authorization") != "" {
+			t.Error("proxy credentials reached origin")
+		}
+		publicHits.Add(1)
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, "<title>Molly public fixture</title>")
+	}))
+	defer origin.Close()
+	resolver := browserResolver(func(h string) ([]netip.Addr, error) {
+		switch h {
+		case "public.test":
+			return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
+		case "private.test":
+			deniedLookups.Add(1)
+			return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+		}
+		return nil, fmt.Errorf("unexpected host %q", h)
+	})
+	p, err := security.NewPublicEgressProxyWithDialer(resolver, func(ctx context.Context, network, target string) (net.Conn, error) {
+		addr := private.Listener.Addr()
+		if target == "8.8.8.8:80" {
+			addr = origin.Listener.Addr()
+		} else {
+			t.Errorf("unexpected validated endpoint %s", target)
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, addr.String())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var h *mygoPublicBrowserHost
+	mygo.RunOnMain(func() { h, err = openMygoPublicBrowserSession(p, resolver) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.CloseAll()
+	loaded := make(chan struct{}, 1)
+	mygo.RunOnMain(func() {
+		err = h.OpenAndNavigate(t.Context(), "g4", "http://public.test/")
+		if err == nil {
+			h.windows["g4"].Page().OnDidFinishLoad(func() {
+				select {
+				case loaded <- struct{}{}:
+				default:
+				}
+			})
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-loaded
+	var window *mygo.Window
+	mygo.RunOnMain(func() { window = h.windows["g4"] })
+	page := window.Page()
+	title, err := page.Eval("document.title")
+	if err != nil || title != "Molly public fixture" || publicHits.Load() == 0 {
+		t.Fatalf("title %q, origin hits %d, error %v", title, publicHits.Load(), err)
+	}
+	result, err := page.Eval("fetch('http://private.test/').then(r=>r.status,()=> 'blocked')")
+	if err != nil || (result != "blocked" && result != float64(403)) || deniedLookups.Load() == 0 || privateHits.Load() != 0 {
+		t.Fatalf("private result %v, proxy lookups %d, private origin hits %d, error %v", result, deniedLookups.Load(), privateHits.Load(), err)
+	}
+	h.CloseAll()
+	if !window.IsDestroyed() {
+		t.Fatal("public window survived CloseAll")
+	}
+	conn, err := net.Dial("tcp", strings.TrimPrefix(p.URL, "http://"))
+	if err == nil {
+		conn.Close()
+		t.Fatal("proxy listener survived CloseAll")
+	}
+	t.Logf("WKWebView loaded %q, denied private fetch (%v), private origin hits %d, proxy listener closed", title, result, privateHits.Load())
+}

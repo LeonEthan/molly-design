@@ -304,6 +304,37 @@ void test('OAuth refresh keeps public reads and unrelated saves available, prese
   assert.equal((await store.acquireForRun(unrelated.id, unrelated.revision)).apiKey, input.apiKey)
 })
 
+void test('rotated OAuth grant survives writer contention beyond the ordinary write deadline', async (t) => {
+  const { directory, store } = await fixture(t)
+  const { connection } = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
+  const lease = join(directory, 'model-connections.writer.lease')
+  const rotated = { ...oauthTokens, refreshToken: 'rotated-once' }
+  await store.mutateOAuth(connection.id, async () => {
+    await writeFile(
+      lease,
+      JSON.stringify({
+        version: 1,
+        owner: 'mygo',
+        pid: 1,
+        host: 'fixture',
+        leaseId: 'migrating',
+        acquiredAtMs: 1,
+        expiresAtMs: 60001
+      })
+    )
+    let elapsed = 0
+    t.mock.method(performance, 'now', () => elapsed)
+    t.mock.method(Date, 'now', () => {
+      const current = 58000 + elapsed
+      elapsed += 3000
+      return current
+    })
+    return rotated
+  })
+  const reopened = new ModelConnectionStore(directory, cipher, 'darwin')
+  assert.equal((await reopened.oauthFor(connection.id)).refreshToken, rotated.refreshToken)
+})
+
 void test('reauthentication waits for rotation and preserves the selection identity', async (t) => {
   const { store } = await fixture(t)
   const first = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
@@ -1726,3 +1757,28 @@ for (const compatibleApi of ['openai-responses', 'google-generative-ai']) {
     assert.equal((await store.snapshot()).connections[0].compatibleApi, 'openai-completions')
   })
 }
+
+void test('Electron reclaims an expired MyGo lease before publishing its vault', async (t) => {
+  const { store, directory } = await fixture(t)
+  const file = join(directory, 'model-connections.writer.lease')
+  await writeFile(
+    file,
+    JSON.stringify({
+      version: 1,
+      owner: 'mygo',
+      pid: 1,
+      host: 'fixture',
+      leaseId: 'retired',
+      acquiredAtMs: 1,
+      expiresAtMs: 2
+    }),
+    { mode: 0o600 }
+  )
+  const id = await store.deviceId()
+  assert.equal(
+    JSON.parse(cipher.decryptString(await readFile(join(directory, 'model-connections.enc'))))
+      .installationId,
+    id
+  )
+  await assert.rejects(stat(file), { code: 'ENOENT' })
+})

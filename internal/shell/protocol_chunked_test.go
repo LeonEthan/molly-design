@@ -231,11 +231,19 @@ func TestChunkedBentoFlushRealWorker(t *testing.T) {
 		t.Fatal(err)
 	}
 	cli := filepath.Join(root, "apps", "cli")
+	loader := filepath.ToSlash(filepath.Join(cli, "node_modules", "tsx", "dist", "loader.mjs"))
+	for _, dependency := range []string{loader, filepath.Join(root, "packages", "components", "node_modules", "jsdom", "package.json")} {
+		if _, err := os.Stat(dependency); err != nil {
+			if errors.Is(err, os.ErrNotExist) && os.Getenv("MOLLY_TEST_REAL_BENTO_WORKER") != "1" {
+				t.Skipf("workspace dependencies missing: %v", err)
+			}
+			t.Fatal(err)
+		}
+	}
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Fatal(err)
 	}
-	loader := filepath.ToSlash(filepath.Join(cli, "node_modules", "tsx", "dist", "loader.mjs"))
 	loaderURL := url.URL{Scheme: "file", Path: "/" + strings.TrimPrefix(loader, "/")}
 	t.Setenv("NODE_OPTIONS", "--import="+loaderURL.String())
 	dataDir := t.TempDir()

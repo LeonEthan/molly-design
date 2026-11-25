@@ -20,7 +20,7 @@ import (
 )
 
 func TestPrivatePreviewHosts(t *testing.T) {
-	dir := settingsTestDir(t)
+	dir := shortTempDir(t)
 	path := filepath.Join(dir, "ctl")
 	ln, err := net.Listen("unix", path)
 	if err != nil {

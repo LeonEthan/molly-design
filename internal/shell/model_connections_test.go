@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -24,7 +23,7 @@ type settingsTransport func(*http.Request) (*http.Response, error)
 
 func (f settingsTransport) RoundTrip(q *http.Request) (*http.Response, error) { return f(q) }
 func TestExperimentalSettings(t *testing.T) {
-	dir := settingsTestDir(t)
+	dir := shortTempDir(t)
 	var events int
 	transport := settingsTransport(func(q *http.Request) (*http.Response, error) {
 		if q.URL.String() != "https://example.org/v1/models" || q.Header.Get("Authorization") != "Bearer private-key" {
@@ -117,7 +116,7 @@ func TestSettingsCrossProcessLock(t *testing.T) {
 		}
 		return
 	}
-	dir := settingsTestDir(t)
+	dir := shortTempDir(t)
 	key := pausedSettingsKey{make(chan struct{}), make(chan struct{})}
 	s, e := NewModelConnectionsService(dir, "ws", key, nil, nil)
 	if e != nil {
@@ -147,19 +146,6 @@ func TestSettingsCrossProcessLock(t *testing.T) {
 	}
 }
 
-func settingsTestDir(t *testing.T) string {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		return t.TempDir()
-	}
-	dir, e := os.MkdirTemp("/tmp", "ms-")
-	if e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
-	return dir
-}
-
 type crashSettingsKey struct{}
 
 func (crashSettingsKey) LoadOrCreateMasterKey() ([]byte, error) { os.Exit(71); return nil, nil }
@@ -173,7 +159,7 @@ func TestSettingsCrashUnlock(t *testing.T) {
 		_, e = s.SaveImage(q)
 		t.Fatalf("writer did not exit: %v", e)
 	}
-	dir := settingsTestDir(t)
+	dir := shortTempDir(t)
 	cmd := exec.Command(os.Args[0], "-test.run=^TestSettingsCrashUnlock$")
 	cmd.Env = append(os.Environ(), "MOLLY_TEST_CRASH_LOCK_DIR="+dir)
 	var exit *exec.ExitError
@@ -194,7 +180,7 @@ func TestSettingsCrashUnlock(t *testing.T) {
 }
 
 func TestLegacyChangePreventsVaultWrite(t *testing.T) {
-	s, err := NewModelConnectionsService(settingsTestDir(t), "workspace", fixtureSettingsKey{}, nil, nil)
+	s, err := NewModelConnectionsService(shortTempDir(t), "workspace", fixtureSettingsKey{}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

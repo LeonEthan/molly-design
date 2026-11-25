@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -694,12 +695,22 @@ func (s *stubDesignController) Export(_ context.Context, artworkID, format, titl
 	return nil
 }
 
-func TestSessionControlSendStreamsNDJSONAndUnwrapsJSONEnvelope(t *testing.T) {
-	sockDir, err := os.MkdirTemp("/tmp", "molly-sc-")
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	base := "/tmp"
+	if runtime.GOOS == "windows" {
+		base = ""
+	}
+	dir, err := os.MkdirTemp(base, "molly-")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(sockDir)
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return dir
+}
+
+func TestSessionControlSendStreamsNDJSONAndUnwrapsJSONEnvelope(t *testing.T) {
+	sockDir := shortTempDir(t)
 	sockPath := filepath.Join(sockDir, "ctrl.sock")
 
 	ln, err := net.Listen("unix", sockPath)
@@ -910,11 +921,7 @@ func TestProfileIsolationWindowsPipeHashAndDirtyReloadGuard(t *testing.T) {
 }
 
 func TestLocalProjectsPositionalForwardingAndMachineIDInjection(t *testing.T) {
-	sockDir, err := os.MkdirTemp("/tmp", "molly-lp-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(sockDir)
+	sockDir := shortTempDir(t)
 	ctrlSock := filepath.Join(sockDir, "ctrl.sock")
 	probeSock := filepath.Join(sockDir, "probe.sock")
 

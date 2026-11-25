@@ -15,7 +15,7 @@ import {
 const cli = createRequire(new URL('../apps/cli/package.json', import.meta.url));
 const { tsImport } = cli('tsx/esm/api');
 const { acceptsDesignContent, designInput, designAssociation } = await tsImport(
-  '../apps/cli/src/design/store.ts',
+  '../apps/cli/src/design/content.ts',
   import.meta.url
 );
 const saved = designInput.extend({ association: designAssociation });

@@ -114,29 +114,39 @@ export function useDesignCreation(workspaceSlug: string) {
       createdAt: new Date().toISOString(),
     };
     pending.current = association;
-    const saved = source
-      ? await service.copy(source, association, sourceHostId)
-      : await service.create({ association, width, height });
-    await runtime.writer.upsertDocMeta(getSessionRoomId(association.sessionId as SessionId), {
-      id: association.sessionId,
-      machineId: association.machineId,
-      userId: association.userId,
-      title: saved.association.name,
-      titleSource: 'user',
-      createdAt: association.createdAt,
-      isArchived: false,
-      cliType: config.cliType,
-      agentType: config.agentType,
-      agentConfigId: config.id,
-      design: { artworkId: association.sessionId, path: 'design.json' },
-    });
-    writeStoredLastActiveTabState(association.sessionId as SessionId, {
-      sessionTabId: association.sessionId,
-      viewerTab: null,
-      sidePanel: { open: true, tab: 'design', tabs: ['design'], sideSessionId: null },
-    });
-    await service.acknowledge(association.sessionId);
-    pending.current = null;
+    try {
+      const saved = source
+        ? await service.copy(source, association, sourceHostId)
+        : await service.create({ association, width, height });
+      await runtime.writer.upsertDocMeta(getSessionRoomId(association.sessionId as SessionId), {
+        id: association.sessionId,
+        machineId: association.machineId,
+        userId: association.userId,
+        title: saved.association.name,
+        titleSource: 'user',
+        createdAt: association.createdAt,
+        isArchived: false,
+        cliType: config.cliType,
+        agentType: config.agentType,
+        agentConfigId: config.id,
+        design: { artworkId: association.sessionId, path: 'design.json' },
+      });
+      writeStoredLastActiveTabState(association.sessionId as SessionId, {
+        sessionTabId: association.sessionId,
+        viewerTab: null,
+        sidePanel: { open: true, tab: 'design', tabs: ['design'], sideSessionId: null },
+      });
+      await service.acknowledge(association.sessionId);
+    } catch (cause) {
+      if (
+        source &&
+        pending.current === association &&
+        ipcErrorMessage(cause) === 'DESIGN_COPY_SOURCE_MISMATCH'
+      )
+        pending.current = null;
+      throw cause;
+    }
+    if (pending.current === association) pending.current = null;
     if (source) await service.finishCopy(source, association.sessionId, sourceHostId);
     await navigate({
       to: '/$workspaceName/sessions/$sessionId',
@@ -1436,11 +1446,38 @@ export function usePendingDesignRecovery() {
   const agentConfigs = useAtomValue(getAllAgentConfigAtom);
   useEffect(() => {
     const service = getIpcServices()?.design;
-    if (!runtime || !user || !service) return;
+    if (!runtime || !user || !service) return undefined;
+    let cancelled = false;
+    const deferredAckIds = new Set<string>();
+    const inFlight = new Set<string>();
+    const changedDuringAck = new Set<string>();
+    const acknowledge = async (id: string) => {
+      inFlight.add(id);
+      try {
+        await service.acknowledge(id);
+        deferredAckIds.delete(id);
+      } catch {
+        deferredAckIds.add(id);
+      } finally {
+        inFlight.delete(id);
+      }
+      if (changedDuringAck.delete(id) && deferredAckIds.has(id) && !cancelled)
+        await acknowledge(id);
+    };
+    const retry = (artworkId?: string) => {
+      for (const id of inFlight) if (!artworkId || id === artworkId) changedDuringAck.add(id);
+      for (const id of deferredAckIds)
+        if ((!artworkId || id === artworkId) && !inFlight.has(id)) void acknowledge(id);
+    };
+    const stopState = onIpcEvent('design.state', (event) => retry(event.artworkId));
+    const stopConnection = onIpcEvent('loro.status', (connected) => {
+      if (connected) retry();
+    });
     void service
       .pending()
       .then(async (designs) => {
         for (const { association } of designs) {
+          if (cancelled) return;
           if (association.userId !== user.id) continue;
           const roomId = getSessionRoomId(association.sessionId as SessionId);
           const existing = await runtime.repo.getDocMeta(roomId);
@@ -1468,9 +1505,14 @@ export function usePendingDesignRecovery() {
               : {}),
             design: { artworkId: association.sessionId, path: 'design.json' },
           });
-          await service.acknowledge(association.sessionId);
+          if (!cancelled) await acknowledge(association.sessionId);
         }
       })
       .catch((error) => toast.error(String(error)));
+    return () => {
+      cancelled = true;
+      stopState();
+      stopConnection();
+    };
   }, [runtime, user, agentConfigs]);
 }

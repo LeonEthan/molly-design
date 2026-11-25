@@ -16,6 +16,8 @@ import {
 import { buildAcpSelectorOptions } from '../src/components/shared/acp-selector-options';
 
 const state = vi.hoisted(() => ({
+  events: new Map<string, (event: unknown) => void>(),
+  blocked: new Set<string>(),
   configs: [] as AgentConfigMeta[],
   pending: [] as { association: Record<string, string> }[],
   metas: new Map<string, SessionMeta>(),
@@ -47,6 +49,10 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 vi.mock('../src/lib/session-draft-tabs', () => ({ writeStoredLastActiveTabState: () => {} }));
 vi.mock('../src/lib/electron-ipc-client', () => ({
+  onIpcEvent: (channel: string, cb: (event: unknown) => void) => {
+    state.events.set(channel, cb);
+    return () => state.events.delete(channel);
+  },
   getIpcServices: () => ({
     design: {
       pending: async () => state.pending,
@@ -58,7 +64,13 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
         state.calls.push('create');
         return { association };
       },
-      acknowledge: async () => state.calls.push('acknowledge'),
+      acknowledge: async (id: string) => {
+        if (state.blocked.has(id)) {
+          state.calls.push('deferred');
+          throw Error('JOB_RUNNING');
+        }
+        state.calls.push('acknowledge');
+      },
       finishCopy: async () => state.calls.push('finishCopy'),
     },
   }),
@@ -257,4 +269,22 @@ it('does not replace an already published session binding during association rec
     design: { artworkId: 'existing', path: 'design.json' },
   });
   expect([...state.metas.values()][0].agentConfigId).toBeUndefined();
+});
+
+it('recovers the next artwork and retries the deferred acknowledgement on a state change', async () => {
+  state.pending = ['first', 'second'].map((sessionId) => ({
+    association: {
+      sessionId,
+      machineId: 'machine',
+      userId: 'local:user',
+      name: sessionId,
+      createdAt: '2026-10-12T00:00:00Z',
+    },
+  }));
+  state.blocked.add('first');
+  await act(async () => root.render(<Recovery />));
+  expect(state.calls).toEqual(['publish', 'deferred', 'publish', 'acknowledge']);
+  state.blocked.delete('first');
+  await act(async () => state.events.get('design.state')?.({ artworkId: 'first' }));
+  expect(state.calls).toEqual(['publish', 'deferred', 'publish', 'acknowledge', 'acknowledge']);
 });

@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 
 const INHERITED_KEYS = [
   'PATH',
+  'MOLLY_SUPERVISOR_RUN_ID',
   'HOME',
   'USER',
   'LOGNAME',
@@ -26,7 +27,13 @@ export function createWorkerEnvironment(
   if (!runtimeEpoch) throw new Error('harness_runtime_epoch_required');
   const profile = createHash('sha256').update(runtimeEpoch).digest('hex');
   const environment: Record<string, string> = {};
-  for (const key of INHERITED_KEYS) {
+  for (const key of [
+    ...INHERITED_KEYS,
+    'MOLLY_PROFILE',
+    'MOLLY_MCP_LORO_SOCKET_PATH',
+    'MOLLY_DATA_DIR',
+    'MOLLY_ISOLATED_DATA_ROOT_STRICT',
+  ]) {
     const value = inherited[key];
     if (value !== undefined) environment[key] = value;
   }

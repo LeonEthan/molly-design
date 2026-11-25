@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
+
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -113,7 +113,17 @@ type DesignHostController interface {
 	Export(ctx context.Context, artworkID string, format string, title string, scale int) error
 }
 
+type designWorker interface {
+	Request(context.Context, any, ...func() error) (json.RawMessage, error)
+	Close() error
+}
 type BridgeConfig struct {
+	previewUI         func(func())
+	Resources         *LocalFileResourceStore
+	Bundled           *BundledCapabilities
+	startPrivate      func(context.Context) (*CLISupervisor, error)
+	appContext        context.Context
+	Supervisor        *CLISupervisor
 	AppVersion        string
 	DataDir           string
 	ControlSocketPath string
@@ -121,7 +131,7 @@ type BridgeConfig struct {
 	LoroSocketPath    string
 	DesignHost        *DesignProtocolHost
 	CanvasGate        *CanvasAccessGate
-	DesignWorker      *DesignWorkerClient
+	DesignWorker      designWorker
 	DesignController  DesignHostController
 	LoroRelay         *LoroRelay
 	PublicBrowserHost PublicBrowserHost
@@ -129,7 +139,23 @@ type BridgeConfig struct {
 }
 
 type MollyBridge struct {
-	cfg BridgeConfig
+	renderHosts    sync.WaitGroup
+	previewMu      sync.Mutex
+	previews       map[string]*sourcePreview
+	thumbMu        sync.Mutex
+	language       string
+	mounted        bool
+	releaseAwake   func()
+	workbench      atomic.Pointer[mygo.Window]
+	settingsMu     sync.Mutex
+	settings       *ModelConnectionsService
+	settingsClosed bool
+	vaultWake      chan struct{}
+
+	private      atomic.Pointer[CLISupervisor]
+	lifecycle    sync.Mutex
+	shuttingDown bool
+	cfg          BridgeConfig
 
 	mu             sync.RWMutex
 	workbenchPage  *mygo.Page
@@ -149,16 +175,23 @@ func NewMollyBridge(cfg BridgeConfig) *MollyBridge {
 		cfg.CanvasGate = NewCanvasAccessGate()
 	}
 	b := &MollyBridge{
-		cfg:            cfg,
+		cfg: cfg, vaultWake: make(chan struct{}, 1),
 		publicBrowsers: make(map[string]*PublicBrowserRecord),
 		windowBadge:    map[string]int{"unread": 0, "waiting": 0, "working": 0},
 	}
+	b.private.Store(cfg.Supervisor)
 	b.docGen.Store(1)
 	return b
 }
 
 func (b *MollyBridge) AttachWorkbenchPage(page *mygo.Page) int64 {
 	b.mu.Lock()
+	if r := b.cfg.Resources; r != nil {
+		r.mu.Lock()
+		r.owner = page
+		r.requireOwner = true
+		r.mu.Unlock()
+	}
 	b.workbenchPage = page
 	gen := b.docGen.Load()
 	b.mu.Unlock()
@@ -166,6 +199,12 @@ func (b *MollyBridge) AttachWorkbenchPage(page *mygo.Page) int64 {
 }
 
 func (b *MollyBridge) AdvanceDocGeneration() int64 {
+	b.clearPreviews()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.cfg.Resources != nil {
+		b.cfg.Resources.AdvanceGen()
+	}
 	return b.docGen.Add(1)
 }
 
@@ -260,17 +299,20 @@ func (b *MollyBridge) Invoke(ctx context.Context, docGen int64, channel string, 
 	case "localProjects":
 		return b.handleLocalProjects(ctx, method, args)
 	case "machineRpc":
+		if method == "previewFile" {
+			return b.previewFile(ctx, docGen, args)
+		}
 		return b.handleMachineRPC(ctx, method, args)
 	case "design":
 		return b.handleDesign(ctx, method, args)
 	case "notifications":
 		return b.handleNotifications(method, args)
 	case "image":
-		return b.handleImage(method)
+		return b.handleImage(method, args)
 	case "publicBrowser":
 		return b.handlePublicBrowser(ctx, method, args)
 	case "modelConnections":
-		return b.handleModelConnections(method)
+		return b.handleModelConnections(method, args)
 	case "updater":
 		return b.handleUpdater(method)
 	default:
@@ -375,11 +417,105 @@ func (b *MollyBridge) handleApp(method string, args []json.RawMessage) (any, err
 	case "getVersion":
 		return b.cfg.AppVersion, nil
 	case "getLocale":
+		b.mu.RLock()
+		defer b.mu.RUnlock()
+		if b.language != "" {
+			return b.language, nil
+		}
 		return "en", nil
+	case "setLanguage":
+		b.mu.Lock()
+		b.language = stringArg(args, 0)
+		b.mu.Unlock()
+		return nil, nil
+	case "notifyRendererMounted":
+		b.mu.Lock()
+		b.mounted = true
+		b.mu.Unlock()
+		return nil, nil
+	case "reportRendererFatalError":
+		b.mu.Lock()
+		b.mounted = false
+		b.mu.Unlock()
+		if len(args) != 1 || len(args[0]) > 1<<20 {
+			return nil, os.ErrInvalid
+		}
+		var report struct {
+			Scope   string `json:"scope"`
+			Message string `json:"message"`
+			Details string `json:"details"`
+			Copied  bool   `json:"copied"`
+		}
+		if err := json.Unmarshal(args[0], &report); err != nil {
+			return nil, err
+		}
+		data, err := json.Marshal(report)
+		if err != nil {
+			return nil, err
+		}
+		return nil, writeFileAtomicMode0600(filepath.Join(b.cfg.DataDir, "renderer-fatal.json"), data)
+	case "completeOnboarding":
+		err := writeFileAtomicMode0600(filepath.Join(b.cfg.DataDir, "onboarding-state.json"), []byte(`{"completed":true}`))
+		if err != nil {
+			return settingsObject{"ok": false, "error": "completion_failed"}, nil
+		}
+		return settingsObject{"ok": true}, nil
+	case "getPreventSleepEnabled", "setPreventSleepEnabled":
+		var enabled *bool
+		if len(args) == 1 {
+			_ = json.Unmarshal(args[0], &enabled)
+		}
+		var result settingsObject
+		mygo.RunOnMain(func() {
+			if method == "getPreventSleepEnabled" {
+				result = settingsObject{"enabled": b.releaseAwake != nil}
+				return
+			}
+			if enabled != nil {
+				if *enabled && b.releaseAwake == nil {
+					b.releaseAwake = mygo.Power.KeepAwake("Molly desktop", false)
+				} else if !*enabled && b.releaseAwake != nil {
+					b.releaseAwake()
+					b.releaseAwake = nil
+				}
+			}
+			result = settingsObject{"ok": enabled != nil, "enabled": b.releaseAwake != nil}
+		})
+		return result, nil
 	case "getNativeTheme":
-		return map[string]any{"themeSource": "system", "shouldUseDarkColors": false}, nil
-	case "isFullscreen":
-		return false, nil
+		return nativeThemeSnapshot(), nil
+	case "setNativeTheme":
+		source := stringArg(args, 0)
+		if source == "dark" || source == "light" || source == "system" {
+			mygo.Theme.SetSource(mygo.ThemeSource(source))
+		}
+		return nil, nil
+	case "openLocalPath", "revealLocalPath":
+		path := stringArg(args, 0)
+		key := "opened"
+		if method == "revealLocalPath" {
+			key = "revealed"
+		}
+		if !filepath.IsAbs(path) {
+			return settingsObject{key: false, "error": "invalid_path"}, nil
+		}
+		if _, err := os.Stat(path); err != nil {
+			return settingsObject{key: false, "error": "path_not_found"}, nil
+		}
+		if key == "revealed" {
+			mygo.Shell.ShowItemInFolder(path)
+		} else if err := mygo.Shell.OpenPath(path); err != nil {
+			return settingsObject{key: false, "error": err.Error()}, nil
+		}
+		return settingsObject{key: true}, nil
+	case "requestRendererReload":
+		if win := b.workbench.Load(); win != nil {
+			win.Page().Reload()
+		}
+		return nil, nil
+	case "isFullscreen", "getFullscreen":
+		win := b.workbench.Load()
+		return win != nil && win.IsFullScreen(), nil
 	case "getComposition":
 		return platform.DefaultComposition(), nil
 	case "getAutoLaunchStatus":
@@ -394,7 +530,7 @@ func (b *MollyBridge) handleApp(method string, args []json.RawMessage) (any, err
 			}
 		}
 		return map[string]any{"ok": true}, nil
-	case "openExternal":
+	case "openExternal", "openExternalUrl":
 		if len(args) == 0 {
 			return map[string]any{"opened": false, "error": "missing_url"}, nil
 		}
@@ -406,23 +542,12 @@ func (b *MollyBridge) handleApp(method string, args []json.RawMessage) (any, err
 		if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
 			return map[string]any{"opened": false, "error": "disallowed_scheme"}, nil
 		}
-		if err := openExternalURL(parsed.String()); err != nil {
+		if err := mygo.Shell.OpenExternal(parsed.String()); err != nil {
 			return map[string]any{"opened": false, "url": parsed.String(), "error": err.Error()}, nil
 		}
 		return map[string]any{"opened": true, "url": parsed.String()}, nil
 	default:
 		return map[string]any{"ok": false, "error": "unsupported_in_experimental_mygo_shell"}, nil
-	}
-}
-
-func openExternalURL(rawURL string) error {
-	switch runtime.GOOS {
-	case "darwin":
-		return exec.Command("open", rawURL).Start()
-	case "windows":
-		return exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL).Start()
-	default:
-		return exec.Command("xdg-open", rawURL).Start()
 	}
 }
 
@@ -432,6 +557,13 @@ func (b *MollyBridge) handleCLI(ctx context.Context, method string) (any, error)
 		return []any{}, nil
 	case "getState":
 		now := time.Now().UnixMilli()
+		owner := "external"
+		if s := b.private.Load(); s != nil {
+			if !s.OwnsPrivateDaemon() {
+				return map[string]any{"phase": "offline", "desiredState": "stopped", "updatedAtMs": now, "preventSleepEnabled": false}, nil
+			}
+			owner = "owned"
+		}
 		if b.cfg.ProbeSocketPath != "" {
 			if state, err := b.fetchUnixJSON(ctx, b.cfg.ProbeSocketPath, http.MethodGet, "/state", nil); err == nil {
 				return map[string]any{
@@ -440,7 +572,7 @@ func (b *MollyBridge) handleCLI(ctx context.Context, method string) (any, error)
 					"updatedAtMs":         now,
 					"preventSleepEnabled": false,
 					"runtime":             state,
-					"runtimeOwnership":    "external",
+					"runtimeOwnership":    owner,
 				}, nil
 			}
 		}
@@ -451,7 +583,31 @@ func (b *MollyBridge) handleCLI(ctx context.Context, method string) (any, error)
 			"preventSleepEnabled": false,
 		}, nil
 	case "restart", "terminate":
-		return map[string]any{"ok": false, "error": "cli_lifecycle_external_in_mygo_experimental"}, nil
+		if b.cfg.startPrivate == nil {
+			return map[string]any{"ok": false, "error": "cli_lifecycle_external_in_mygo_experimental"}, nil
+		}
+		b.lifecycle.Lock()
+		defer b.lifecycle.Unlock()
+		if b.shuttingDown {
+			return map[string]any{"ok": false, "error": "shell_shutting_down"}, nil
+		}
+		b.cfg.CanvasGate.Disconnected()
+		if current := b.private.Load(); current != nil {
+			err := current.Close()
+			if err != nil && !current.exited.Load() {
+				return nil, err
+			}
+		}
+		if method == "restart" {
+			next, err := b.cfg.startPrivate(ctx)
+			if err != nil {
+				return nil, err
+			}
+			b.private.Store(next)
+			b.startRenderHost(b.cfg.appContext, next)
+			go b.runHarnessHost(b.cfg.appContext, next)
+		}
+		return map[string]any{"ok": true}, nil
 	default:
 		return nil, fmt.Errorf("unknown cli method: %s", method)
 	}
@@ -468,11 +624,7 @@ func (b *MollyBridge) handleLoro(method string) (any, error) {
 }
 
 func isMainProcessOnlyMachineRPCMethod(method string) bool {
-	return method == "harness/host" ||
-		method == "mcp/catalog-entry" ||
-		method == "design/image-connection" ||
-		method == "design/canvas-host" ||
-		strings.HasPrefix(method, "browser/")
+	return coordinatorMethod(method) || method == "design/image-connection" || strings.HasPrefix(method, "browser/")
 }
 
 func (b *MollyBridge) handleSessionControl(ctx context.Context, method string, args []json.RawMessage) (any, error) {
@@ -497,19 +649,29 @@ func (b *MollyBridge) handleSessionControl(ctx context.Context, method string, a
 	return b.streamSessionControl(ctx, b.cfg.ControlSocketPath, payload.RequestID, payload.Message)
 }
 
+func (b *MollyBridge) dialLocal(ctx context.Context, endpoint string) (net.Conn, error) {
+	if s := b.private.Load(); s != nil {
+		if !s.OwnsPrivateDaemon() {
+			return nil, errors.New("private_daemon_unavailable")
+		}
+		return dialOwnedCLI(ctx, endpoint, s.process.Pid)
+	}
+	return ipc.DialLocal(ctx, endpoint)
+}
+
 func (b *MollyBridge) localIPCClient(socketPath string, timeout time.Duration) *http.Client {
 	return &http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
 			DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
-				return ipc.DialLocal(dialCtx, socketPath)
+				return b.dialLocal(dialCtx, socketPath)
 			},
 		},
 	}
 }
 
 func (b *MollyBridge) streamSessionControl(ctx context.Context, socketPath, requestID string, message []byte) (map[string]any, error) {
-	client := b.localIPCClient(socketPath, 30*time.Second)
+	client := b.idleIPCClient(socketPath, controlIdleTimeout("/session-control", message))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://localhost/session-control", bytes.NewReader(message))
 	if err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}, nil
@@ -911,9 +1073,7 @@ func (b *MollyBridge) handleLocalProjects(ctx context.Context, method string, ar
 }
 
 func (b *MollyBridge) handleMachineRPC(ctx context.Context, method string, args []json.RawMessage) (any, error) {
-	if method == "previewFile" {
-		return nil, errors.New("preview_file_unavailable_in_experimental_shell")
-	}
+
 	if method != "send" {
 		return nil, fmt.Errorf("unknown machineRpc method: %s", method)
 	}
@@ -947,6 +1107,9 @@ func (b *MollyBridge) handleLocalControl(ctx context.Context, path string, args 
 
 func (b *MollyBridge) fetchUnixRaw(ctx context.Context, socketPath, method, reqPath string, body []byte) (int, string, []byte, error) {
 	client := b.localIPCClient(socketPath, 10*time.Second)
+	if reqPath == "/project-control" {
+		client = b.idleIPCClient(socketPath, controlIdleTimeout(reqPath, body))
+	}
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
@@ -985,10 +1148,17 @@ func (b *MollyBridge) fetchUnixJSON(ctx context.Context, socketPath, method, req
 
 func (b *MollyBridge) handleDesign(ctx context.Context, method string, args []json.RawMessage) (any, error) {
 	switch method {
+	case "refreshPreview":
+		return b.refreshPreview(ctx, args)
+	case "attachPreview", "hidePreview", "closePreview":
+		return b.previewAction(method, args)
 	case "getState", "state":
 		var id string
 		if len(args) > 0 {
 			_ = json.Unmarshal(args[0], &id)
+		}
+		if method == "state" && b.cfg.DesignWorker != nil {
+			return b.designState(ctx, id)
 		}
 		return b.cfg.CanvasGate.State(id), nil
 	case "prepareForSend", "save":
@@ -1000,30 +1170,21 @@ func (b *MollyBridge) handleDesign(ctx context.Context, method string, args []js
 			return nil, err
 		}
 		return map[string]any{"ok": true}, nil
-	case "read":
-		if b.cfg.DesignWorker == nil {
-			return nil, errors.New("design worker unavailable")
+	case "compareAvailable", "cover", "compareHold", "copy", "finishCopy", "selectionSummary", "selection", "highlight", "settleNotes", "applyCommand":
+		return b.canvasAction(ctx, method, args)
+	case "thumbnail":
+		return b.thumbnail(ctx, stringArg(args, 0))
+	case "close", "leave":
+		id := stringArg(args, 0)
+		if id == "" {
+			return nil, os.ErrInvalid
 		}
-		var id string
-		if len(args) > 0 {
-			_ = json.Unmarshal(args[0], &id)
+		if c, ok := b.cfg.DesignController.(*mygoDesignController); ok {
+			return c.closeDesign(id, stringArg(args, 1), method == "leave", func() error { return b.forgetThumbnail(id) })
 		}
-		return b.cfg.DesignWorker.Request(ctx, map[string]any{
-			"operation": "read",
-			"sessionId": id,
-		})
-	case "versions":
-		if b.cfg.DesignWorker == nil {
-			return nil, errors.New("design worker unavailable")
-		}
-		var id string
-		if len(args) == 0 || json.Unmarshal(args[0], &id) != nil || strings.TrimSpace(id) == "" {
-			return nil, errors.New("invalid design sessionId")
-		}
-		return b.cfg.DesignWorker.Request(ctx, map[string]any{
-			"operation": "history-list",
-			"sessionId": id,
-		})
+		return true, nil
+	case "pending", "acknowledge", "read", "versions", "history-read", "create", "rename", "saveVersion", "restoreVersion":
+		return b.designStore(ctx, method, args)
 	case "attach":
 		if b.cfg.DesignController == nil {
 			return nil, errors.New("design canvas host unavailable")
@@ -1045,6 +1206,9 @@ func (b *MollyBridge) handleDesign(ctx context.Context, method string, args []js
 		if err := b.cfg.DesignController.Attach(ctx, artworkID, bounds, hostID); err != nil {
 			return nil, err
 		}
+		b.removePreviews(func(host string, p *sourcePreview) bool {
+			return host == hostID && p.id == artworkID && p.turn != b.cfg.CanvasGate.previewTurn(p.id)
+		})
 		return nil, nil
 	case "hide":
 		if b.cfg.DesignController == nil {
@@ -1117,26 +1281,28 @@ func (b *MollyBridge) handleDesign(ctx context.Context, method string, args []js
 func (b *MollyBridge) handleNotifications(method string, _ []json.RawMessage) (any, error) {
 	switch method {
 	case "getPermissionStatus":
-		return map[string]any{"supported": true, "permission": "default", "source": "system"}, nil
+		return map[string]any{"supported": false, "permission": "default", "error": "permission_status_unavailable"}, nil
 	case "showSessionCompletion":
 		return map[string]any{"shown": false, "reason": "experimental_mygo_shell"}, nil
 	case "openSystemSettings":
-		return map[string]any{"opened": false, "platform": runtime.GOOS}, nil
+		platform := runtime.GOOS
+		target := ""
+		switch platform {
+		case "windows":
+			platform = "win32"
+			target = "ms-settings:notifications"
+		case "darwin":
+			target = "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+		}
+		if target == "" {
+			return settingsObject{"opened": false, "platform": platform, "error": "unsupported_platform"}, nil
+		}
+		if err := mygo.Shell.OpenExternal(target); err != nil {
+			return settingsObject{"opened": false, "platform": platform, "error": err.Error()}, nil
+		}
+		return settingsObject{"opened": true, "platform": platform, "target": target}, nil
 	default:
 		return nil, fmt.Errorf("unknown notifications method: %s", method)
-	}
-}
-
-func (b *MollyBridge) handleImage(method string) (any, error) {
-	switch method {
-	case "showPreviewMenu":
-		return map[string]any{"action": nil}, nil
-	case "copyToClipboard":
-		return map[string]any{"copied": false, "error": "experimental_mygo_shell"}, nil
-	case "saveFile":
-		return map[string]any{"saved": false, "canceled": true}, nil
-	default:
-		return nil, fmt.Errorf("unknown image method: %s", method)
 	}
 }
 
@@ -1242,19 +1408,6 @@ func (b *MollyBridge) handlePublicBrowser(ctx context.Context, method string, ar
 	}
 }
 
-func (b *MollyBridge) handleModelConnections(method string) (any, error) {
-	switch method {
-	case "list", "getAll":
-		return map[string]any{
-			"connections": []any{},
-			"readOnly":    true,
-			"reason":      "experimental_mygo_shell_pending_g1_signing",
-		}, nil
-	default:
-		return nil, errors.New("modelConnections write is disabled in experimental MyGo shell until G1 signing")
-	}
-}
-
 func (b *MollyBridge) handleUpdater(method string) (any, error) {
 	switch method {
 	case "getState":
@@ -1276,4 +1429,17 @@ func (b *MollyBridge) handleUpdater(method string) (any, error) {
 	default:
 		return nil, fmt.Errorf("unknown updater method: %s", method)
 	}
+}
+
+func (b *MollyBridge) closePrivateCLI() error {
+	b.lifecycle.Lock()
+	defer b.lifecycle.Unlock()
+	if b.shuttingDown {
+		return nil
+	}
+	b.shuttingDown = true
+	if s := b.private.Load(); s != nil {
+		return s.Close()
+	}
+	return nil
 }

@@ -1,3 +1,4 @@
+import { stdioProfileEnvironment } from './stdio-profile';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -251,6 +252,7 @@ export function buildMollyImageMcpServer(config: MollyImageMcpServerConfig = {})
     } catch (error) {
       const message =
         error instanceof Error ? error.message : `Image generation failed: ${String(error)}`;
+      if (message === 'image_credentials_require_mcp_http_host') return failure(message);
       if (delegatedToCore) {
         if (error instanceof CoreIpcRpcError) {
           if (error.code === 'image_generate_failed' || error.code === 'image_edit_failed') {
@@ -304,6 +306,7 @@ const failure = (text: string) => ({
 });
 
 export async function runMollyImageMcpServer(): Promise<void> {
+  stdioProfileEnvironment();
   const context = getMcpSessionContext();
   await buildMollyImageMcpServer({
     designGate: await resolveDesignGate(context),

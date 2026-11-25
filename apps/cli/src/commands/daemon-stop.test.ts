@@ -103,6 +103,21 @@ afterEach(() => {
 });
 
 describe('daemon stop across the Molly host port migration', () => {
+  it('finds the baseline daemon from the isolated port before trying 17790', async () => {
+    vi.mocked(hostLease.getLocalCliHostEndpoint).mockReturnValue({
+      kind: 'tcp',
+      host: '127.0.0.1',
+      port: 41888,
+    });
+    const hosts = createHosts([
+      [17792, daemon],
+      [17790, daemon],
+    ]);
+    const result = stopDaemonProcess();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await result).toMatchObject({ status: 'stopped' });
+    expect(hosts.requests).toEqual([{ port: 17792, instanceId: daemon.instanceId, token }]);
+  });
   it.each([false, true])(
     'stops the legacy daemon even with a new Electron host: %s',
     async (electronRunning) => {

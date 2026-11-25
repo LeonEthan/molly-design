@@ -1,3 +1,4 @@
+import { getMollyDataDir } from '@molly/shared/node/installation-profile';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
@@ -74,7 +75,10 @@ function createPrivateSocketEndpoint(platform: NodeJS.Platform): {
     };
   }
   const dirName = `mc-sup-${randomBytes(6).toString('hex')}`;
-  const baseDir = platform === 'darwin' ? '/tmp' : os.tmpdir();
+  const baseDir =
+    platform === 'darwin' && process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT !== '1'
+      ? '/tmp'
+      : os.tmpdir();
   const socketDir = path.join(baseDir, dirName);
   mkdirSync(socketDir, { recursive: true, mode: 0o700 });
   return {
@@ -84,6 +88,35 @@ function createPrivateSocketEndpoint(platform: NodeJS.Platform): {
     },
     socketDir,
   };
+}
+
+export function spawnMollyCore(binaryPath: string, endpoint: MollyCoreEndpoint): ChildProcess {
+  const handshake = process.env.MOLLY_SUPERVISOR_TRANSPORT === 'stdin';
+  const env = { ...process.env };
+  if (handshake) {
+    delete env.MOLLY_CORE_IPC_TOKEN;
+    delete env.MOLLY_DATA_DIR;
+    delete env.LODY_DATA_DIR;
+  } else env.MOLLY_CORE_IPC_TOKEN = endpoint.authToken;
+  const child = spawn(
+    binaryPath,
+    ['--serve-ipc', endpoint.socketPath, handshake ? '--stdin-handshake' : '--watch-stdin'],
+    {
+      stdio: ['pipe', 'ignore', 'pipe'],
+      env,
+      windowsHide: true,
+    }
+  );
+  if (handshake) {
+    child.stdin?.on('error', () => child.kill());
+    child.stdin?.write(
+      JSON.stringify({
+        authToken: endpoint.authToken,
+        allowedDataRoot: getMollyDataDir(),
+      }) + '\n'
+    );
+  }
+  return child;
 }
 
 export class MollyCoreSupervisor {
@@ -274,18 +307,7 @@ export class MollyCoreSupervisor {
   }
 
   private spawnChild(): ChildProcess {
-    const child = spawn(
-      this.binaryPath,
-      ['--serve-ipc', this.fixedEndpoint.socketPath, '--watch-stdin'],
-      {
-        stdio: ['pipe', 'ignore', 'pipe'],
-        env: {
-          ...process.env,
-          MOLLY_CORE_IPC_TOKEN: this.fixedEndpoint.authToken,
-        },
-        windowsHide: true,
-      }
-    );
+    const child = spawnMollyCore(this.binaryPath, this.fixedEndpoint);
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', (chunk: string) => {
       const text = chunk.trim();

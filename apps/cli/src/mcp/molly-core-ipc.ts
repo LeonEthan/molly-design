@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import net from 'node:net';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
@@ -42,12 +43,28 @@ export function isMollyCorePreConnectError(error: unknown): error is MollyCorePr
   return error instanceof MollyCorePreConnectError;
 }
 
+const hostHelloSchema = z.object({
+  type: z.literal('molly/mcp-host-hello'),
+  mcpToolAuthToken: z.string().regex(/^[0-9a-f]{64}$/),
+  mollyCore: z
+    .object({ socketPath: z.string().min(1), authToken: z.string().regex(/^[0-9a-f]{64}$/) })
+    .nullable(),
+});
+let hostHello: z.infer<typeof hostHelloSchema> | undefined;
+export function acceptMcpHostHello(value: unknown) {
+  hostHello = hostHelloSchema.parse(value);
+}
+export const getMcpToolAuthToken = () => hostHello?.mcpToolAuthToken;
 export function getMollyCoreIpcSocketPath(): string | undefined {
+  if (hostHello || process.env.MOLLY_SUPERVISOR_TRANSPORT === 'stdin')
+    return hostHello?.mollyCore?.socketPath;
   const value = process.env.MOLLY_CORE_IPC_SOCKET?.trim();
   return value && value.length > 0 ? value : undefined;
 }
 
 export function getMollyCoreIpcToken(): string | undefined {
+  if (hostHello || process.env.MOLLY_SUPERVISOR_TRANSPORT === 'stdin')
+    return hostHello?.mollyCore?.authToken;
   const value = process.env.MOLLY_CORE_IPC_TOKEN?.trim();
   return value && value.length > 0 ? value : undefined;
 }

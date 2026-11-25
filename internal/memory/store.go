@@ -66,6 +66,16 @@ type Store struct {
 	clock  func() time.Time
 }
 
+func sqliteFileURI(dbPath, mode string) string {
+	path := filepath.ToSlash(dbPath)
+	if strings.HasPrefix(path, "//") {
+		path = "//" + path
+	} else if len(path) >= 2 && path[1] == ':' {
+		path = "/" + path
+	}
+	return "file:" + strings.NewReplacer("%", "%25", "?", "%3F", "#", "%23").Replace(path) + "?mode=" + mode
+}
+
 func Open(dbPath string) (*Store, error) {
 	return OpenWithClock(dbPath, time.Now)
 }
@@ -79,14 +89,20 @@ func OpenWithClock(dbPath string, clock func() time.Time) (*Store, error) {
 	}
 
 	isMemory := dbPath == ":memory:" || strings.HasPrefix(dbPath, "file::memory:")
+	dsn := dbPath
 	if !isMemory {
-		dir := filepath.Dir(dbPath)
+		abs, err := filepath.Abs(dbPath)
+		if err != nil {
+			return nil, err
+		}
+		dsn = sqliteFileURI(abs, "rwc")
+		dir := filepath.Dir(abs)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, fmt.Errorf("create memory directory: %w", err)
 		}
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open memory sqlite: %w", err)
 	}
@@ -539,7 +555,11 @@ func (s *Store) ImportLegacyMem0File(ctx context.Context, legacyDBPath string) (
 	if err := ctx.Err(); err != nil {
 		return MigrationReport{}, err
 	}
-	legacyDB, err := sql.Open("sqlite", legacyDBPath)
+	abs, err := filepath.Abs(legacyDBPath)
+	if err != nil {
+		return MigrationReport{}, err
+	}
+	legacyDB, err := sql.Open("sqlite", sqliteFileURI(abs, "ro"))
 	if err != nil {
 		return MigrationReport{}, fmt.Errorf("open legacy mem0 sqlite: %w", err)
 	}

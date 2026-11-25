@@ -180,6 +180,7 @@ export function createProductSession(options: {
   const say = (message: string | Copy) =>
     typeof message === 'string' ? message : (labels[message[0]] ?? message[1]);
   let readonlyMessage: string | Copy = COPY.readonly;
+  let flushRunSeq = 0;
   let writePermit: string | undefined;
   options.setReadonly(true);
   document.body.dataset.readonly = 'true';
@@ -795,14 +796,17 @@ export function createProductSession(options: {
         };
       },
       async flush(permit: string) {
+        const runId = ++flushRunSeq;
+        const prevSaving = saving;
         writePermit = permit;
         try {
+          if (prevSaving) await prevSaving.catch(() => {});
           await flush();
           return { ok: true };
         } catch (cause) {
           return { ok: false, error: String(cause) };
         } finally {
-          writePermit = undefined;
+          if (flushRunSeq === runId) writePermit = undefined;
         }
       },
       async save() {

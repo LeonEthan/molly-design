@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import net from 'node:net';
 import os from 'node:os';
-import { getInstallationProfile } from './installation-profile';
+import { getInstallationProfile, getMollyDataDir, experimentalScope } from './installation-profile';
 import type { PlatformKind } from '../platform-kind';
 
 const HOST_TCP_ADDRESS = '127.0.0.1';
@@ -61,7 +61,9 @@ function getUserPipeSuffix(): string {
 
 function getE2eHostPort(): number | null {
   if ((process.env.MOLLY_E2E ?? process.env.LODY_E2E) !== '1') return null;
-  const rawPort = (process.env[E2E_HOST_PORT_ENV] ?? process.env.LODY_E2E_LOCAL_CLI_HOST_PORT)?.trim();
+  const rawPort = (
+    process.env[E2E_HOST_PORT_ENV] ?? process.env.LODY_E2E_LOCAL_CLI_HOST_PORT
+  )?.trim();
   if (!rawPort) return null;
   if (!/^\d+$/u.test(rawPort)) {
     throw new Error(`${E2E_HOST_PORT_ENV} must be an integer between 1024 and 65535`);
@@ -74,7 +76,8 @@ function getE2eHostPort(): number | null {
 }
 
 export function getE2eHostPipe(nodePlatform = process.platform): string | null {
-  if (nodePlatform !== 'win32' || (process.env.MOLLY_E2E ?? process.env.LODY_E2E) !== '1') return null;
+  if (nodePlatform !== 'win32' || (process.env.MOLLY_E2E ?? process.env.LODY_E2E) !== '1')
+    return null;
   const pipe = (process.env[E2E_HOST_PIPE_ENV] ?? process.env.LODY_E2E_LOCAL_CLI_HOST_PIPE)?.trim();
   if (!pipe) return null;
   if (!E2E_HOST_PIPE_PATTERN.test(pipe)) {
@@ -83,19 +86,32 @@ export function getE2eHostPipe(nodePlatform = process.platform): string | null {
   return pipe;
 }
 
-export function getLocalCliHostEndpoint(platform?: PlatformKind): LocalCliHostEndpoint {
+export function getLocalCliHostEndpoint(
+  platform?: PlatformKind,
+  useExperimentalScope = true
+): LocalCliHostEndpoint {
   const profile = getInstallationProfile(platform);
+  const scope = useExperimentalScope && experimentalScope(getMollyDataDir(platform));
   if (process.platform === 'win32') {
     return {
       kind: 'pipe',
       path:
-        getE2eHostPipe() ?? `\\\\.\\pipe\\${profile.namespace}-agent-host-${getUserPipeSuffix()}`,
+        getE2eHostPipe() ??
+        `\\\\.\\pipe\\${profile.namespace}-agent-host-${getUserPipeSuffix()}${scope && process.env.MOLLY_MYGO_ISOLATED_PIPES === '1' ? `-${scope}` : ''}`,
     };
+  }
+  let port = getE2eHostPort() ?? profile.localCliHostPort;
+  if (scope) {
+    const override = process.env.MOLLY_LOCAL_CLI_HOST_PORT;
+    port =
+      override === undefined ? 20000 + (parseInt(scope.slice(0, 8), 16) % 40000) : Number(override);
+    if (!Number.isInteger(port) || port < 1 || port > 65535)
+      throw Error('invalid_local_cli_host_port');
   }
   return {
     kind: 'tcp',
     host: HOST_TCP_ADDRESS,
-    port: getE2eHostPort() ?? profile.localCliHostPort,
+    port,
   };
 }
 

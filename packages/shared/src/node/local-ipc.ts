@@ -25,7 +25,12 @@ import {
   LocalSessionControlResponseSchema,
 } from '../message-schemas';
 import { LOCAL_PROJECT_CONTROL_PATH } from './local-project-control';
-import { getInstallationProfile, getMollyDataDir } from './installation-profile';
+import {
+  getInstallationProfile,
+  experimentalScope,
+  resolveIsolatedDataPath,
+  getMollyDataDir,
+} from './installation-profile';
 import type { PlatformKind } from '../platform-kind';
 
 export const LOCAL_CONTROL_HEADER = 'x-lody-local-control';
@@ -62,6 +67,7 @@ const LocalProbeHealthResponseSchema = z.object({
   pid: z.number().int().positive(),
   cliVersion: z.string().min(1),
   homeDir: z.string().min(1),
+  dataDir: z.string().min(1).optional(),
 });
 
 export type LocalProbeHealthResponse = z.infer<typeof LocalProbeHealthResponseSchema>;
@@ -152,6 +158,7 @@ export type LocalDaemonRunFileError =
   | LocalDaemonRunFilePermissionError;
 
 export type LocalIpcRequestOptions = {
+  mcpToken?: string;
   timeoutMs?: number;
 };
 
@@ -226,10 +233,12 @@ export function getLocalDaemonSocketPath(basename: string, platform?: PlatformKi
     // access to the owner (and Administrators — who can compromise the user's
     // processes regardless). If Node ever exposes pipe security attributes,
     // tighten this to owner-only explicitly.
-    return `\\\\.\\pipe\\${basename}-${getUserSocketSuffix()}`;
+    const scope =
+      process.env.MOLLY_MYGO_ISOLATED_PIPES === '1' && experimentalScope(getMollyDataDir(platform));
+    return `\\\\.\\pipe\\${basename}-${getUserSocketSuffix()}${scope ? `-${scope}` : ''}`;
   }
 
-  const socketPath = path.join(getLocalDaemonRunDir(platform), `${basename}.sock`);
+  const socketPath = resolveIsolatedDataPath(getLocalDaemonRunDir(platform), `${basename}.sock`);
   if (Buffer.byteLength(socketPath, 'utf8') > MAX_UNIX_SOCKET_PATH_BYTES) {
     throw new Error(`local_ipc_socket_path_too_long:${socketPath}`);
   }
@@ -255,15 +264,15 @@ export function getLocalLoroDataPlaneSocketPath(platform?: PlatformKind): string
 }
 
 export function getLocalDaemonRunDir(platform?: PlatformKind): string {
-  return path.join(getMollyDataDir(platform), 'run');
+  return resolveIsolatedDataPath(getMollyDataDir(platform), 'run');
 }
 
 export function getLocalDaemonRunFilePath(platform?: PlatformKind): string {
-  return path.join(getLocalDaemonRunDir(platform), 'daemon.json');
+  return resolveIsolatedDataPath(getLocalDaemonRunDir(platform), 'daemon.json');
 }
 
 export function getLocalDaemonLockFilePath(platform?: PlatformKind): string {
-  return path.join(getLocalDaemonRunDir(platform), 'daemon.lock');
+  return resolveIsolatedDataPath(getLocalDaemonRunDir(platform), 'daemon.lock');
 }
 
 export function ensureLocalDaemonRunDir(runDir: string = getLocalDaemonRunDir()): void {
@@ -501,7 +510,8 @@ function postJsonOverSocket(
   socketPath: string,
   requestPath: string,
   body: unknown,
-  timeoutMs: number
+  timeoutMs: number,
+  mcpToken?: string
 ): Effect.Effect<{ response: HttpResponseLike; payload: unknown }, IpcError> {
   const encoded = JSON.stringify(body);
   return requestJsonOverSocket(
@@ -512,6 +522,7 @@ function postJsonOverSocket(
       headers: {
         'content-type': 'application/json',
         'content-length': String(Buffer.byteLength(encoded, 'utf8')),
+        ...(mcpToken && { 'x-molly-mcp-token': mcpToken }),
         [LOCAL_CONTROL_HEADER]: '1',
       },
       body: encoded,
@@ -907,7 +918,8 @@ const parseMachineRpcResponse = parseJsonBody<LocalMachineRpcResponse>(
 type PostJsonFn = (
   requestPath: string,
   body: unknown,
-  timeoutMs: number
+  timeoutMs: number,
+  mcpToken?: string
 ) => Effect.Effect<{ response: HttpResponseLike; payload: unknown }, IpcError>;
 
 type PostSessionControlFn = (
@@ -947,7 +959,8 @@ function makeControlClient(
         post(
           LOCAL_MACHINE_RPC_PATH,
           message,
-          requestOptions?.timeoutMs ?? DEFAULT_LOCAL_CONTROL_TIMEOUT_MS
+          requestOptions?.timeoutMs ?? DEFAULT_LOCAL_CONTROL_TIMEOUT_MS,
+          requestOptions?.mcpToken
         ),
         ({ response, payload }) => parseMachineRpcResponse(response, payload)
       ),
@@ -1056,8 +1069,10 @@ export function makeLocalControlClientSocket(
 ): LocalControlClientService {
   const withSocketPath = makeCachedSocketPathRunner(() => resolveControlSocketPath(options));
   return makeControlClient(
-    (requestPath, body, timeoutMs) =>
-      withSocketPath((socketPath) => postJsonOverSocket(socketPath, requestPath, body, timeoutMs)),
+    (requestPath, body, timeoutMs, mcpToken) =>
+      withSocketPath((socketPath) =>
+        postJsonOverSocket(socketPath, requestPath, body, timeoutMs, mcpToken)
+      ),
     (message, requestOptions) =>
       withSocketPath((socketPath) =>
         postSessionControlOverSocket(socketPath, message, requestOptions)

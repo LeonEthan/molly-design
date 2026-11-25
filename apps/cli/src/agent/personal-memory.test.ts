@@ -1,12 +1,15 @@
+import { linkSync } from 'node:fs';
+import * as fs from 'node:fs/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { PersonalMemoryService } from './personal-memory';
 
 const directories: string[] = [];
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))
   );
@@ -158,4 +161,58 @@ it('migrates legacy mem0 vectors SQLite rows once with zero data loss and preser
   await memory.remove('legacy-00', snap.revision);
   const reopened = await PersonalMemoryService.open(dbPath);
   expect((await reopened.read()).entries).toHaveLength(31);
+});
+
+it.each([
+  { kind: 'symlink', suffix: 'directory' },
+  ...['', '-wal', '-shm', '-journal'].flatMap((suffix) =>
+    ['hardlink', 'symlink'].map((kind) => ({ kind, suffix }))
+  ),
+])(
+  'rejects a $kind on SQLite path ($suffix) before touching external bytes',
+  async ({ kind, suffix }) => {
+    const fixture = await fs.mkdtemp(path.join(tmpdir(), 'sqlite-isolation-'));
+    directories.push(fixture);
+    const root = path.join(fixture, 'root');
+    const dir = path.join(root, 'memory');
+    const outside = path.join(fixture, 'outside');
+    await fs.mkdir(path.dirname(dir), { recursive: true });
+    await fs.mkdir(outside);
+    const target = path.join(
+      outside,
+      'preferences.sqlite' + (suffix === 'directory' ? '' : suffix)
+    );
+    const bytes = Buffer.from([0, 255, 42]);
+    await fs.writeFile(target, bytes);
+    if (suffix === 'directory') {
+      await fs.symlink(outside, dir, 'dir');
+    } else {
+      await fs.mkdir(dir);
+      const leaf = path.join(dir, 'preferences.sqlite' + suffix);
+      if (kind === 'hardlink') linkSync(target, leaf);
+      else await fs.symlink(target, leaf, 'file');
+    }
+    vi.stubEnv('MOLLY_DATA_DIR', root);
+    vi.stubEnv('MOLLY_ISOLATED_DATA_ROOT_STRICT', '1');
+    await expect(
+      PersonalMemoryService.open(path.join(dir, 'preferences.sqlite'), { coreEndpoint: null })
+    ).rejects.toThrow(
+      kind === 'hardlink' ? 'invalid_isolated_sqlite_file' : 'isolated_data_path_symlink'
+    );
+    expect(await fs.readFile(target)).toEqual(bytes);
+    expect(await fs.readdir(outside)).toEqual([path.basename(target)]);
+  }
+);
+
+it('rejects an explicit database outside the strict data root before creating directories', async () => {
+  const fixture = await mkdtemp(path.join(tmpdir(), 'sqlite-isolation-'));
+  directories.push(fixture);
+  vi.stubEnv('MOLLY_DATA_DIR', path.join(fixture, 'root'));
+  vi.stubEnv('MOLLY_ISOLATED_DATA_ROOT_STRICT', '1');
+  await expect(
+    PersonalMemoryService.open(path.join(fixture, 'outside', 'preferences.sqlite'), {
+      coreEndpoint: null,
+    })
+  ).rejects.toThrow('isolated_data_path_escape');
+  expect(await fs.readdir(fixture)).toEqual([]);
 });

@@ -233,6 +233,23 @@ func resolveDaemonSocketPaths(dataDir string, opts DesktopOptions) (controlSock,
 	return
 }
 
+func resolveCLIEntry(worker string) string {
+	var candidates []string
+	if worker != "" {
+		candidates = append(candidates, filepath.Join(filepath.Dir(worker), "index.js"))
+	}
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "..", "Resources", "cli", "index.js"))
+	}
+	candidates = append(candidates, filepath.Join("apps", "electron", "resources", "cli", "index.js"), filepath.Join("apps", "cli", "dist", "index.js"))
+	for _, path := range candidates {
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+			return path
+		}
+	}
+	return ""
+}
+
 func resolveDesignWorkerRuntime(opts DesktopOptions) (string, string) {
 	nodeBin := opts.NodeBin
 	entryJS := opts.DesignWorkerJS
@@ -240,6 +257,9 @@ func resolveDesignWorkerRuntime(opts DesktopOptions) (string, string) {
 		resDir := filepath.Join(filepath.Dir(exe), "..", "Resources")
 		if nodeBin == "" {
 			candidate := filepath.Join(resDir, "runtime", "node")
+			if runtime.GOOS == "windows" {
+				candidate += ".exe"
+			}
 			if _, statErr := os.Stat(candidate); statErr == nil {
 				nodeBin = candidate
 			}
@@ -265,28 +285,41 @@ func resolveDesignWorkerRuntime(opts DesktopOptions) (string, string) {
 	return nodeBin, entryJS
 }
 
+type canvasPage interface {
+	EvalContext(context.Context, string) (any, error)
+}
 type mygoCanvasInstance struct {
-	artworkID string
-	hostID    string
-	win       *mygo.Window
-	page      *mygo.Page
-	surface   *DesignSurface
+	copyMu     sync.Mutex
+	copyTarget string
+	compare    string
+	lastSeq    atomic.Uint64
+	artworkID  string
+	hostID     string
+	win        *mygo.Window
+	page       canvasPage
+	surface    *DesignSurface
 }
 
 func (c *mygoCanvasInstance) ArtworkID() string { return c.artworkID }
 
-func (c *mygoCanvasInstance) SetReadonly(readonly bool, reason string) error {
+func (c *mygoCanvasInstance) SetReadonly(ctx context.Context, seq uint64, readonly bool, reason string) error {
+	for {
+		prev := c.lastSeq.Load()
+		if seq < prev {
+			return nil
+		}
+		if c.lastSeq.CompareAndSwap(prev, seq) {
+			break
+		}
+	}
 	if c.page == nil || (c.win != nil && c.win.IsDestroyed()) {
 		return nil
 	}
 	reasonJSON, _ := json.Marshal(reason)
-	_, err := c.page.Eval(fmt.Sprintf(`(() => {
-		if (window.molly && typeof window.molly.setReadonly === 'function') {
-			window.molly.setReadonly(%t, %s);
-			return true;
-		}
-		return false;
-	})()`, readonly, string(reasonJSON)))
+	applied, err := c.page.EvalContext(ctx, fmt.Sprintf("window.__mollyApplyReadonly?.(%d,%t,%s)", seq, readonly, reasonJSON))
+	if err == nil && applied != true {
+		return errors.New("canvas editor unavailable")
+	}
 	return err
 }
 
@@ -310,7 +343,9 @@ func (c *mygoCanvasInstance) EditorState() (*canvasEditorState, error) {
 	if c.page == nil || (c.win != nil && c.win.IsDestroyed()) {
 		return nil, errors.New("canvas surface is not attached")
 	}
-	res, err := c.page.Eval(`(() => (window.molly && typeof window.molly.state === 'function' ? window.molly.state() : null))()`)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	res, err := c.page.EvalContext(ctx, `(() => (window.molly && typeof window.molly.state === 'function' ? window.molly.state() : null))()`)
 	if err != nil {
 		return nil, err
 	}
@@ -320,6 +355,15 @@ func (c *mygoCanvasInstance) EditorState() (*canvasEditorState, error) {
 	raw, err := json.Marshal(res)
 	if err != nil {
 		return nil, err
+	}
+	var flags map[string]any
+	if err := json.Unmarshal(raw, &flags); err != nil {
+		return nil, err
+	}
+	for _, key := range []string{"dirty", "saving", "composing"} {
+		if _, ok := flags[key].(bool); !ok {
+			return nil, errors.New("unknown canvas editor state")
+		}
 	}
 	var st canvasEditorState
 	if err := json.Unmarshal(raw, &st); err != nil {
@@ -333,7 +377,9 @@ func (c *mygoCanvasInstance) Flush(permit string) error {
 		return errors.New("canvas surface is not attached")
 	}
 	permitJSON, _ := json.Marshal(permit)
-	res, err := c.page.Eval(fmt.Sprintf(`(async () => {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	res, err := c.page.EvalContext(ctx, fmt.Sprintf(`(async () => {
 		if (!window.molly || typeof window.molly.flush !== 'function') {
 			return { ok: false, error: 'canvas editor is not ready to flush' };
 		}
@@ -360,6 +406,8 @@ func (c *mygoCanvasInstance) Flush(permit string) error {
 }
 
 type mygoDesignController struct {
+	emit       func(string, any) error
+	exit       canvasExit
 	mu         sync.Mutex
 	designHost *DesignProtocolHost
 	gate       *CanvasAccessGate
@@ -372,7 +420,7 @@ func newMygoDesignController(designHost *DesignProtocolHost, gate *CanvasAccessG
 		designHost: designHost,
 		gate:       gate,
 		worker:     worker,
-		instances:  make(map[string]*mygoCanvasInstance),
+		instances:  make(map[string]*mygoCanvasInstance), exit: canvasExit{closing: make(map[*mygo.Window]string), approved: make(map[*mygo.Window]bool)},
 	}
 }
 
@@ -380,12 +428,12 @@ func canvasInstanceKey(artworkID, hostID string) string {
 	return artworkID + "\x00" + hostID
 }
 
-func (c *mygoDesignController) openOrReplaceSurface(ctx context.Context, artworkID, hostID string, bounds DesignBounds) error {
+func (c *mygoDesignController) openOrReplaceSurface(ctx context.Context, artworkID, hostID string, bounds DesignBounds, expected *mygoCanvasInstance, frame string) error {
 	if c.worker == nil || c.designHost == nil {
 		return errors.New("design worker or protocol host unavailable")
 	}
 	payload, err := c.worker.Request(ctx, map[string]any{
-		"operation": "read",
+		"operation": "read", "readOnly": true,
 		"sessionId": artworkID,
 	})
 	if err != nil {
@@ -402,7 +450,7 @@ func (c *mygoDesignController) openOrReplaceSurface(ctx context.Context, artwork
 		h = 760
 	}
 	win := mygo.NewWindow(mygo.WindowOptions{
-		Title:  "Molly Canvas - " + artworkID,
+		Title: "Molly Canvas - " + artworkID, Hidden: true,
 		Width:  w,
 		Height: h,
 		Page: mygo.PageOptions{
@@ -410,6 +458,11 @@ func (c *mygoDesignController) openOrReplaceSurface(ctx context.Context, artwork
 			BackgroundThrottling: mygo.ThrottlingOff,
 		},
 	})
+	if c.emit != nil {
+		surface.mu.Lock()
+		surface.onSelection = func(summary map[string]any) { summary["hostId"] = hostID; _ = c.emit("design.selection", summary) }
+		surface.mu.Unlock()
+	}
 	c.designHost.BindSurfaceLifecycle(win, surface)
 	inst := &mygoCanvasInstance{
 		artworkID: artworkID,
@@ -419,13 +472,29 @@ func (c *mygoDesignController) openOrReplaceSurface(ctx context.Context, artwork
 		surface:   surface,
 	}
 
+	inst.compare = frame
+	c.exit.mu.Lock()
+	if c.exit.phase != quitIdle || len(c.exit.closing) > 0 || c.exit.closingArtwork[artworkID] {
+		c.exit.mu.Unlock()
+		win.Destroy()
+		return errors.New("canvas close in progress")
+	}
 	key := canvasInstanceKey(artworkID, hostID)
 	c.mu.Lock()
 	existing := c.instances[key]
+	if existing != expected {
+		c.mu.Unlock()
+		c.exit.mu.Unlock()
+		win.Destroy()
+		return errors.New("canvas instance changed")
+	}
 	c.instances[key] = inst
 	c.mu.Unlock()
 
+	c.exit.mu.Unlock()
+	c.guardWindow(win, false)
 	_ = c.gate.Register(inst)
+	win.Page().OnDidFinishLoad(func() { c.gate.mu.Lock(); c.gate.signalLocked(artworkID); c.gate.mu.Unlock() })
 	win.OnClosed(func() {
 		c.mu.Lock()
 		if c.instances[key] == inst {
@@ -435,6 +504,7 @@ func (c *mygoDesignController) openOrReplaceSurface(ctx context.Context, artwork
 		c.gate.Unregister(inst)
 	})
 	win.Page().LoadURL(surface.URL)
+	win.Show()
 
 	if existing != nil {
 		c.gate.Unregister(existing)
@@ -442,7 +512,7 @@ func (c *mygoDesignController) openOrReplaceSurface(ctx context.Context, artwork
 			c.designHost.RevokeSurface(existing.surface.Host)
 		}
 		if existing.win != nil && !existing.win.IsDestroyed() {
-			existing.win.Close()
+			existing.win.Destroy()
 		}
 	}
 	return nil
@@ -457,7 +527,16 @@ func (c *mygoDesignController) Attach(ctx context.Context, artworkID string, bou
 		existing.win.Show()
 		return nil
 	}
-	return c.openOrReplaceSurface(ctx, artworkID, hostID, bounds)
+	if existing != nil && !existing.win.IsDestroyed() {
+		state, err := existing.EditorState()
+		if err != nil {
+			return err
+		}
+		if err := validateCanvasStateCleanForReload(state); err != nil {
+			return err
+		}
+	}
+	return c.openOrReplaceSurface(ctx, artworkID, hostID, bounds, existing, "")
 }
 
 func (c *mygoDesignController) Hide(artworkID string, hostID string) error {
@@ -477,7 +556,9 @@ func (c *mygoDesignController) PresentToolbar(artworkID string, hostID string, p
 	if inst == nil || inst.page == nil || (inst.win != nil && inst.win.IsDestroyed()) {
 		return nil
 	}
-	_, err := inst.page.Eval(fmt.Sprintf(`(() => {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err := inst.page.EvalContext(ctx, fmt.Sprintf(`(() => {
 		if (window.molly && typeof window.molly.presentToolbar === 'function') {
 			window.molly.presentToolbar(%s);
 		}
@@ -502,6 +583,11 @@ func (c *mygoDesignController) SyncFromStore(ctx context.Context, artworkID stri
 	if len(targets) == 0 {
 		return nil
 	}
+	_, _, seq, release := c.gate.AcquireCloseFreeze(artworkID, randomHexToken(16))
+	defer release()
+	if err := c.gate.WaitApplied(ctx, seq, artworkID); err != nil {
+		return err
+	}
 	for _, inst := range targets {
 		st, err := inst.EditorState()
 		if err != nil {
@@ -512,7 +598,11 @@ func (c *mygoDesignController) SyncFromStore(ctx context.Context, artworkID stri
 		}
 	}
 	for _, inst := range targets {
-		if err := c.openOrReplaceSurface(ctx, inst.artworkID, inst.hostID, DesignBounds{Width: 1100, Height: 760}); err != nil {
+		frame := ""
+		if data, e := inst.win.CapturePage(); e == nil {
+			frame = pngDataURL(data)
+		}
+		if err := c.openOrReplaceSurface(ctx, inst.artworkID, inst.hostID, DesignBounds{Width: 1100, Height: 760}, inst, frame); err != nil {
 			return err
 		}
 	}
@@ -543,16 +633,23 @@ func sanitizeExportFileName(title, format string, scale int) string {
 }
 
 func writeFileAtomicMode0600(targetPath string, content []byte) error {
-	dir := filepath.Dir(targetPath)
+	dir, err := os.OpenRoot(filepath.Dir(targetPath))
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return writeAtomicInRoot(dir, filepath.Base(targetPath), content)
+}
+func writeAtomicInRoot(dir *os.Root, targetPath string, content []byte) error {
 	tmpPath := targetPath + "." + randomHexToken(8) + ".tmp"
-	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	f, err := dir.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
 	committed := false
 	defer func() {
 		if !committed {
-			_ = os.Remove(tmpPath)
+			_ = dir.Remove(tmpPath)
 		}
 	}()
 	if _, err := f.Write(content); err != nil {
@@ -566,12 +663,12 @@ func writeFileAtomicMode0600(targetPath string, content []byte) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, targetPath); err != nil {
+	if err := dir.Rename(tmpPath, targetPath); err != nil {
 		return err
 	}
 	committed = true
 	if runtime.GOOS != "windows" {
-		if df, dirErr := os.Open(dir); dirErr == nil {
+		if df, dirErr := dir.Open("."); dirErr == nil {
 			_ = df.Sync()
 			_ = df.Close()
 		}
@@ -589,7 +686,7 @@ func (c *mygoDesignController) Export(ctx context.Context, artworkID string, for
 		}
 	}
 	payload, err := c.worker.Request(ctx, map[string]any{
-		"operation": "read",
+		"operation": "read", "readOnly": true,
 		"sessionId": artworkID,
 	})
 	if err != nil {
@@ -609,7 +706,7 @@ func (c *mygoDesignController) Export(ctx context.Context, artworkID string, for
 	if err != nil || strings.TrimSpace(targetPath) == "" {
 		return err
 	}
-	outBytes, _, _, _, _, err := renderDesignOffscreen(c.designHost, artworkID, payload, format, scale)
+	outBytes, _, _, _, _, err := renderDesignOffscreen(c.designHost, artworkID, payload, format, scale, nil)
 	if err != nil {
 		return err
 	}
@@ -636,12 +733,73 @@ func buildCanvasHostRPCBody(machineID, workspaceID string, reports []DesignCanva
 	})
 }
 
+const offscreenReadyJS = `new Promise((resolve, reject) => {
+		const timer = setTimeout(() => { observer.disconnect(); reject(new Error('Canvas rendering timed out')); }, 15000);
+		const observer = new MutationObserver(check);
+		observer.observe(document, { childList: true, subtree: true });
+		async function check() {
+			const stage = document.querySelector('.ed-stage-scale .bento-slide');
+			if (!window.bento || !window.bento.doc || !stage) return;
+			observer.disconnect();
+			try {
+				await document.fonts.ready;
+				if ([...document.fonts].some(font => font.status === 'error')) throw new Error('Font failed to load');
+				await Promise.all([...stage.querySelectorAll('img')].map(img => img.decode()));
+				await Promise.all([...stage.querySelectorAll('image')].map(node => {
+					const image = new Image();
+					image.src = node.getAttribute('href') || node.getAttribute('xlink:href') || '';
+					return image.decode();
+				}));
+				if (stage.offsetWidth !== %d || stage.offsetHeight !== %d) throw new Error('Canvas dimensions differ');
+				document.documentElement.style.cssText = 'margin:0;background:transparent!important;overflow:hidden';
+				document.body.style.cssText = 'margin:0;background:transparent!important;overflow:hidden';
+				stage.style.cssText += ';transform:none;position:absolute;left:0;top:0';
+				stage.inert = true;
+				document.body.replaceChildren(stage);
+				clearTimeout(timer);
+				resolve(devicePixelRatio);
+			} catch (e) {
+				clearTimeout(timer);
+				reject(e);
+			}
+		}
+		check();
+	})`
+
+const offscreenTileJS = `new Promise((resolve, reject) => {
+	const stage = document.querySelector('.bento-slide');
+	stage.style.left = '%dpx';
+	stage.style.top = '%dpx';
+	const bounds = stage.getBoundingClientRect();
+	if (bounds.left !== %d || bounds.top !== %d) throw Error('Tile origin mismatch');
+	const seq = %d;
+	const {port1, port2} = new MessageChannel();
+	port1.onmessage = ({data}) => {
+		port1.close();
+		port2.close();
+		if (data !== seq) reject(Error('Tile sequence mismatch'));
+		else resolve(data);
+	};
+	port2.postMessage(seq);
+})`
+
 func renderDesignOffscreen(
 	designHost *DesignProtocolHost,
 	artworkID string,
 	payloadRaw json.RawMessage,
 	format string,
 	scale int,
+	report *G3SelfTestReport,
+) ([]byte, int, int, int, int, error) {
+	return renderDesignOffscreenContext(context.Background(), designHost, artworkID, payloadRaw, format, scale, report)
+}
+func renderDesignOffscreenContext(ctx context.Context,
+	designHost *DesignProtocolHost,
+	artworkID string,
+	payloadRaw json.RawMessage,
+	format string,
+	scale int,
+	report *G3SelfTestReport,
 ) ([]byte, int, int, int, int, error) {
 	if designHost == nil {
 		return nil, 0, 0, 0, 0, errors.New("design protocol host unavailable")
@@ -703,76 +861,35 @@ func renderDesignOffscreen(
 	})
 	win.Page().LoadURL(surface.URL)
 	select {
+	case <-ctx.Done():
+		return nil, width, height, bleed, len(tiles), ctx.Err()
 	case <-loadedCh:
 	case <-time.After(15 * time.Second):
 		return nil, width, height, bleed, len(tiles), errors.New("timed out waiting for Bento editor.html load")
 	}
 
-	readyJS := fmt.Sprintf(`new Promise((resolve, reject) => {
-		const timer = setTimeout(() => { observer.disconnect(); reject(new Error('Canvas rendering timed out')); }, 15000);
-		const observer = new MutationObserver(check);
-		observer.observe(document, { childList: true, subtree: true });
-		async function check() {
-			const stage = document.querySelector('.ed-stage-scale .bento-slide');
-			if (!window.bento || !window.bento.doc || !stage) return;
-			observer.disconnect();
-			try {
-				await document.fonts.ready;
-				if ([...document.fonts].some(font => font.status === 'error')) throw new Error('Font failed to load');
-				await Promise.all([...stage.querySelectorAll('img')].map(img => img.decode()));
-				await Promise.all([...stage.querySelectorAll('image')].map(node => {
-					const image = new Image();
-					image.src = node.getAttribute('href') || node.getAttribute('xlink:href') || '';
-					return image.decode();
-				}));
-				if (stage.offsetWidth !== %d || stage.offsetHeight !== %d) throw new Error('Canvas dimensions differ');
-				document.documentElement.style.cssText = 'margin:0;background:transparent!important;overflow:hidden';
-				document.body.style.cssText = 'margin:0;background:transparent!important;overflow:hidden';
-				stage.style.cssText += ';transform:none;position:absolute;left:0;top:0';
-				stage.inert = true;
-				document.body.replaceChildren(stage);
-				void stage.getBoundingClientRect();
-				await Promise.race([
-					new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))),
-					new Promise(r => setTimeout(r, 60))
-				]);
-				clearTimeout(timer);
-				resolve({ ok: true, w: stage.offsetWidth, h: stage.offsetHeight });
-			} catch (e) {
-				clearTimeout(timer);
-				reject(e);
-			}
-		}
-		check();
-	})`, width, height)
-
-	if _, err := win.Page().Eval(readyJS); err != nil {
+	readyCtx, cancelReady := context.WithTimeout(ctx, 20*time.Second)
+	defer cancelReady()
+	hostDPR, err := win.Page().EvalContext(readyCtx, fmt.Sprintf(offscreenReadyJS, width, height))
+	if report != nil {
+		report.HostNativeDPR, _ = hostDPR.(float64)
+		report.TargetScale = scale
+	}
+	if err != nil {
 		return nil, width, height, bleed, len(tiles), fmt.Errorf("bento ready wait failed: %w", err)
 	}
 
 	curW, curH := firstTile.CaptureWidth, firstTile.CaptureHeight
-	for _, tile := range tiles {
+	for seq, tile := range tiles {
 		if tile.CaptureWidth != curW || tile.CaptureHeight != curH {
 			win.SetContentSize(tile.CaptureWidth, tile.CaptureHeight)
 			curW, curH = tile.CaptureWidth, tile.CaptureHeight
 		}
-		if len(tiles) > 1 {
-			panJS := fmt.Sprintf(`(async () => {
-				const stage = document.querySelector('.bento-slide');
-				if (stage) {
-					stage.style.left = '%dpx';
-					stage.style.top = '%dpx';
-					void stage.getBoundingClientRect();
-				}
-				await Promise.race([
-					new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))),
-					new Promise(r => setTimeout(r, 60))
-				]);
-				return true;
-			})()`, -tile.CaptureX, -tile.CaptureY)
-			if _, err := win.Page().Eval(panJS); err != nil {
-				return nil, width, height, bleed, len(tiles), err
-			}
+		ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		ready, err := win.Page().EvalContext(ctx, fmt.Sprintf(offscreenTileJS, -tile.CaptureX, -tile.CaptureY, -tile.CaptureX, -tile.CaptureY, seq))
+		cancel()
+		if err != nil || ready != float64(seq) {
+			return nil, width, height, bleed, len(tiles), fmt.Errorf("tile %d readiness failed (receipt %v, error %v)", seq, ready, err)
 		}
 		rawPNG, err := win.CapturePage()
 		if err != nil {
@@ -781,6 +898,13 @@ func renderDesignOffscreen(
 		img, err := png.Decode(bytes.NewReader(rawPNG))
 		if err != nil {
 			return nil, width, height, bleed, len(tiles), fmt.Errorf("decode captured PNG failed: %w", err)
+		}
+		if report != nil {
+			report.CaptureDPR = float64(img.Bounds().Dx()) / float64(tile.CaptureWidth)
+			report.ResamplingMode = "direct-1to1"
+			if report.CaptureDPR != float64(scale) {
+				report.ResamplingMode = "area-resampled"
+			}
 		}
 		if err := stitcher.AddTile(tile, img); err != nil {
 			return nil, width, height, bleed, len(tiles), fmt.Errorf("stitch tile failed: %w", err)
@@ -794,14 +918,65 @@ func renderDesignOffscreen(
 	return outBytes, width, height, bleed, len(tiles), nil
 }
 
-func RunDesktop(opts DesktopOptions) error {
+func RunDesktop(opts DesktopOptions) (runErr error) {
 	if strings.TrimSpace(opts.RendererDir) == "" {
 		return errors.New("renderer directory is required")
 	}
 	dataDir := resolveDefaultDataDir(opts.DataDir)
+	if err := ValidateIsolatedShellPaths(dataDir); err != nil {
+		return err
+	}
+	dataDir, err := canonicalDirectory(dataDir)
+	if err != nil {
+		return err
+	}
 	controlSock, probeSock, loroSock := resolveDaemonSocketPaths(dataDir, opts)
 	nodeBin, designWorkerJS := resolveDesignWorkerRuntime(opts)
 
+	var supervisor *CLISupervisor
+	var bridge *MollyBridge
+	var startPrivate func(context.Context) (*CLISupervisor, error)
+	if opts.ControlSocketPath == "" && opts.ProbeSocketPath == "" && opts.LoroSocketPath == "" {
+		if runtime.GOOS == "windows" {
+			scope, _, err := dataDirectoryScope(dataDir)
+			if err != nil {
+				return err
+			}
+			controlSock += "-" + scope
+			probeSock += "-" + scope
+			loroSock += "-" + scope
+		}
+		cliEntry := resolveCLIEntry(designWorkerJS)
+		if nodeBin == "" || cliEntry == "" {
+			return errors.New("private_cli_runtime_unavailable")
+		}
+		startPrivate = func(ctx context.Context) (*CLISupervisor, error) {
+			if err := ValidateIsolatedShellPaths(dataDir); err != nil {
+				return nil, err
+			}
+			s, err := startPrivateCLI(dataDir, nodeBin, cliEntry)
+			if err != nil {
+				return nil, err
+			}
+			ready, cancel := context.WithTimeout(ctx, 45*time.Second)
+			defer cancel()
+			if err = s.confirmPrivateDaemon(ready, probeSock); err != nil {
+				return nil, errors.Join(err, s.Close())
+			}
+			return s, nil
+		}
+		supervisor, err = startPrivate(context.Background())
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if bridge == nil {
+				runErr = errors.Join(runErr, supervisor.Close())
+			} else {
+				runErr = errors.Join(runErr, bridge.closePrivateCLI())
+			}
+		}()
+	}
 	gate := NewCanvasAccessGate()
 	var worker *DesignWorkerClient
 	if nodeBin != "" && designWorkerJS != "" {
@@ -823,7 +998,7 @@ func RunDesktop(opts DesktopOptions) error {
 						"doc":    req.Doc,
 						"assets": req.Assets,
 					},
-				})
+				}, req.BeforeSend)
 				if err != nil {
 					return DesignSaveResult{}, err
 				}
@@ -837,7 +1012,7 @@ func RunDesktop(opts DesktopOptions) error {
 			}
 		}
 		var err error
-		designHost, err = NewDesignProtocolHost(opts.DesignDir, gate, saveFn)
+		designHost, err = NewDesignProtocolHostWithDataDir(opts.DesignDir, gate, saveFn, dataDir)
 		if err != nil {
 			return err
 		}
@@ -846,7 +1021,6 @@ func RunDesktop(opts DesktopOptions) error {
 		}
 	}
 
-	var bridge *MollyBridge
 	var relay *LoroRelay
 	if loroSock != "" {
 		relay = NewLoroRelay(LoroRelayConfig{
@@ -876,7 +1050,16 @@ func RunDesktop(opts DesktopOptions) error {
 		designController = newMygoDesignController(designHost, gate, worker)
 	}
 
+	resources := NewLocalFileResourceStore()
+	if err := mygo.Protocol.Handle("molly-resource", resources); err != nil {
+		return err
+	}
+	defer resources.RevokeAll()
+	appCtx, cancelApp := context.WithCancel(context.Background())
+	defer cancelApp()
 	bridge = NewMollyBridge(BridgeConfig{
+		previewUI: mygo.RunOnMain, startPrivate: startPrivate, appContext: appCtx, Resources: resources, Bundled: NewBundledCapabilities(resolveCLIEntry(designWorkerJS)),
+		Supervisor:        supervisor,
 		AppVersion:        opts.AppVersion,
 		DataDir:           dataDir,
 		ControlSocketPath: controlSock,
@@ -884,19 +1067,30 @@ func RunDesktop(opts DesktopOptions) error {
 		LoroSocketPath:    loroSock,
 		DesignHost:        designHost,
 		CanvasGate:        gate,
-		DesignWorker:      worker,
+
 		DesignController:  designController,
 		LoroRelay:         relay,
 		PublicBrowserHost: publicBrowserAdapter,
 	})
+	if worker != nil {
+		bridge.cfg.DesignWorker = worker
+	}
+	gate.onWritable = func(id string) { _ = bridge.EmitToWorkbench("design.state", settingsObject{"artworkId": id}) }
+	gate.owns = func() bool { return bridge.private.Load().OwnsPrivateDaemon() }
+	if c, ok := designController.(*mygoDesignController); ok {
+		c.emit = bridge.EmitToWorkbench
+	}
 	installGlobalBridge(bridge)
-
-	appCtx, cancelApp := context.WithCancel(context.Background())
+	go bridge.runCanvasHost(appCtx)
+	if supervisor.OwnsPrivateDaemon() {
+		go bridge.runHarnessHost(appCtx, supervisor)
+	}
 
 	mygo.App.SetName("Molly")
-	mygo.SetFrontend(os.DirFS(opts.RendererDir))
+	mygo.SetFrontend(rendererFiles{os.DirFS(opts.RendererDir), runtime.GOOS})
 
 	mygo.App.OnReady(func() {
+		bridge.startRenderHost(appCtx, supervisor)
 		if relay != nil {
 			go func() {
 				ctx, cancel := context.WithTimeout(appCtx, 2*time.Second)
@@ -917,11 +1111,28 @@ func RunDesktop(opts DesktopOptions) error {
 		})
 		page := win.Page()
 		bridge.AttachWorkbenchPage(page)
+		bridge.workbench.Store(win)
+		if c, ok := designController.(*mygoDesignController); ok {
+			c.guardWindow(win, true)
+			c.guardQuit()
+		}
+		win.OnClosed(func() { bridge.AdvanceDocGeneration(); bridge.workbench.Store(nil); bridge.AttachWorkbenchPage(nil) })
+		win.OnEnterFullScreen(func() { _ = bridge.EmitToWorkbench("app.fullscreen", true) })
+		win.OnLeaveFullScreen(func() { _ = bridge.EmitToWorkbench("app.fullscreen", false) })
+		mygo.Theme.OnUpdated(func() {
+			theme := "light"
+			if mygo.Theme.IsDark() {
+				theme = "dark"
+			}
+			_ = bridge.EmitToWorkbench("app.nativeTheme", theme)
+		})
 		var wbNavCount atomic.Int64
 		page.OnWillNavigate(func(e *mygo.NavigateEvent) {
-			if err := security.ValidateTopLevelNavigation(e.URL, "mygo://localhost"); err != nil {
+			if err := validateProtocolNavigation(e.URL, runtime.GOOS, "mygo", "localhost"); err != nil {
 				e.PreventDefault()
+				return
 			}
+			resources.AdvanceGen()
 		})
 		page.OnDidNavigate(func(_ string) {
 			if wbNavCount.Add(1) > 1 {
@@ -933,20 +1144,56 @@ func RunDesktop(opts DesktopOptions) error {
 		})
 	})
 
-	mygo.App.OnBeforeQuit(func(_ *mygo.QuitEvent) {
-		cancelApp()
-		if browserHost != nil {
-			browserHost.CloseAll()
-		}
-		if worker != nil {
-			_ = worker.Close()
-		}
-		if relay != nil {
-			_ = relay.Close()
-		}
-	})
+	mygo.App.OnQuit(func() { bridge.shutdownDesktop(cancelApp, browserHost) })
+	err = mygo.App.Run()
+	cancelApp()
+	bridge.renderHosts.Wait()
+	return err
+}
 
-	return mygo.App.Run()
+func (bridge *MollyBridge) shutdownDesktop(cancelApp context.CancelFunc, browserHost *mygoPublicBrowserHost) {
+	cancelApp()
+	bridge.clearPreviews()
+	designHost, gate, worker, relay := bridge.cfg.DesignHost, bridge.cfg.CanvasGate, bridge.cfg.DesignWorker, bridge.cfg.LoroRelay
+
+	if designHost != nil {
+		designHost.mu.Lock()
+		var hosts []string
+		for host := range designHost.surfaces {
+			hosts = append(hosts, host)
+		}
+		designHost.mu.Unlock()
+		for _, host := range hosts {
+			designHost.RevokeSurface(host)
+		}
+	}
+	gate.SetUpdating(true)
+	gate.Disconnected()
+	gate.mu.Lock()
+	clear(gate.closeFreezes)
+	gate.mu.Unlock()
+	if browserHost != nil {
+		browserHost.CloseAll()
+	}
+	if worker != nil {
+		_ = worker.Close()
+	}
+	if relay != nil {
+		_ = relay.Close()
+	}
+	_ = bridge.closePrivateCLI()
+	bridge.closeSettings()
+	if resources := bridge.cfg.Resources; resources != nil {
+		resources.Close()
+	}
+	if bridge.releaseAwake != nil {
+		bridge.releaseAwake()
+		bridge.releaseAwake = nil
+	}
+	if designHost != nil && designHost.spool != nil {
+		_ = designHost.spool.Close()
+	}
+
 }
 
 type G5SelfTestReport struct {
@@ -965,6 +1212,12 @@ type G5SelfTestReport struct {
 	ReloadNewDocBridgeOK     bool   `json:"reloadNewDocBridgeOK"`
 	WorkbenchBridgeOK        bool   `json:"workbenchBridgeOK"`
 	Error                    string `json:"error,omitempty"`
+}
+
+func evalProbe(page *mygo.Page, script string) (any, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return page.EvalContext(ctx, script)
 }
 
 func RunSelfTestG5() (G5SelfTestReport, error) {
@@ -1081,7 +1334,7 @@ func RunSelfTestG5() (G5SelfTestReport, error) {
 				return
 			}
 
-			wbCheck, err := wbPage.Eval(fmt.Sprintf(`(async () => {
+			wbCheck, err := evalProbe(wbPage, fmt.Sprintf(`(async () => {
 				const res = await window.mygo.call("MollyBridge.Invoke", %d, "updater.getState", []);
 				return res && res.phase === "disabled";
 			})()`, wbGen))
@@ -1095,7 +1348,7 @@ func RunSelfTestG5() (G5SelfTestReport, error) {
 
 			saveURL := surface.Origin + "/ws/" + surface.ArtworkID + "/save"
 			evalStatus := func(page *mygo.Page, js string) (int, error) {
-				v, err := page.Eval(js)
+				v, err := evalProbe(page, js)
 				if err != nil {
 					return 0, err
 				}
@@ -1186,7 +1439,7 @@ func RunSelfTestG5() (G5SelfTestReport, error) {
 			report.ActiveTurnStatus = st
 			gate.UpdateFromDaemon(nil, nil)
 
-			crossBlocked, err := untrustedWin.Page().Eval(fmt.Sprintf(`(async () => {
+			crossBlocked, err := evalProbe(untrustedWin.Page(), fmt.Sprintf(`(async () => {
 				try {
 					const r = await fetch(%q, {
 						method: "POST",
@@ -1204,7 +1457,7 @@ func RunSelfTestG5() (G5SelfTestReport, error) {
 			}
 			report.CrossPageBlocked, _ = crossBlocked.(bool)
 
-			canvasBridgeBlocked, err := canvasWin.Page().Eval(fmt.Sprintf(`(async () => {
+			canvasBridgeBlocked, err := evalProbe(canvasWin.Page(), fmt.Sprintf(`(async () => {
 				try {
 					await window.mygo.call("MollyBridge.Invoke", %d, "updater.getState", []);
 					return false;
@@ -1218,7 +1471,7 @@ func RunSelfTestG5() (G5SelfTestReport, error) {
 			}
 			report.CanvasBridgeBlocked, _ = canvasBridgeBlocked.(bool)
 
-			untrustedBridgeBlocked, err := untrustedWin.Page().Eval(fmt.Sprintf(`(async () => {
+			untrustedBridgeBlocked, err := evalProbe(untrustedWin.Page(), fmt.Sprintf(`(async () => {
 				try {
 					if (!window.mygo || !window.mygo.call) return true;
 					await window.mygo.call("MollyBridge.Invoke", %d, "updater.getState", []);
@@ -1257,7 +1510,7 @@ func RunSelfTestG5() (G5SelfTestReport, error) {
 				testErr = err
 				return
 			}
-			staleBlocked, err := wbPage.Eval(fmt.Sprintf(`(async () => {
+			staleBlocked, err := evalProbe(wbPage, fmt.Sprintf(`(async () => {
 				try {
 					await window.mygo.call("MollyBridge.Invoke", %d, "updater.getState", []);
 					return false;
@@ -1271,7 +1524,7 @@ func RunSelfTestG5() (G5SelfTestReport, error) {
 			}
 			report.ReloadStaleDocGenBlocked, _ = staleBlocked.(bool)
 
-			newDocOK, err := wbPage.Eval(`(async () => {
+			newDocOK, err := evalProbe(wbPage, `(async () => {
 				const res = await window.ipc.invoke("updater.getState");
 				return Boolean(res && res.phase === "disabled");
 			})()`)
@@ -1310,15 +1563,19 @@ func RunSelfTestG5() (G5SelfTestReport, error) {
 }
 
 type G3SelfTestReport struct {
-	Passed      bool   `json:"passed"`
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
-	BleedPx     int    `json:"bleedPx"`
-	TileCount   int    `json:"tileCount"`
-	OutputBytes int    `json:"outputBytes"`
-	DurationMs  int64  `json:"durationMs"`
-	OutputPath  string `json:"outputPath"`
-	Error       string `json:"error,omitempty"`
+	HostNativeDPR  float64 `json:"hostNativeDPR"`
+	CaptureDPR     float64 `json:"captureDPR"`
+	TargetScale    int     `json:"targetScale"`
+	ResamplingMode string  `json:"resamplingMode"`
+	Passed         bool    `json:"passed"`
+	Width          int     `json:"width"`
+	Height         int     `json:"height"`
+	BleedPx        int     `json:"bleedPx"`
+	TileCount      int     `json:"tileCount"`
+	OutputBytes    int     `json:"outputBytes"`
+	DurationMs     int64   `json:"durationMs"`
+	OutputPath     string  `json:"outputPath"`
+	Error          string  `json:"error,omitempty"`
 }
 
 func RunSelfTestG3(designDir, samplePath, outputPNG string) (G3SelfTestReport, error) {
@@ -1375,7 +1632,11 @@ func RunSelfTestG3(designDir, samplePath, outputPNG string) (G3SelfTestReport, e
 	mygo.App.OnReady(func() {
 		go func() {
 			defer mygo.App.Quit()
-			outBytes, w, h, bleed, tileCount, err := renderDesignOffscreen(host, artworkID, sampleRaw, "png", 1)
+			scale := 1
+			if os.Getenv("MOLLY_G3_SCALE") == "2" {
+				scale = 2
+			}
+			outBytes, w, h, bleed, tileCount, err := renderDesignOffscreen(host, artworkID, sampleRaw, "png", scale, &report)
 			if err != nil {
 				renderErr = err
 				return
@@ -1468,7 +1729,7 @@ func RunSelfTestRenderer(rendererDir string) (RendererSelfTestReport, error) {
 				return
 			}
 
-			val, err := page.Eval(`(async () => {
+			val, err := evalProbe(page, `(async () => {
 				const deadline = Date.now() + 12000;
 				while (Date.now() < deadline) {
 					const root = document.getElementById('root');

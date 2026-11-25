@@ -383,3 +383,20 @@ func TestDarwinIsolatedTempKeychainRoundTripAndMigration(t *testing.T) {
 		t.Fatalf("expected ErrSecretNotFound after delete, got %v", err)
 	}
 }
+
+func TestVaultPublicationRejectsRedirectedSecretsDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires symlink privilege")
+	}
+	dir, outside := t.TempDir(), t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dir, "secrets")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFileAtomic0600(filepath.Join(dir, "secrets", "model-connections.v2.enc"), []byte("fixture")); err == nil {
+		t.Fatal("accepted redirected secrets directory")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 0 {
+		t.Fatal(entries, err)
+	}
+}

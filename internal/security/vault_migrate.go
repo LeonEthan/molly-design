@@ -779,22 +779,40 @@ func readRegularVaultFile(path string) ([]byte, bool, error) {
 
 func writeFileAtomic0600(targetPath string, content []byte) error {
 	dir := filepath.Dir(targetPath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	parent, _, err := OpenPathRoot(PathRoot{Dir: filepath.Dir(dir), RejectSymlinkRoot: false})
+	if err != nil {
 		return err
 	}
+	defer parent.Close()
+	base := filepath.Base(dir)
+	if err = parent.Mkdir(base, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	info, err := parent.Lstat(base)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return errors.New("invalid vault directory")
+	}
+	root, err := parent.OpenRoot(base)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
 	suffix := make([]byte, 8)
 	if _, err := io.ReadFull(rand.Reader, suffix); err != nil {
 		return err
 	}
-	tmpPath := filepath.Join(dir, fmt.Sprintf(".%s.%s.tmp", filepath.Base(targetPath), hex.EncodeToString(suffix)))
-	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	tmpPath := fmt.Sprintf(".%s.%s.tmp", filepath.Base(targetPath), hex.EncodeToString(suffix))
+	f, err := root.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
 	committed := false
 	defer func() {
 		if !committed {
-			_ = os.Remove(tmpPath)
+			_ = root.Remove(tmpPath)
 		}
 	}()
 	if _, err := f.Write(content); err != nil {
@@ -808,12 +826,12 @@ func writeFileAtomic0600(targetPath string, content []byte) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, targetPath); err != nil {
+	if err := root.Rename(tmpPath, filepath.Base(targetPath)); err != nil {
 		return err
 	}
 	committed = true
 	if runtime.GOOS != "windows" {
-		if df, dirErr := os.Open(dir); dirErr == nil {
+		if df, dirErr := root.Open("."); dirErr == nil {
 			_ = df.Sync()
 			_ = df.Close()
 		}

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	xdraw "golang.org/x/image/draw"
 	"image"
+	"image/color"
 	"image/draw"
 	"image/jpeg"
 	"image/png"
@@ -236,7 +238,7 @@ func (s *IncrementalTileStitcher) AddTile(rect TileRect, tileImg image.Image) er
 	dstOriginX := rect.LogicalX * s.scale
 	dstOriginY := rect.LogicalY * s.scale
 
-	if math.Abs(dprX-float64(s.scale)) < 0.01 && math.Abs(dprY-float64(s.scale)) < 0.01 {
+	if sb.Dx() == rect.CaptureWidth*s.scale && sb.Dy() == rect.CaptureHeight*s.scale {
 		srcX := sb.Min.X + int(math.Round(float64(rect.CropOffsetX)*dprX))
 		srcY := sb.Min.Y + int(math.Round(float64(rect.CropOffsetY)*dprY))
 		dstRect := image.Rect(dstOriginX, dstOriginY, dstOriginX+targetW, dstOriginY+targetH)
@@ -244,22 +246,43 @@ func (s *IncrementalTileStitcher) AddTile(rect TileRect, tileImg image.Image) er
 		return nil
 	}
 
-	for dy := 0; dy < targetH; dy++ {
-		logicalY := float64(rect.CropOffsetY) + (float64(dy)+0.5)/float64(s.scale)
-		srcY := sb.Min.Y + int(math.Floor(logicalY*dprY))
-		if srcY >= sb.Max.Y {
-			srcY = sb.Max.Y - 1
-		}
-		for dx := 0; dx < targetW; dx++ {
-			logicalX := float64(rect.CropOffsetX) + (float64(dx)+0.5)/float64(s.scale)
-			srcX := sb.Min.X + int(math.Floor(logicalX*dprX))
-			if srcX >= sb.Max.X {
-				srcX = sb.Max.X - 1
+	source := image.Rect(
+		sb.Min.X+int(math.Round(float64(rect.CropOffsetX)*dprX)),
+		sb.Min.Y+int(math.Round(float64(rect.CropOffsetY)*dprY)),
+		sb.Min.X+int(math.Round(float64(rect.CropOffsetX+rect.LogicalWidth)*dprX)),
+		sb.Min.Y+int(math.Round(float64(rect.CropOffsetY+rect.LogicalHeight)*dprY)),
+	)
+	dst := image.Rect(dstOriginX, dstOriginY, dstOriginX+targetW, dstOriginY+targetH)
+	if source.Dx()%targetW == 0 && source.Dy()%targetH == 0 {
+		boxWidth, boxHeight := source.Dx()/targetW, source.Dy()/targetH
+		for y := 0; y < targetH; y++ {
+			for x := 0; x < targetW; x++ {
+				start := source.Min.Add(image.Pt(x*boxWidth, y*boxHeight))
+				s.dst.SetNRGBA(dst.Min.X+x, dst.Min.Y+y, averageBox(tileImg, image.Rectangle{Min: start, Max: start.Add(image.Pt(boxWidth, boxHeight))}))
 			}
-			s.dst.Set(dstOriginX+dx, dstOriginY+dy, tileImg.At(srcX, srcY))
+		}
+		return nil
+	}
+	xdraw.BiLinear.Scale(s.dst, dst, tileImg, source, draw.Src, nil)
+	return nil
+}
+
+func averageBox(img image.Image, box image.Rectangle) color.NRGBA {
+	var red, green, blue, alpha uint64
+	for y := box.Min.Y; y < box.Max.Y; y++ {
+		for x := box.Min.X; x < box.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			red += uint64(r)
+			green += uint64(g)
+			blue += uint64(b)
+			alpha += uint64(a)
 		}
 	}
-	return nil
+	if alpha == 0 {
+		return color.NRGBA{}
+	}
+	area := uint64(box.Dx()*box.Dy()) * 257
+	return color.NRGBA{R: uint8((red*255 + alpha/2) / alpha), G: uint8((green*255 + alpha/2) / alpha), B: uint8((blue*255 + alpha/2) / alpha), A: uint8((alpha + area/2) / area)}
 }
 
 func (s *IncrementalTileStitcher) Image() *image.NRGBA {

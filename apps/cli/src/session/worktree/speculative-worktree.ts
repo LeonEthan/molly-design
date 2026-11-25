@@ -3,7 +3,7 @@ import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { z } from 'zod';
-import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+import { getMollyDataDir, resolveIsolatedDataPath } from '@molly/shared/node/installation-profile';
 import type { MachineId, RepoId, SessionId, WorkspaceId } from '@molly/shared';
 import type { Logger } from '@/utils/logger';
 import {
@@ -48,12 +48,12 @@ const SpeculativeWorktreeMarkerSchema = z
 type SpeculativeWorktreeMarker = z.infer<typeof SpeculativeWorktreeMarkerSchema>;
 
 function getMarkerRoot(): string {
-  return path.join(getMollyDataDir('local'), 'session-preparations', 'worktrees');
+  return resolveIsolatedDataPath(getMollyDataDir('local'), 'session-preparations', 'worktrees');
 }
 
 function getMarkerPath(sessionId: SessionId): string {
   const key = createHash('sha256').update(sessionId).digest('hex');
-  return path.join(getMarkerRoot(), `${key}.json`);
+  return resolveIsolatedDataPath(getMarkerRoot(), `${key}.json`);
 }
 
 async function readMarker(sessionId: SessionId): Promise<SpeculativeWorktreeMarker | null> {
@@ -71,7 +71,11 @@ async function writeMarker(marker: SpeculativeWorktreeMarker): Promise<void> {
   const markerPath = getMarkerPath(marker.sessionId as SessionId);
   await mkdir(path.dirname(markerPath), { recursive: true });
   const temporaryPath = `${markerPath}.${process.pid}.${randomUUID()}.tmp`;
-  await writeFile(temporaryPath, `${JSON.stringify(marker)}\n`, { encoding: 'utf8', mode: 0o600 });
+  await writeFile(temporaryPath, `${JSON.stringify(marker)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+    flag: 'wx',
+  });
   await rename(temporaryPath, markerPath);
 }
 
@@ -364,7 +368,7 @@ export async function recoverStaleSpeculativeWorktrees(args: {
   for (const entry of entries) {
     if (!entry.endsWith('.json')) continue;
     try {
-      const markerPath = path.join(getMarkerRoot(), entry);
+      const markerPath = resolveIsolatedDataPath(getMarkerRoot(), entry);
       const parsed = SpeculativeWorktreeMarkerSchema.safeParse(
         JSON.parse(await readFile(markerPath, 'utf8')) as unknown
       );

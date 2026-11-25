@@ -103,6 +103,18 @@
         throw new Error('MyGo bridge unavailable');
       }
       const currentGen = await docGenReady;
+      if (channel === 'image.copyToClipboard' || channel === 'image.saveAs' || channel === 'image.saveFile') {
+        const key = channel === 'image.copyToClipboard' ? 'pngBytes' : 'bytes';
+        const bytes = args[0]?.[key];
+        if (bytes instanceof ArrayBuffer && bytes.byteLength <= 64 * 1024 * 1024) {
+          const view = new Uint8Array(bytes);
+          const chunks = [];
+          for (let offset = 0; offset < view.length; offset += 24576) {
+            chunks.push(btoa(String.fromCharCode(...view.subarray(offset, offset + 24576))));
+          }
+          args[0] = { ...args[0], [key]: chunks.join('') };
+        }
+      }
       return await window.mygo.call('MollyBridge.Invoke', currentGen, channel, args);
     },
     on: (channel, listener) => {

@@ -2,13 +2,13 @@ package shell
 
 import (
 	"bufio"
+	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"strings"
@@ -36,33 +36,49 @@ type DesignCanvasReport struct {
 
 type CanvasInstance interface {
 	ArtworkID() string
-	SetReadonly(readonly bool, reason string) error
+	SetReadonly(context.Context, uint64, bool, string) error
 	Flush(permit string) error
 }
 
+type artworkRefresher struct {
+	ctx                   context.Context
+	cancel                context.CancelFunc
+	targetSeq, appliedSeq uint64
+	appliedErr            error
+	appliedCond           *sync.Cond
+	refreshCh, stopCh     chan struct{}
+}
+
 type CanvasAccessGate struct {
-	mu        sync.Mutex
-	known     bool
-	updating  bool
-	active    map[string]DesignCanvasState
-	permits   map[string]string
-	reported  map[string]struct{}
-	instances map[CanvasInstance]struct{}
-	inFlight  map[string]*sync.WaitGroup
+	stateSeq        uint64
+	refreshers      map[string]*artworkRefresher
+	closeFreezes    map[string]map[string]string
+	owns            func() bool
+	onWritable      func(string)
+	mu              sync.Mutex
+	known           bool
+	updating        bool
+	daemonTurns     map[string]string
+	active          map[string]DesignCanvasState
+	permits         map[string]string
+	inFlightPrepare map[string]struct{}
+	instances       map[CanvasInstance]struct{}
+	inFlight        map[string]map[chan struct{}]struct{}
 }
 
 func NewCanvasAccessGate() *CanvasAccessGate {
 	return &CanvasAccessGate{
-		active:    make(map[string]DesignCanvasState),
-		permits:   make(map[string]string),
-		reported:  make(map[string]struct{}),
-		instances: make(map[CanvasInstance]struct{}),
-		inFlight:  make(map[string]*sync.WaitGroup),
+		refreshers: make(map[string]*artworkRefresher), closeFreezes: make(map[string]map[string]string),
+		active:          make(map[string]DesignCanvasState),
+		permits:         make(map[string]string),
+		inFlightPrepare: make(map[string]struct{}),
+		instances:       make(map[CanvasInstance]struct{}),
+		inFlight:        make(map[string]map[chan struct{}]struct{}),
 	}
 }
 
 func (g *CanvasAccessGate) isReadonlyLocked(artworkID string) bool {
-	if g.updating || !g.known {
+	if g.updating || !g.known || (g.owns != nil && !g.owns()) || len(g.closeFreezes[artworkID]) > 0 {
 		return true
 	}
 	if _, busy := g.active[artworkID]; busy {
@@ -78,6 +94,15 @@ func (g *CanvasAccessGate) IsReadonly(artworkID string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.isReadonlyLocked(artworkID)
+}
+
+func (g *CanvasAccessGate) SetUpdating(value bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.updating != value {
+		g.updating = value
+		g.signalLocked("")
+	}
 }
 
 func (g *CanvasAccessGate) State(artworkID string) map[string]any {
@@ -97,69 +122,196 @@ func (g *CanvasAccessGate) State(artworkID string) map[string]any {
 
 func (g *CanvasAccessGate) Register(inst CanvasInstance) error {
 	g.mu.Lock()
+	defer g.mu.Unlock()
+	id := inst.ArtworkID()
 	g.instances[inst] = struct{}{}
-	g.mu.Unlock()
-	return inst.SetReadonly(true, "checking")
-}
-
-func (g *CanvasAccessGate) Unregister(inst CanvasInstance) {
-	g.mu.Lock()
-	delete(g.instances, inst)
-	g.mu.Unlock()
-}
-
-func (g *CanvasAccessGate) Disconnected() {
-	g.mu.Lock()
-	g.known = false
-	g.permits = make(map[string]string)
-	instances := g.snapshotInstancesLocked()
-	g.mu.Unlock()
-	for _, inst := range instances {
-		_ = inst.SetReadonly(true, "checking")
+	if g.refreshers[id] == nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		r := &artworkRefresher{ctx: ctx, cancel: cancel, appliedCond: sync.NewCond(&g.mu), refreshCh: make(chan struct{}, 1), stopCh: make(chan struct{})}
+		g.refreshers[id] = r
+		go g.refreshArtwork(id, r)
 	}
+	g.signalLocked(id)
+	return nil
 }
 
-func (g *CanvasAccessGate) snapshotInstancesLocked() []CanvasInstance {
-	out := make([]CanvasInstance, 0, len(g.instances))
+func (g *CanvasAccessGate) signalLocked(id string) uint64 {
+	g.stateSeq++
+	for key, r := range g.refreshers {
+		if id != "" && key != id {
+			continue
+		}
+		r.targetSeq = g.stateSeq
+		select {
+		case r.refreshCh <- struct{}{}:
+		default:
+		}
+	}
+	return g.stateSeq
+}
+
+func (g *CanvasAccessGate) instancesLocked(id string) []CanvasInstance {
+	var out []CanvasInstance
 	for inst := range g.instances {
-		out = append(out, inst)
+		if inst.ArtworkID() == id {
+			out = append(out, inst)
+		}
 	}
 	return out
 }
 
-func (g *CanvasAccessGate) refresh() {
-	g.mu.Lock()
-	instances := g.snapshotInstancesLocked()
-	known := g.known
-	updating := g.updating
-	activeCopy := make(map[string]DesignCanvasState, len(g.active))
-	for k, v := range g.active {
-		activeCopy[k] = v
-	}
-	permitsCopy := make(map[string]string, len(g.permits))
-	for k, v := range g.permits {
-		permitsCopy[k] = v
-	}
-	g.mu.Unlock()
-
-	for _, inst := range instances {
-		id := inst.ArtworkID()
-		_, isActive := activeCopy[id]
-		_, hasPermit := permitsCopy[id]
-		readonly := updating || !known || isActive || hasPermit
+func (g *CanvasAccessGate) refreshArtwork(id string, r *artworkRefresher) {
+	for {
+		select {
+		case <-r.stopCh:
+			return
+		case <-r.refreshCh:
+		}
+		g.mu.Lock()
+		if g.refreshers[id] != r {
+			g.mu.Unlock()
+			return
+		}
+		seq, ro := r.targetSeq, g.isReadonlyLocked(id)
 		reason := "locked"
-		if !known {
+		if !g.known {
 			reason = "checking"
-		} else if isActive || hasPermit || updating {
+		} else if ro {
 			reason = "processing"
 		}
-		_ = inst.SetReadonly(readonly, reason)
+		instances := g.instancesLocked(id)
+		g.mu.Unlock()
+		var err error
+		for _, inst := range instances {
+			ctx, cancel := context.WithTimeout(r.ctx, 3*time.Second)
+			e := inst.SetReadonly(ctx, seq, ro, reason)
+			cancel()
+			err = errors.Join(err, e)
+		}
+		g.mu.Lock()
+		r.appliedSeq, r.appliedErr = seq, err
+		r.appliedCond.Broadcast()
+		g.mu.Unlock()
 	}
+}
+
+func (g *CanvasAccessGate) WaitApplied(ctx context.Context, seq uint64, id string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for {
+		r := g.refreshers[id]
+		if r == nil {
+			return nil
+		}
+		if r.appliedSeq >= seq {
+			return r.appliedErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		stop := context.AfterFunc(ctx, func() { g.mu.Lock(); r.appliedCond.Broadcast(); g.mu.Unlock() })
+		r.appliedCond.Wait()
+		stop()
+	}
+}
+
+func (g *CanvasAccessGate) Unregister(inst CanvasInstance) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.instances, inst)
+	id := inst.ArtworkID()
+	if r := g.refreshers[id]; r != nil && len(g.instancesLocked(id)) == 0 {
+		delete(g.refreshers, id)
+		r.cancel()
+		close(r.stopCh)
+		r.appliedCond.Broadcast()
+	}
+	g.signalLocked(id)
+}
+
+func (g *CanvasAccessGate) Disconnected() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.known {
+		return
+	}
+	g.known = false
+	clear(g.permits)
+	g.signalLocked("")
+}
+
+func (g *CanvasAccessGate) AcquireCloseFreeze(id, owner string) (string, bool, uint64, func()) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	writable := !g.isReadonlyLocked(id) || g.allowedLocked(id, g.closeFreezes[id][owner])
+	p := randomHexToken(16)
+	if g.closeFreezes[id] == nil {
+		g.closeFreezes[id] = map[string]string{}
+	}
+	g.closeFreezes[id][owner] = p
+	return p, writable, g.signalLocked(id), func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if g.closeFreezes[id][owner] == p {
+			g.releaseLocked(id, owner)
+		}
+	}
+}
+
+func (g *CanvasAccessGate) releaseLocked(id, owner string) {
+	delete(g.closeFreezes[id], owner)
+	if len(g.closeFreezes[id]) == 0 {
+		delete(g.closeFreezes, id)
+	}
+	g.signalLocked(id)
+	g.notifyWritableLocked(id)
+}
+
+func (g *CanvasAccessGate) notifyWritableLocked(id string) {
+	if g.onWritable != nil && !g.isReadonlyLocked(id) {
+		go g.onWritable(id)
+	}
+}
+
+func (g *CanvasAccessGate) ReleaseCloseFreezeByOwner(owner string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for id, m := range g.closeFreezes {
+		if _, ok := m[owner]; ok {
+			g.releaseLocked(id, owner)
+		}
+	}
+}
+
+func (g *CanvasAccessGate) allowedLocked(id, permit string) bool {
+	if !g.known || g.updating || (g.owns != nil && !g.owns()) {
+		return false
+	}
+	if permit == "" {
+		return !g.isReadonlyLocked(id)
+	}
+	st, active := g.active[id]
+	if g.permits[id] == permit {
+		return !active || st.Preparing
+	}
+	for _, p := range g.closeFreezes[id] {
+		if p == permit {
+			return !active
+		}
+	}
+	return false
+}
+
+func (g *CanvasAccessGate) IsWriteAllowed(id, permit string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.allowedLocked(id, permit)
 }
 
 func (g *CanvasAccessGate) UpdateFromDaemon(
 	states []DesignCanvasState,
 	beforeRelease func(artworkID string) error,
+	emit ...func(DesignCanvasReport),
 ) []DesignCanvasReport {
 	g.mu.Lock()
 	next := make(map[string]DesignCanvasState, len(states))
@@ -184,10 +336,17 @@ func (g *CanvasAccessGate) UpdateFromDaemon(
 	}
 
 	g.mu.Lock()
+	changed := !g.known || !maps.Equal(g.active, next)
+	g.daemonTurns = make(map[string]string, len(states))
+	for _, st := range states {
+		g.daemonTurns[st.ArtworkID] = st.TurnID
+	}
 	g.active = next
 	g.known = true
+	if changed {
+		g.signalLocked("")
+	}
 	g.mu.Unlock()
-	g.refresh()
 
 	var reports []DesignCanvasReport
 	live := make(map[string]struct{}, len(states))
@@ -197,45 +356,36 @@ func (g *CanvasAccessGate) UpdateFromDaemon(
 			continue
 		}
 		g.mu.Lock()
-		_, already := g.reported[st.TurnID]
-		updating := g.updating
+		_, already := g.inFlightPrepare[st.TurnID]
+		if !already {
+			g.inFlightPrepare[st.TurnID] = struct{}{}
+		}
 		g.mu.Unlock()
 		if already {
 			continue
 		}
-		var flushErr error
-		if updating {
-			flushErr = errors.New("Molly is preparing an update; try again after updating")
-		} else {
-			flushErr = g.Flush(st.ArtworkID)
-		}
-		if flushErr != nil {
-			msg := flushErr.Error()
-			if len(msg) > 500 {
-				msg = msg[:500]
+		prepare := func() DesignCanvasReport {
+			err := g.Flush(st.ArtworkID)
+			r := DesignCanvasReport{ArtworkID: st.ArtworkID, TurnID: st.TurnID, OK: err == nil}
+			if err != nil {
+				r.Error = err.Error()
+				if len(r.Error) > 500 {
+					r.Error = r.Error[:500]
+				}
 			}
-			reports = append(reports, DesignCanvasReport{
-				ArtworkID: st.ArtworkID,
-				TurnID:    st.TurnID,
-				OK:        false,
-				Error:     msg,
-			})
-		} else {
-			reports = append(reports, DesignCanvasReport{
-				ArtworkID: st.ArtworkID,
-				TurnID:    st.TurnID,
-				OK:        true,
-			})
+			return r
 		}
-		g.mu.Lock()
-		g.reported[st.TurnID] = struct{}{}
-		g.mu.Unlock()
+		if len(emit) > 0 {
+			go func() { emit[0](prepare()) }()
+		} else {
+			reports = append(reports, prepare())
+		}
 	}
 
 	g.mu.Lock()
-	for turnID := range g.reported {
+	for turnID := range g.inFlightPrepare {
 		if _, ok := live[turnID]; !ok {
-			delete(g.reported, turnID)
+			delete(g.inFlightPrepare, turnID)
 		}
 	}
 	g.mu.Unlock()
@@ -243,39 +393,53 @@ func (g *CanvasAccessGate) UpdateFromDaemon(
 }
 
 func (g *CanvasAccessGate) Flush(artworkID string) error {
-	raw := make([]byte, 16)
-	_, _ = io.ReadFull(rand.Reader, raw)
-	permit := hex.EncodeToString(raw)
-
+	permit := randomHexToken(16)
 	g.mu.Lock()
-	if !g.known || g.updating {
+	if !g.known || g.updating || g.permits[artworkID] != "" || (g.owns != nil && !g.owns()) {
 		g.mu.Unlock()
 		return ErrCanvasReadOnly
 	}
 	g.permits[artworkID] = permit
-	wg := g.inFlight[artworkID]
-	instances := g.snapshotInstancesLocked()
+	seq := g.signalLocked(artworkID)
 	g.mu.Unlock()
 
-	g.refresh()
 	defer func() {
 		g.mu.Lock()
 		if g.permits[artworkID] == permit {
 			delete(g.permits, artworkID)
+			g.notifyWritableLocked(artworkID)
 		}
+		g.signalLocked(artworkID)
 		g.mu.Unlock()
-		g.refresh()
 	}()
 
-	if wg != nil {
-		wg.Wait()
+	return g.flushInstances(context.Background(), artworkID, permit, seq)
+}
+
+func (g *CanvasAccessGate) flushInstances(ctx context.Context, artworkID, permit string, seq uint64) error {
+	g.mu.Lock()
+	flights := maps.Clone(g.inFlight[artworkID])
+	g.mu.Unlock()
+	if err := g.WaitApplied(ctx, seq, artworkID); err != nil {
+		return err
 	}
+	for done := range flights {
+		<-done
+	}
+	g.mu.Lock()
+	instances := g.instancesLocked(artworkID)
+	g.mu.Unlock()
 	for _, inst := range instances {
 		if inst.ArtworkID() != artworkID {
 			continue
 		}
 		if err := inst.Flush(permit); err != nil {
-			return err
+			g.mu.Lock()
+			_, live := g.instances[inst]
+			g.mu.Unlock()
+			if live {
+				return err
+			}
 		}
 	}
 	return nil
@@ -283,7 +447,7 @@ func (g *CanvasAccessGate) Flush(artworkID string) error {
 
 func (g *CanvasAccessGate) PrepareForSend(artworkID string) error {
 	g.mu.Lock()
-	if g.updating {
+	if g.updating || (g.owns != nil && !g.owns()) {
 		g.mu.Unlock()
 		return errors.New("Molly is preparing an update; try again after updating")
 	}
@@ -303,26 +467,37 @@ func (g *CanvasAccessGate) PrepareForSend(artworkID string) error {
 
 func (g *CanvasAccessGate) Write(artworkID string, permit string, action func() error) error {
 	g.mu.Lock()
-	if !g.known || g.updating {
+	if !g.allowedLocked(artworkID, permit) {
 		g.mu.Unlock()
 		return ErrCanvasReadOnly
 	}
-	readonly := g.isReadonlyLocked(artworkID)
-	allowedPermit := permit != "" && g.permits[artworkID] == permit
-	if readonly && !allowedPermit {
-		g.mu.Unlock()
-		return ErrCanvasReadOnly
+	done := make(chan struct{})
+	if g.inFlight[artworkID] == nil {
+		g.inFlight[artworkID] = map[chan struct{}]struct{}{}
 	}
-	wg := g.inFlight[artworkID]
-	if wg == nil {
-		wg = &sync.WaitGroup{}
-		g.inFlight[artworkID] = wg
-	}
-	wg.Add(1)
+	g.inFlight[artworkID][done] = struct{}{}
 	g.mu.Unlock()
-	defer wg.Done()
+	defer func() {
+		g.mu.Lock()
+		delete(g.inFlight[artworkID], done)
+		if len(g.inFlight[artworkID]) == 0 {
+			delete(g.inFlight, artworkID)
+		}
+		close(done)
+		g.mu.Unlock()
+	}()
 	return action()
 }
+
+const workerFrameLimit = 68 << 20
+
+type DesignWorkerError struct {
+	Message    string
+	Code       string
+	RevisionID string
+}
+
+func (e *DesignWorkerError) Error() string { return e.Message }
 
 type workerResponse struct {
 	value json.RawMessage
@@ -411,8 +586,9 @@ func (w *DesignWorkerClient) startLocked() (*workerProcess, error) {
 		return nil, errors.New("design worker runtime not configured")
 	}
 	cmd := exec.Command(w.nodeBin, w.entryJS)
+	cmd.Env = scrubSensitiveChildEnv(os.Environ())
 	if w.dataDir != "" {
-		cmd.Env = append(os.Environ(), "MOLLY_DATA_DIR="+w.dataDir)
+		cmd.Env = append(cmd.Env, "MOLLY_DATA_DIR="+w.dataDir, "MOLLY_ISOLATED_DATA_ROOT_STRICT=1")
 	}
 	configureWorkerProcessGroup(cmd)
 	stdin, err := cmd.StdinPipe()
@@ -439,19 +615,21 @@ func (w *DesignWorkerClient) startLocked() (*workerProcess, error) {
 		defer close(proc.exited)
 		defer close(proc.lines)
 		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 64*1024), 64*1024*1024)
+		scanner.Buffer(make([]byte, 64*1024), workerFrameLimit+1)
 		for scanner.Scan() {
 			var resp struct {
-				OK    bool            `json:"ok"`
-				Value json.RawMessage `json:"value"`
-				Error string          `json:"error"`
+				OK         bool            `json:"ok"`
+				Value      json.RawMessage `json:"value"`
+				Error      string          `json:"error"`
+				Code       string          `json:"code"`
+				RevisionID string          `json:"revisionId"`
 			}
 			if unmarshalErr := json.Unmarshal(scanner.Bytes(), &resp); unmarshalErr != nil {
 				proc.lines <- workerResponse{err: fmt.Errorf("invalid design worker response: %w", unmarshalErr)}
 				continue
 			}
 			if !resp.OK {
-				proc.lines <- workerResponse{err: errors.New(resp.Error)}
+				proc.lines <- workerResponse{err: &DesignWorkerError{resp.Error, resp.Code, resp.RevisionID}}
 				continue
 			}
 			proc.lines <- workerResponse{value: resp.Value}
@@ -480,7 +658,7 @@ func (w *DesignWorkerClient) dropProcess(proc *workerProcess, kill bool) {
 	}
 }
 
-func (w *DesignWorkerClient) Request(ctx context.Context, req any) (json.RawMessage, error) {
+func (w *DesignWorkerClient) Request(ctx context.Context, req any, beforeSend ...func() error) (json.RawMessage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -504,11 +682,26 @@ func (w *DesignWorkerClient) Request(ctx context.Context, req any) (json.RawMess
 		return nil, err
 	}
 
-	line, err := json.Marshal(req)
-	if err != nil {
+	var frame bytes.Buffer
+	enc := json.NewEncoder(&frame)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(req); err != nil {
 		return nil, err
 	}
-	payload := append(line, '\n')
+	if frame.Len()-1 > workerFrameLimit {
+		return nil, errors.New("design worker request exceeds 68 MiB")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	for _, check := range beforeSend {
+		if check != nil {
+			if err := check(); err != nil {
+				return nil, err
+			}
+		}
+	}
+	payload := frame.Bytes()
 	writeErrCh := make(chan error, 1)
 	go func() {
 		_, wErr := proc.stdin.Write(payload)
@@ -534,6 +727,10 @@ func (w *DesignWorkerClient) Request(ctx context.Context, req any) (json.RawMess
 			w.dropProcess(proc, false)
 			return nil, errors.New("design service stopped; retry to check the saved drawing")
 		}
+		var workerErr *DesignWorkerError
+		if resp.err != nil && !errors.As(resp.err, &workerErr) {
+			w.dropProcess(proc, true)
+		}
 		return resp.value, resp.err
 	case <-ctx.Done():
 		w.dropProcess(proc, true)
@@ -551,10 +748,17 @@ func (w *DesignWorkerClient) Close() error {
 	if proc == nil {
 		return nil
 	}
-	_ = proc.stdin.Close()
 	timeout := w.drainTimeout
 	if timeout <= 0 {
 		timeout = 3 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := w.acquireSlot(ctx); err == nil {
+		defer w.releaseSlot()
+		_ = proc.stdin.Close()
+	} else {
+		proc.kill()
 	}
 	killWait := w.killTimeout
 	if killWait <= 0 {
@@ -563,7 +767,7 @@ func (w *DesignWorkerClient) Close() error {
 	select {
 	case <-proc.exited:
 		return proc.waitErr
-	case <-time.After(timeout):
+	case <-ctx.Done():
 		proc.kill()
 		select {
 		case <-proc.exited:

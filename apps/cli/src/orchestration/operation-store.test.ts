@@ -1,9 +1,10 @@
-import { chmod, mkdtemp, rm, stat } from 'node:fs/promises';
+import { linkSync, symlinkSync } from 'node:fs';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   MOLLY_OPERATION_COMPLETION_MAX_BYTES,
@@ -14,6 +15,7 @@ import {
 
 import {
   canonicalizeMollyCommand,
+  getMollyOperationStorePath,
   isOperationStoreBusyError,
   MollyOperationStore,
   MollyOperationStoreError,
@@ -1291,4 +1293,33 @@ it('retains unfinished progress ownership across delivery consumption, reopening
   } finally {
     store.close();
   }
+});
+
+describe.each(['hard link', 'symlink'])('strict profile with a %s', (kind) => {
+  it.each(['', '-wal', '-shm', '-journal'])(
+    'rejects a linked database component with suffix "%s"',
+    async (suffix) => {
+      const parent = await mkdtemp(path.join(os.tmpdir(), 'molly-isolation-'));
+      try {
+        const root = path.join(parent, 'profile');
+        vi.stubEnv('MOLLY_DATA_DIR', root);
+        vi.stubEnv('MOLLY_ISOLATED_DATA_ROOT_STRICT', '1');
+        const dbPath = getMollyOperationStorePath('machine');
+        await mkdir(path.dirname(dbPath), { recursive: true });
+        const external = path.join(parent, 'external');
+        const original = Buffer.from('original target contents');
+        await writeFile(external, original);
+        if (kind === 'hard link') linkSync(external, dbPath + suffix);
+        else symlinkSync(external, dbPath + suffix, 'file');
+
+        expect(() => new MollyOperationStore(dbPath)).toThrow(
+          kind === 'hard link' ? 'invalid_isolated_sqlite_file' : 'isolated_data_path_symlink'
+        );
+        expect(await readFile(external)).toEqual(original);
+      } finally {
+        vi.unstubAllEnvs();
+        await rm(parent, { recursive: true, force: true });
+      }
+    }
+  );
 });

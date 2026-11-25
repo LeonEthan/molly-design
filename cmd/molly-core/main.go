@@ -72,6 +72,7 @@ type browserFetchResult struct {
 }
 
 type memoryRegistry struct {
+	root   *dataRoot
 	mu     sync.Mutex
 	stores map[string]*memory.Store
 }
@@ -85,7 +86,13 @@ func (r *memoryRegistry) get(dbPath string) (*memory.Store, error) {
 	if key == "" {
 		return nil, errors.New("dbPath is required")
 	}
-	if key != ":memory:" {
+	if r.root != nil {
+		var err error
+		key, err = r.root.databasePath(dbPath)
+		if err != nil {
+			return nil, err
+		}
+	} else if key != ":memory:" {
 		abs, err := filepath.Abs(key)
 		if err != nil {
 			return nil, err
@@ -312,7 +319,11 @@ func registerCoreHandlers(srv *ipc.Server, imageClient *mcp.ImageClient, fetcher
 		if err := json.Unmarshal(params, &in); err != nil {
 			return nil, &ipc.RPCError{Code: "invalid_params", Message: err.Error()}
 		}
-		res, err := design.ReadDesign(in.DataRoot, in.SessionID)
+		root, err := memReg.root.authorize(in.DataRoot)
+		if err != nil {
+			return nil, &ipc.RPCError{Code: "unauthorized", Message: err.Error()}
+		}
+		res, err := design.ReadDesign(root, in.SessionID)
 		if err != nil {
 			return nil, &ipc.RPCError{Code: "design_read_failed", Message: err.Error()}
 		}
@@ -342,7 +353,11 @@ func registerCoreHandlers(srv *ipc.Server, imageClient *mcp.ImageClient, fetcher
 		if err := json.Unmarshal(params, &in); err != nil {
 			return nil, &ipc.RPCError{Code: "invalid_params", Message: err.Error()}
 		}
-		res, err := gs.List(ctx, in.DataRoot, in.SessionID)
+		root, err := memReg.root.authorize(in.DataRoot)
+		if err != nil {
+			return nil, &ipc.RPCError{Code: "unauthorized", Message: err.Error()}
+		}
+		res, err := gs.List(ctx, root, in.SessionID)
 		if err != nil {
 			return nil, &ipc.RPCError{Code: "gitstore_list_failed", Message: err.Error()}
 		}
@@ -358,7 +373,11 @@ func registerCoreHandlers(srv *ipc.Server, imageClient *mcp.ImageClient, fetcher
 		if err := json.Unmarshal(params, &in); err != nil {
 			return nil, &ipc.RPCError{Code: "invalid_params", Message: err.Error()}
 		}
-		res, err := gs.Read(ctx, in.DataRoot, in.SessionID, in.CommitID)
+		root, err := memReg.root.authorize(in.DataRoot)
+		if err != nil {
+			return nil, &ipc.RPCError{Code: "unauthorized", Message: err.Error()}
+		}
+		res, err := gs.Read(ctx, root, in.SessionID, in.CommitID)
 		if err != nil {
 			return nil, &ipc.RPCError{Code: "gitstore_read_failed", Message: err.Error()}
 		}
@@ -412,6 +431,7 @@ func runWithInput(args []string, stdin io.Reader, stdout io.Writer, stderr io.Wr
 	showVersion := fs.Bool("version", false, "print molly-core version")
 	checkLocal := fs.Bool("check-local-composition", false, "print local composition JSON and exit")
 	serveIPC := fs.String("serve-ipc", "", "serve local authenticated IPC on unix socket or windows named pipe")
+	handshake := fs.Bool("stdin-handshake", false, "read IPC credentials and optional data root from stdin and exit on EOF")
 	watchStdin := fs.Bool("watch-stdin", false, "exit when stdin reaches EOF (parent-death signal)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -443,7 +463,18 @@ func runWithInput(args []string, stdin io.Reader, stdout io.Writer, stderr io.Wr
 		return 0
 	}
 	if strings.TrimSpace(*serveIPC) != "" {
-		authToken := strings.TrimSpace(os.Getenv("MOLLY_CORE_IPC_TOKEN"))
+		var authToken string
+		var root *dataRoot
+		if *handshake {
+			var err error
+			authToken, root, stdin, err = readHandshake(stdin)
+			if err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+		} else {
+			authToken = strings.TrimSpace(os.Getenv("MOLLY_CORE_IPC_TOKEN"))
+		}
 		if authToken == "" {
 			_, _ = fmt.Fprintln(stderr, "MOLLY_CORE_IPC_TOKEN is required when running --serve-ipc")
 			return 1
@@ -455,13 +486,14 @@ func runWithInput(args []string, stdin io.Reader, stdout io.Writer, stderr io.Wr
 		}
 		defer srv.Close()
 		memReg := newMemoryRegistry()
+		memReg.root = root
 		defer memReg.closeAll()
 		registerCoreHandlers(srv, &mcp.ImageClient{}, &browserfetch.Fetcher{}, memReg)
 		sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		ctx, cancel := context.WithCancel(sigCtx)
 		defer cancel()
-		if *watchStdin && stdin != nil {
+		if (*watchStdin || *handshake) && stdin != nil {
 			go func() {
 				_, _ = io.Copy(io.Discard, stdin)
 				cancel()
@@ -473,7 +505,7 @@ func runWithInput(args []string, stdin io.Reader, stdout io.Writer, stderr io.Wr
 		}
 		return 0
 	}
-	_, _ = fmt.Fprintln(stderr, "usage: molly-core --version | --check-local-composition | --serve-ipc <socket-path> [--watch-stdin]")
+	_, _ = fmt.Fprintln(stderr, "usage: molly-core --version | --check-local-composition | --serve-ipc <socket-path> [--watch-stdin | --stdin-handshake]")
 	return 2
 }
 

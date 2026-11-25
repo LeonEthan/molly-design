@@ -1,3 +1,6 @@
+import { timingSafeEqual } from 'node:crypto';
+import type { IncomingHttpHeaders } from 'node:http';
+import { getSupervisorHello, mcpToolAuthToken } from './local-supervisor-control';
 import {
   LOCAL_MACHINE_RPC_PATH,
   LocalMachineRpcResponseSchema,
@@ -232,10 +235,20 @@ async function handleProjectControlRequest(
   }
 }
 
+const coordinatorMethods = new Set([
+  'harness/host',
+  'design/canvas-host',
+  'design/render-host',
+  'mcp/catalog-entry',
+  'browser/host',
+  'browser/pause-all',
+]);
+
 async function handleMachineRpcRequest(
   config: LocalSessionControlConfig,
   raw: string,
-  requestId: number
+  requestId: number,
+  headers?: IncomingHttpHeaders
 ): Promise<LocalControlHandlerResponse> {
   const parsed = safeParseLocalMachineRpcRequest(raw);
   if (!parsed.success) {
@@ -258,6 +271,28 @@ async function handleMachineRpcRequest(
       `[local-control:${requestId}] machine rpc machine mismatch: expected=${config.machineId} actual=${message.machineId}`
     );
     return handlerResponse(403, { ok: false, error: 'machine_mismatch' });
+  }
+  if (process.env.MOLLY_SUPERVISOR_TRANSPORT === 'stdin') {
+    const coordinator = coordinatorMethods.has(message.method);
+    if (
+      coordinator ||
+      (message.method === 'design/image-connection' && message.params?.acquireCredential === true)
+    ) {
+      const expected = coordinator ? getSupervisorHello()?.coordinatorToken : mcpToolAuthToken;
+      const actual = headers?.[coordinator ? 'x-molly-coordinator-token' : 'x-molly-mcp-token'];
+      if (
+        !expected ||
+        typeof actual !== 'string' ||
+        Buffer.byteLength(actual) !== Buffer.byteLength(expected) ||
+        !timingSafeEqual(Buffer.from(actual), Buffer.from(expected))
+      )
+        return handlerResponse(403, {
+          ok: false,
+          error: coordinator ? 'forbidden' : 'image_credentials_require_mcp_http_host',
+        });
+      if (!coordinator && !message.ownerSessionId)
+        return handlerResponse(403, { ok: false, error: 'session_lease_required' });
+    }
   }
   if (!config.dispatchMachineRpc) {
     return handlerResponse(501, { ok: false, error: 'method_unavailable' });
@@ -284,6 +319,7 @@ export class LocalControlHandler {
   handle(request: {
     path: string;
     rawBody: string;
+    headers?: IncomingHttpHeaders;
     requestId: number;
     onSessionResponse?: (response: LocalSessionControlResponse) => void;
   }): Promise<LocalControlHandlerResponse> {
@@ -293,7 +329,12 @@ export class LocalControlHandler {
       });
     }
     if (request.path === LOCAL_MACHINE_RPC_PATH) {
-      return handleMachineRpcRequest(this.config, request.rawBody, request.requestId);
+      return handleMachineRpcRequest(
+        this.config,
+        request.rawBody,
+        request.requestId,
+        request.headers
+      );
     }
     if (request.path === LOCAL_PROJECT_CONTROL_PATH) {
       return handleProjectControlRequest(this.config, request.rawBody, request.requestId);

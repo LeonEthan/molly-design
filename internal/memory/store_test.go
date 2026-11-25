@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -22,7 +24,12 @@ func fixedClock() func() time.Time {
 }
 
 func TestOpenCreateDirAndReopenPersistence(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "memory", "preferences.sqlite")
+	parent := t.TempDir()
+	name := "dir?foo=bar#baz%23"
+	if runtime.GOOS == "windows" {
+		name = "dir#baz%23"
+	}
+	dbPath := filepath.Join(parent, name, "memory", "preferences.sqlite")
 	store, err := OpenWithClock(dbPath, fixedClock())
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -39,6 +46,14 @@ func TestOpenCreateDirAndReopenPersistence(t *testing.T) {
 	}
 	if err := store.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
+	}
+
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(parent)
+	if err != nil || len(entries) != 1 || entries[0].Name() != name {
+		t.Fatalf("unexpected database location: %v %v", entries, err)
 	}
 
 	reopened, err := OpenWithClock(dbPath, fixedClock())

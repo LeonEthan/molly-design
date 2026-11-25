@@ -22,7 +22,6 @@ import {
   SessionExitEvent,
 } from './types';
 import { JsonLinesParser } from '../utils/json-lines-parser';
-import path from 'path';
 import { Logger } from '@/utils/logger';
 import { ndJsonStream } from '@agentclientprotocol/sdk';
 import * as fs from 'fs';
@@ -30,7 +29,11 @@ import type { AgentClient } from '@/agent/agent-client';
 import { createAcpClient } from '@/agent/acp-runner';
 import { withAcpSessionStartSlot } from '@/agent/acp-session-start-gate';
 import { appendStderrTail, createAcpStartupMonitor } from '@/agent/acp-startup-monitor';
-import { ensureMollyDataDir, getMollyDataDir } from '@molly/shared/node/installation-profile';
+import {
+  ensureMollyDataDir,
+  resolveIsolatedDataPath,
+  getMollyDataDir,
+} from '@molly/shared/node/installation-profile';
 import { scrubInheritedClaudeAuthEnv, shouldScrubClaudeAuthEnv } from '@/agent/claude-env-conflict';
 import { getCachedLoginShellEnvSync, getLoginShellEnv } from '@/agent/login-shell-env';
 import { mergeLoginShellEnv, withDefaultAcpPathEntries } from '@/agent/setting';
@@ -61,7 +64,7 @@ type SessionEvents = {
 };
 
 export const getDefaultSessionWorkdir = (sessionId: SessionId): string =>
-  path.join(getMollyDataDir(), 'chats', sessionId);
+  resolveIsolatedDataPath(getMollyDataDir(), 'chats', sessionId);
 
 export const ensureDefaultSessionWorkdir = (sessionId: SessionId): string => {
   const dir = getDefaultSessionWorkdir(sessionId);
@@ -557,7 +560,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
         JSON.stringify(callbacks.args) !== JSON.stringify(launch.args)
       )
         throw new Error('harness_launch_mismatch');
-      const privateRoot = path.join(getMollyDataDir(), 'harness', 'pi');
+      const privateRoot = resolveIsolatedDataPath(getMollyDataDir(), 'harness', 'pi');
       const designContinuationContext =
         await callbacks.embeddedHarness.readDesignContinuationContext?.();
       embeddedConfig = {
@@ -583,6 +586,8 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
       };
       env = createWorkerEnvironment({ ...process.env, ...loginShellEnv }, embeddedConfig);
     }
+    if (process.env.MOLLY_SUPERVISOR_RUN_ID)
+      env.MOLLY_SUPERVISOR_RUN_ID = process.env.MOLLY_SUPERVISOR_RUN_ID;
     // Trusted design launch identity also serves exact submission; it does not
     // assert that this runtime implements native tool or terminal hooks.
     this.designHookRuntime = embeddedConfig && callbacks.designHooks ? 'molly' : undefined;

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import Database from 'better-sqlite3';
 import {
   PersonalMemoryEntrySchema as EntrySchema,
@@ -8,7 +8,10 @@ import {
   PERSONAL_MEMORY_LIMIT,
   type PersonalMemorySnapshot,
 } from '@molly/shared/personal-memory';
-import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+import {
+  getMollyDataDir,
+  resolveIsolatedSqlitePath,
+} from '@molly/shared/node/installation-profile';
 import {
   callMollyCoreIpc,
   getMollyCoreIpcSocketPath,
@@ -162,6 +165,11 @@ export class PersonalMemoryService {
           }
         }
       }
+    }
+    if (dbPath !== ':memory:' && process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT === '1') {
+      const root = getMollyDataDir();
+      const file = relative(root, dbPath);
+      dbPath = resolveIsolatedSqlitePath(root, file);
     }
     if (coreEndpoint) {
       await callMollyCoreIpc<PersonalMemorySnapshot>(

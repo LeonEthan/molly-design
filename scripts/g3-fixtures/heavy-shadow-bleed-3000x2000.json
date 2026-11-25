@@ -1,0 +1,41 @@
+{
+  "doc": {
+    "schemaVersion": 4,
+    "canvas": {
+      "width": 3000,
+      "height": 2000
+    },
+    "background": {
+      "type": "solid",
+      "color": "#f3f0e9"
+    },
+    "diagnostics": [],
+    "elements": [
+      {
+        "id": "caster",
+        "kind": "shape",
+        "bounds": [1300, 510, 230, 600],
+        "zIndex": 0,
+        "shapeName": "rect",
+        "fill": {
+          "type": "solid",
+          "color": "#316e82"
+        },
+        "shadow": {
+          "blur": 72,
+          "color": "#17212a",
+          "offset": [0, 0]
+        }
+      }
+    ],
+    "fonts": []
+  },
+  "assets": {},
+  "association": {
+    "sessionId": "cf5157a8-adfb-5309-b7ae-84688c28f356",
+    "name": "heavy-shadow-bleed-3000x2000",
+    "userId": "synthetic",
+    "machineId": "g3",
+    "createdAt": "2026-01-01T00:00:00Z"
+  }
+}

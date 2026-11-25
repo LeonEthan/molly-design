@@ -1,3 +1,4 @@
+import { getMollyDataDir } from '@molly/shared/node/installation-profile';
 import type * as http from 'http';
 import * as os from 'os';
 import type { CliRuntimeState, MachineId } from '@molly/shared';
@@ -18,6 +19,7 @@ export function createLocalProbeRequestHandler(config: LocalProbeConfig): http.R
     pid: process.pid,
     cliVersion: config.cliVersion,
     homeDir: os.homedir(),
+    dataDir: getMollyDataDir(),
   });
 
   return (req, res) => {

@@ -1,7 +1,8 @@
+import { resolveIsolatedDataPath } from '@molly/shared/node/installation-profile';
 /** Git is the only design history backend. Current saves remain in store.ts. */
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstat, mkdir } from 'node:fs/promises';
+import { lstat, mkdir, readdir } from 'node:fs/promises';
 import { devNull } from 'node:os';
 import path from 'node:path';
 import { isBlankCanvas } from '@molly/shared/design-blank-canvas';
@@ -20,8 +21,17 @@ const revision = z.string().regex(/^[a-f0-9]{64}$/);
 const commitId = z.string().regex(/^[a-f0-9]{40}$/);
 const identity = { sessionId: designId };
 export const designHistoryRequest = z.discriminatedUnion('operation', [
-  z.object({ operation: z.literal('history-list'), ...identity }).strict(),
-  z.object({ operation: z.literal('history-read'), ...identity, commitId }).strict(),
+  z
+    .object({ operation: z.literal('history-list'), readOnly: z.boolean().optional(), ...identity })
+    .strict(),
+  z
+    .object({
+      operation: z.literal('history-read'),
+      readOnly: z.boolean().optional(),
+      ...identity,
+      commitId,
+    })
+    .strict(),
   z
     .object({ operation: z.literal('history-create'), ...identity, baseRevisionId: revision })
     .strict(),
@@ -67,7 +77,7 @@ const zeroId = '0'.repeat(40);
 /** Same local Git executable as Molly; no shell, user index, remote or hook execution. */
 function git(repository: string, args: string[], input?: string | Uint8Array): Promise<string> {
   const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))
+    Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('GIT_'))
   );
   return new Promise((resolve, reject) => {
     const child = execFile(
@@ -171,11 +181,34 @@ async function initialize(repository: string) {
     await git(repository, ['init', '--bare', '--template=', '--object-format=sha1', repository]);
 }
 
+async function assertSafeDesignHistoryRepository(
+  repository: string,
+  relative = '',
+  depth = 0
+): Promise<void> {
+  if (depth > 8) throw Error('Design history repository nesting exceeds limit');
+  const entries = await readdir(path.join(repository, relative), { withFileTypes: true });
+  for (const entry of entries) {
+    const name = path.posix.join(relative, entry.name);
+    if (
+      entry.isSymbolicLink() ||
+      ['.git', 'commondir', 'objects/info/alternates', 'objects/info/http-alternates'].includes(
+        name.toLowerCase()
+      )
+    ) {
+      throw Error('Design history directory is redirected');
+    }
+    if (entry.isDirectory()) await assertSafeDesignHistoryRepository(repository, name, depth + 1);
+  }
+}
+
 async function locate(dataRoot: string, sessionId: string) {
-  const directory = path.join(dataRoot, 'chats', sessionId);
+  const directory = resolveIsolatedDataPath(dataRoot, 'chats', sessionId);
   const repository = path.join(directory, 'history.git');
-  await ensureDesignDirectory(directory, repository);
-  return { repository, available: await exists(repository) };
+  await ensureDesignDirectory(dataRoot, repository);
+  const available = await exists(repository);
+  if (available) await assertSafeDesignHistoryRepository(repository);
+  return { repository, available };
 }
 
 async function openRepository(dataRoot: string, sessionId: string) {
@@ -235,6 +268,7 @@ export async function designHistoryOperation(
   const current = await designOperation(dataRoot, {
     operation: 'read',
     sessionId: request.sessionId,
+    readOnly: 'readOnly' in request && request.readOnly,
   });
   if (request.operation === 'history-list' || request.operation === 'history-read') {
     const { repository, available } = await locate(dataRoot, request.sessionId);

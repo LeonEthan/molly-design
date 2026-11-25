@@ -1,3 +1,4 @@
+import { getMcpToolAuthToken } from './molly-core-ipc';
 import {
   DesignToolHookResultSchema,
   type DesignAssetFailure,
@@ -183,8 +184,15 @@ export async function resolveDesignGate(
     logger?.debug('design gate: no local control socket; image tool stays unregistered');
     return EMPTY_DESIGN_GATE;
   }
+  if (
+    acquireCredential &&
+    process.env.MOLLY_SUPERVISOR_TRANSPORT === 'stdin' &&
+    !getMcpToolAuthToken()
+  )
+    throw Error('image_credentials_require_mcp_http_host');
   const answer = await callDesignRpc(ctx, logger, 'design/image-connection', { acquireCredential });
   if (!answer.ok) {
+    if (answer.error === 'image_credentials_require_mcp_http_host') throw Error(answer.error);
     logger?.debug(`design gate: lookup failed: ${answer.error}`);
     return EMPTY_DESIGN_GATE;
   }
@@ -328,7 +336,7 @@ async function callDesignRpc(
             ownerSessionId: ctx.sessionId,
             ...(method === 'design/image-connection' ? { method, params } : { method, params: {} }),
           },
-          { timeoutMs }
+          { timeoutMs, ...(params.acquireCredential && { mcpToken: getMcpToolAuthToken() }) }
         )
         .pipe(
           Effect.catchTag('IpcTimeoutError', (error) =>

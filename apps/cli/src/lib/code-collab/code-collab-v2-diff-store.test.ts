@@ -1,12 +1,13 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { linkSync, symlinkSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { SessionId, WorkspaceId } from '@molly/shared';
 import { SqliteTurnDiffStore } from '@molly/turn-diff-store/sqlite';
-import { CodeCollabV2DiffStore } from './code-collab-v2-diff-store';
+import { CodeCollabV2DiffStore, getCodeCollabV2DiffStoreDbPath } from './code-collab-v2-diff-store';
 
 const SESSION_ID = 'session-v2' as SessionId;
 const WORKSPACE_ID = 'workspace-v2' as WorkspaceId;
@@ -75,5 +76,39 @@ describe('legacy CodeCollabV2DiffStore reads', () => {
       expect(await store.getTurnDiffSnapshot({ ownerSessionId: SESSION_ID, turnId: 'turn-1', path: 'src/app.ts', nowMs }))
         .toEqual({ status: 'unavailable' });
     });
+  });
+});
+
+describe.each(['hard link', 'symlink'])('strict profile with a %s', (kind) => {
+  it.each(['', '-wal', '-shm', '-journal'])('rejects a linked database component with suffix "%s"', async (suffix) => {
+    const parent = await realpath(await mkdtemp(path.join(tmpdir(), 'molly-isolation-')));
+    try {
+      const root = path.join(parent, 'profile');
+      vi.stubEnv('MOLLY_DATA_DIR', root);
+      vi.stubEnv('MOLLY_ISOLATED_DATA_ROOT_STRICT', '1');
+      const dbPath = getCodeCollabV2DiffStoreDbPath(WORKSPACE_ID);
+      await mkdir(path.dirname(dbPath), { recursive: true });
+      const external = path.join(parent, 'external');
+      const original = Buffer.from('original target contents');
+      await writeFile(external, original);
+      const lazyStore = new CodeCollabV2DiffStore(WORKSPACE_ID);
+      if (kind === 'hard link') linkSync(external, dbPath + suffix);
+      else symlinkSync(external, dbPath + suffix, 'file');
+
+      expect(() => new CodeCollabV2DiffStore(WORKSPACE_ID)).toThrow(
+        kind === 'hard link' ? 'invalid_isolated_sqlite_file' : 'isolated_data_path_symlink'
+      );
+      try {
+        await expect(lazyStore.stats()).rejects.toThrow(
+          kind === 'hard link' ? 'invalid_isolated_sqlite_file' : 'isolated_data_path_symlink'
+        );
+      } finally {
+        await lazyStore.close();
+      }
+      expect(await readFile(external)).toEqual(original);
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(parent, { recursive: true, force: true });
+    }
   });
 });

@@ -33,7 +33,7 @@ type fakeCanvasInstance struct {
 
 func (f *fakeCanvasInstance) ArtworkID() string { return f.id }
 
-func (f *fakeCanvasInstance) SetReadonly(ro bool, reason string) error {
+func (f *fakeCanvasInstance) SetReadonly(_ context.Context, _ uint64, ro bool, reason string) error {
 	f.mu.Lock()
 	f.readonly = ro
 	f.reason = reason

@@ -1,3 +1,6 @@
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ACPSessionId, MachineId, SessionId, WorkspaceId } from '@molly/shared';
 import type { Logger } from '@/utils/logger';
@@ -483,36 +486,93 @@ describe('AgentClient session preparation gate', () => {
     });
   });
 
-  it('injects Molly MCP into DeepSeek Harness sessions', async () => {
+  it.for(['posix', 'win32'])(
+    'injects isolated Molly MCP into DeepSeek sessions on %s',
+    async (platform, { onTestFinished }) => {
+      const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'm-')));
+      writeFileSync(path.join(root, '.molly-mygo-experimental'), '');
+      vi.spyOn(process, 'platform', 'get').mockReturnValue(
+        platform === 'win32' ? 'win32' : 'linux'
+      );
+      vi.stubEnv('MOLLY_SUPERVISOR_RUN_ID', 'owned-run');
+      vi.stubEnv('MOLLY_SUPERVISOR_TRANSPORT', 'stdin');
+      vi.stubEnv('MOLLY_MYGO_ISOLATED_PIPES', '1');
+      vi.stubEnv('MOLLY_E2E', '0');
+      onTestFinished(() => vi.restoreAllMocks());
+      vi.stubEnv('MOLLY_DATA_DIR', root);
+      vi.stubEnv('MOLLY_ISOLATED_DATA_ROOT_STRICT', '1');
+      onTestFinished(() => {
+        vi.unstubAllEnvs();
+        rmSync(root, { recursive: true, force: true });
+      });
+      const client = new AgentClient({
+        logger: createLogger(),
+        sessionId: 'session-deepseek' as SessionId,
+        workspaceId: 'workspace-1' as WorkspaceId,
+        machineId: 'machine-1' as MachineId,
+        terminalManager: {} as never,
+        agentConfig: { cliType: 'builtin', agentType: 'deepseek' },
+        onUpdateMessage: vi.fn(),
+        onRequestPermission: vi.fn(),
+      });
+
+      await client.startSession({} as never, '/workdir');
+
+      expect(connectionMocks.newSession).toHaveBeenCalledWith({
+        cwd: '/workdir',
+        mcpServers: [
+          expect.objectContaining({
+            name: 'molly',
+            command: process.execPath,
+            args: expect.arrayContaining([
+              '--conditions=molly-strict-isolated-profile',
+              '__internal',
+              'molly-mcp-server',
+            ]),
+            env: expect.arrayContaining([
+              {
+                name: 'MOLLY_MCP_LORO_SOCKET_PATH',
+                value:
+                  platform === 'win32'
+                    ? expect.stringMatching(/loro-data-plane-.+-[0-9a-f]{16}$/)
+                    : path.join(root, 'run', 'molly-loro-data-plane.sock'),
+              },
+              { name: 'MOLLY_PROFILE', value: 'experimental' },
+              { name: 'MOLLY_SUPERVISOR_RUN_ID', value: 'owned-run' },
+              { name: 'MOLLY_DATA_DIR', value: root },
+              { name: 'MOLLY_ISOLATED_DATA_ROOT_STRICT', value: '1' },
+              { name: 'MOLLY_MCP_SESSION_ID', value: 'session-deepseek' },
+              { name: 'MOLLY_MCP_WORKSPACE_ID', value: 'workspace-1' },
+              { name: 'MOLLY_MCP_MACHINE_ID', value: 'machine-1' },
+              { name: 'MOLLY_MCP_WORKDIR', value: '/workdir' },
+            ]),
+          }),
+        ],
+      });
+    }
+  );
+
+  it('refuses to prepare a stdio fallback with an unbound experimental profile', async ({
+    onTestFinished,
+  }) => {
+    vi.stubEnv('MOLLY_PROFILE', 'experimental');
+    vi.stubEnv('MOLLY_DATA_DIR', undefined);
+    vi.stubEnv('MOLLY_ISOLATED_DATA_ROOT_STRICT', '1');
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
     const client = new AgentClient({
       logger: createLogger(),
-      sessionId: 'session-deepseek' as SessionId,
+      sessionId: 'session-unbound' as SessionId,
       workspaceId: 'workspace-1' as WorkspaceId,
       machineId: 'machine-1' as MachineId,
       terminalManager: {} as never,
-      agentConfig: { cliType: 'builtin', agentType: 'deepseek' },
       onUpdateMessage: vi.fn(),
       onRequestPermission: vi.fn(),
     });
-
-    await client.startSession({} as never, '/workdir');
-
-    expect(connectionMocks.newSession).toHaveBeenCalledWith({
-      cwd: '/workdir',
-      mcpServers: [
-        expect.objectContaining({
-          name: 'molly',
-          command: process.execPath,
-          args: expect.arrayContaining(['__internal', 'molly-mcp-server']),
-          env: expect.arrayContaining([
-            { name: 'MOLLY_MCP_SESSION_ID', value: 'session-deepseek' },
-            { name: 'MOLLY_MCP_WORKSPACE_ID', value: 'workspace-1' },
-            { name: 'MOLLY_MCP_MACHINE_ID', value: 'machine-1' },
-            { name: 'MOLLY_MCP_WORKDIR', value: '/workdir' },
-          ]),
-        }),
-      ],
-    });
+    await expect(client.startSession({} as never, '/workdir')).rejects.toThrow(
+      'invalid_isolated_data_root'
+    );
   });
 
   it('aborts while waiting for a claim without creating an ACP session', async () => {

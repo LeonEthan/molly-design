@@ -18,6 +18,12 @@ import {
 import { verifyLegalResources } from '../apps/electron/scripts/legal-resources.mjs'
 import { prepareEmbeddedHarnessSigning } from '../apps/electron/scripts/sign-embedded-harness.mjs'
 import { verifyEmbeddedHarness } from '../apps/cli/scripts/verify-embedded-harness.mjs'
+import {
+  verifyStandaloneCache,
+  inspectDarwinExternalDylibs,
+  verifyDarwinBinaryArch,
+  verifyNodeRuntimeVersion
+} from './fetch-standalone-node.mjs'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
@@ -59,46 +65,6 @@ function verifyBentoDesignDir(designDir) {
   return manifest
 }
 
-function verifyNodeRuntimeVersion(nodeBin) {
-  const versionText = run(nodeBin, ['-v']).replace(/^v/u, '')
-  const [majorStr, minorStr] = versionText.split('.')
-  const major = Number(majorStr)
-  const minor = Number(minorStr)
-  const supported =
-    (major === 22 && minor >= 19) || (major === 23 && minor >= 6) || major >= 24
-  if (!supported) {
-    throw new Error(
-      `Bundled Node runtime ${versionText} does not meet >=22.19.0 requirement`
-    )
-  }
-  return versionText
-}
-
-function inspectDarwinExternalDylibs(binaryPath) {
-  if (process.platform !== 'darwin') return []
-  const output = run('/usr/bin/otool', ['-L', binaryPath])
-  const external = []
-  for (const line of output.split('\n').slice(1)) {
-    const trimmed = line.trim().split(' ')[0]
-    if (!trimmed) continue
-    if (!trimmed.startsWith('/usr/lib/') && !trimmed.startsWith('/System/Library/')) {
-      external.push(trimmed)
-    }
-  }
-  return external
-}
-
-function verifyDarwinBinaryArch(binaryPath, targetArch) {
-  if (process.platform !== 'darwin') return
-  const expected = targetArch === 'arm64' ? 'arm64' : 'x86_64'
-  const archs = run('/usr/bin/lipo', ['-archs', binaryPath]).split(/\s+/u).filter(Boolean)
-  if (!archs.includes(expected)) {
-    throw new Error(
-      `Binary ${binaryPath} architectures [${archs.join(', ')}] do not include target ${expected}`
-    )
-  }
-}
-
 export async function packageMyGoDesktop({
   outputDir = path.join(repoRoot, 'dist', 'mygo-experimental'),
   appName = 'Molly Experimental',
@@ -107,7 +73,7 @@ export async function packageMyGoDesktop({
   arch = process.arch,
   bundleNode = true,
   requireStandaloneNode = false,
-  nodeBin = process.env.MOLLY_STANDALONE_NODE_BIN ?? process.execPath,
+  nodeBin = process.env.MOLLY_STANDALONE_NODE_BIN,
   adHocSign = process.platform === 'darwin',
   includeCliResources = true,
   cliResourcesDir = path.join(repoRoot, 'apps', 'electron', 'resources', 'cli')
@@ -119,6 +85,9 @@ export async function packageMyGoDesktop({
   if (!goarch) {
     throw new Error(`Unsupported darwin arch: ${arch}`)
   }
+
+  if (requireStandaloneNode && !bundleNode) throw new Error('Standalone Node must be bundled')
+  nodeBin ??= requireStandaloneNode ? verifyStandaloneCache(platform, arch) : process.execPath
 
   const appPath = path.join(outputDir, `${appName}.app`)
   const contentsDir = path.join(appPath, 'Contents')

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { MachineId } from '@molly/shared';
-import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+import { getMollyDataDir, resolveIsolatedDataPath } from '@molly/shared/node/installation-profile';
 import { z } from 'zod';
 
 export let MOLLY_AUTH_URL = process.env.MOLLY_AUTH_URL ?? process.env.LODY_AUTH_URL;
@@ -42,13 +42,29 @@ const CredentialMachineIdSchema = z
   .passthrough();
 
 function getMachineIdFilePath(): string {
-  return path.join(getMollyDataDir(), MACHINE_ID_FILE_NAME);
+  return resolveIsolatedDataPath(getMollyDataDir(), MACHINE_ID_FILE_NAME);
+}
+
+function readCommittedIdentity(file: string): string | null {
+  let fd: number;
+  try {
+    fd = fs.openSync(file, 'r');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+  try {
+    if (fs.existsSync(file + '.wx-pending') || fs.fstatSync(fd).nlink === 0) return null;
+    return fs.readFileSync(fd, 'utf8');
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 function readPersistedMachineId(): MachineId | null {
   try {
     const machineIdPath = getMachineIdFilePath();
-    const id = fs.readFileSync(machineIdPath, 'utf-8').trim();
+    const id = readCommittedIdentity(machineIdPath)?.trim();
     if (!id) return null;
     return id as MachineId;
   } catch {
@@ -57,8 +73,8 @@ function readPersistedMachineId(): MachineId | null {
 }
 
 function readCredentialMachineId(): MachineId | null {
+  const credentialsPath = resolveIsolatedDataPath(getMollyDataDir(), CREDENTIALS_FILE_NAME);
   try {
-    const credentialsPath = path.join(getMollyDataDir(), CREDENTIALS_FILE_NAME);
     const parsed = CredentialMachineIdSchema.safeParse(
       JSON.parse(fs.readFileSync(credentialsPath, 'utf-8'))
     );
@@ -69,59 +85,182 @@ function readCredentialMachineId(): MachineId | null {
   }
 }
 
-function persistMachineId(machineId: MachineId): MachineId {
+function readText(file: string): string | null {
   try {
-    const machineIdPath = getMachineIdFilePath();
-    fs.mkdirSync(path.dirname(machineIdPath), { recursive: true });
-    fs.writeFileSync(machineIdPath, machineId, { encoding: 'utf-8', mode: 0o600 });
-    if (process.platform !== 'win32') {
+    return fs.readFileSync(file, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function writeAllSync(fd: number, value: string): void {
+  const bytes = Buffer.from(value);
+  let offset = 0;
+  while (offset < bytes.length) {
+    const written = fs.writeSync(fd, bytes, offset, bytes.length - offset);
+    if (!written) throw Error('identity_short_write');
+    offset += written;
+  }
+  fs.fsyncSync(fd);
+}
+
+function durableCreate(file: string, value: string): void {
+  const fd = fs.openSync(file, 'wx', 0o600);
+  try {
+    writeAllSync(fd, value);
+  } catch (error) {
+    fs.closeSync(fd);
+    fs.unlinkSync(file);
+    throw error;
+  }
+  fs.closeSync(fd);
+}
+
+function acquireIdentityLock(file: string): number {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    try {
+      const fd = fs.openSync(file, 'wx', 0o600);
       try {
-        fs.chmodSync(machineIdPath, 0o600);
-      } catch {
-        // best effort
+        fs.writeFileSync(fd, String(process.pid));
+      } catch (error) {
+        fs.closeSync(fd);
+        fs.unlinkSync(file);
+        throw error;
+      }
+      return fd;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    const owner = readText(file);
+    if (owner === null) continue;
+    const pid = Number(owner);
+    const stat = fs.lstatSync(file, { throwIfNoEntry: false });
+    if (!stat) continue;
+    let stale = !pid && Date.now() - stat.mtimeMs > 30000;
+    if (Number.isSafeInteger(pid) && pid > 0) {
+      try {
+        process.kill(pid, 0);
+      } catch (error) {
+        stale = (error as NodeJS.ErrnoException).code === 'ESRCH';
       }
     }
-    return machineId;
-  } catch {
-    return readPersistedMachineId() ?? machineId;
+    if (stale && readText(file) === owner) {
+      const recovery = file + '.reap';
+      const guard = acquireIdentityLock(recovery);
+      try {
+        const latest = fs.lstatSync(file, { throwIfNoEntry: false });
+        if (latest?.ino === stat.ino && latest.ctimeMs === stat.ctimeMs && readText(file) === owner)
+          fs.unlinkSync(file);
+      } finally {
+        fs.closeSync(guard);
+        fs.unlinkSync(recovery);
+      }
+      continue;
+    }
+    if (Date.now() >= deadline) throw Error('identity_lock_busy');
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
   }
 }
 
-function createMachineId(machineId: MachineId): MachineId {
+export function publishIdentity(
+  file: string,
+  valid: (raw: string) => boolean,
+  generate: () => string,
+  preferred?: () => string | null
+): string {
+  const root = path.dirname(file);
+  const sibling = (suffix: string) => resolveIsolatedDataPath(root, path.basename(file) + suffix);
+  const pending = sibling('.wx-pending');
+  const desired = preferred?.();
+  const existing = readCommittedIdentity(file);
+  if (
+    existing !== null &&
+    valid(existing) &&
+    (!desired || desired === existing.trim()) &&
+    !fs.existsSync(pending)
+  )
+    return existing;
+  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  const lock = sibling('.init.lock');
+  const temp = sibling('.' + crypto.randomUUID() + '.tmp');
+  const fd = acquireIdentityLock(lock);
   try {
-    const machineIdPath = getMachineIdFilePath();
-    fs.mkdirSync(path.dirname(machineIdPath), { recursive: true });
-    fs.writeFileSync(machineIdPath, machineId, {
-      encoding: 'utf-8',
-      mode: 0o600,
-      flag: 'wx',
-    });
-    return machineId;
-  } catch {
-    // Another CLI may win first creation. Re-read so every concurrent process uses its value.
-    return readPersistedMachineId() ?? machineId;
+    const raw = readText(file);
+    const marker = readText(pending);
+    let expected: unknown;
+    if (marker !== null) {
+      try {
+        expected = JSON.parse(marker).expectedValue;
+      } catch {
+        expected = undefined;
+      }
+    }
+    const priority = preferred?.();
+    if (
+      raw !== null &&
+      valid(raw) &&
+      (!priority || priority === raw.trim()) &&
+      (marker === null || expected === raw)
+    ) {
+      if (marker !== null) {
+        const targetFd = fs.openSync(file, 'r+');
+        try {
+          fs.fsyncSync(targetFd);
+        } finally {
+          fs.closeSync(targetFd);
+        }
+        fs.unlinkSync(pending);
+      }
+      return raw;
+    }
+    const value =
+      priority ?? (typeof expected === 'string' && valid(expected) ? expected : generate());
+    durableCreate(temp, value);
+    if (raw !== null || marker !== null || priority) {
+      fs.renameSync(temp, file);
+      if (marker !== null) fs.unlinkSync(pending);
+    } else {
+      try {
+        fs.linkSync(temp, file);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (['EXDEV', 'EPERM', 'ENOTSUP'].includes(code ?? '')) {
+          durableCreate(pending, JSON.stringify({ expectedValue: value }));
+          try {
+            durableCreate(file, value);
+          } catch (fallbackError) {
+            if ((fallbackError as NodeJS.ErrnoException).code !== 'EEXIST') {
+              if (!fs.lstatSync(file, { throwIfNoEntry: false })) fs.unlinkSync(pending);
+              throw fallbackError;
+            }
+          }
+          fs.unlinkSync(pending);
+        } else if (code !== 'EEXIST') throw error;
+      }
+    }
+    const published = readText(file);
+    if (published === null || !valid(published)) throw Error('invalid_published_identity');
+    return published;
+  } finally {
+    fs.rmSync(temp, { force: true });
+    fs.closeSync(fd);
+    fs.unlinkSync(lock);
   }
 }
 
-/**
- * Returns the installation-scoped machine ID, migrating the credential-bound
- * identity or creating and persisting a UUID on first use. The historical
- * name is retained for callers.
- */
 export function getSystemMachineId(): MachineId | null {
   try {
-    const persisted = readPersistedMachineId();
-    const credentialMachineId = readCredentialMachineId();
-    // Cached auth is already the runtime's machine identity. Keep telemetry and future pairing
-    // aligned with it, including when a buggy release created a conflicting UUID first.
-    if (credentialMachineId && credentialMachineId !== persisted) {
-      return persistMachineId(credentialMachineId);
-    }
-    if (persisted) return persisted;
-
-    return createMachineId(crypto.randomUUID() as MachineId);
-  } catch {
-    return null;
+    return publishIdentity(
+      getMachineIdFilePath(),
+      (raw) => !!raw.trim(),
+      () => crypto.randomUUID(),
+      readCredentialMachineId
+    ).trim() as MachineId;
+  } catch (error) {
+    if (process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT === '1') throw error;
+    return readPersistedMachineId() ?? readCredentialMachineId();
   }
 }
 
@@ -137,6 +276,5 @@ export async function getOrCreateStableMachineIdAsync(): Promise<MachineId> {
   const machineId = await getSystemMachineIdAsync();
   if (machineId) return machineId;
 
-  // Preserve the existing best-effort behavior if the persisted ID cannot be read.
-  return createMachineId(crypto.randomUUID() as MachineId);
+  throw Error('machine_identity_unavailable');
 }

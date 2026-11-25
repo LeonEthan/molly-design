@@ -5,6 +5,10 @@ export const DEFAULT_GC_TARGET_BYTES = 900 * 1024 ** 2;
 export type TurnDiffCompression = 'zstd' | 'gzip';
 
 export interface TurnDiffStoreOptions {
+  readonly isolatedDataRoot?: string;
+  readonly isolatedRootCanonicalPath?: string;
+  readonly isolatedRootDev?: string;
+  readonly isolatedRootIno?: string;
   readonly dbPath: string;
   readonly retentionDays?: number;
   readonly maxStorageBytes?: number;

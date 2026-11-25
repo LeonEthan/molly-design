@@ -15,6 +15,7 @@ import {
 } from '@molly/shared/node/local-ipc';
 import {
   getLocalIpcSocketServersForTest,
+  verifySupervisorOwnedStartupLock,
   startLocalIpcSocketServers,
   stopLocalIpcSocketServers,
 } from '../src/lib/local-ipc-socket-server';
@@ -348,4 +349,20 @@ describe('local IPC socket server', () => {
       payload: { ok: false, error: 'payload_too_large' },
     });
   });
+});
+
+it('verifies the two-line supervisor lock without changing its bytes', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'molly-owner-'));
+  const lock = path.join(root, 'daemon.lock');
+  const content = process.pid + '\ninstance\n';
+  try {
+    fs.writeFileSync(lock, content);
+    verifySupervisorOwnedStartupLock(lock, process.pid, 'instance');
+    expect(() => verifySupervisorOwnedStartupLock(lock, process.pid, 'wrong')).toThrow(
+      'local_ipc_lock_owner_mismatch'
+    );
+    expect(fs.readFileSync(lock, 'utf8')).toBe(content);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

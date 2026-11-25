@@ -49,6 +49,8 @@ jobs:
         with:
           node-version: '22'
       - run: pnpm install --frozen-lockfile
+      - name: Prepare workspace artifacts for Node-backed Go tests
+        run: pnpm --dir apps/cli run prepare:design-authoring
       - name: Verify Node-backed shell fixtures
         run: go test -v -count=1 ./internal/shell -run 'TestWorkerChildEnvironment|TestRecoveryWorkerFrames|TestOffscreenTileWaitsForImageDecodingWithoutAnimationFrames'
       - name: Verify real Bento worker

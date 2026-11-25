@@ -531,6 +531,7 @@ func (p *workerProcess) kill() {
 }
 
 type DesignWorkerClient struct {
+	stderr       io.Writer
 	nodeBin      string
 	entryJS      string
 	dataDir      string
@@ -599,7 +600,7 @@ func (w *DesignWorkerClient) startLocked() (*workerProcess, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd.Stderr = io.Discard
+	cmd.Stderr = w.stderr
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}

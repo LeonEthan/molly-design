@@ -230,6 +230,12 @@ func TestChunkedBentoFlushRealWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if os.Getenv("MOLLY_TEST_REAL_BENTO_WORKER") == "1" {
+		matrix := filepath.Join(root, "packages", "design-authoring", "src", "generated", "capability-matrix-bytes.ts")
+		if _, err := os.Stat(matrix); err != nil {
+			t.Fatalf("run pnpm --dir apps/cli run prepare:design-authoring before testing the real worker: %v", err)
+		}
+	}
 	cli := filepath.Join(root, "apps", "cli")
 	loader := filepath.ToSlash(filepath.Join(cli, "node_modules", "tsx", "dist", "loader.mjs"))
 	for _, dependency := range []string{loader, filepath.Join(root, "packages", "components", "node_modules", "jsdom", "package.json")} {
@@ -248,6 +254,7 @@ func TestChunkedBentoFlushRealWorker(t *testing.T) {
 	t.Setenv("NODE_OPTIONS", "--import="+loaderURL.String())
 	dataDir := t.TempDir()
 	worker := NewDesignWorkerClientWithDataDir(node, filepath.Join(cli, "src", "design-entry.ts"), dataDir)
+	worker.stderr = os.Stderr
 	defer worker.Close()
 	f := newUploadFixture(t, func(id string, r DesignSaveRequest) (DesignSaveResult, error) {
 		raw, err := worker.Request(t.Context(), map[string]any{"operation": "save", "sessionId": id, "baseRevisionId": r.BaseRevisionID, "content": map[string]any{"doc": r.Doc, "assets": r.Assets}}, r.BeforeSend)
@@ -264,13 +271,14 @@ func TestChunkedBentoFlushRealWorker(t *testing.T) {
 	}
 	file := filepath.Join(t.TempDir(), "fixture.mjs")
 	script := `
+import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { crc32,deflateSync } from 'node:zlib';
 import { createInterface } from 'node:readline';
 const [root,origin,id] = process.argv.slice(2);
-const require=createRequire(root+'/packages/components/package.json');
+const require=createRequire(join(root,'packages/components/package.json'));
 const {JSDOM}=require('jsdom');
 const {window}=new JSDOM('<body></body>',{url:origin+'/editor.html'});
 for(const prop of ['window','document','location','MutationObserver','AbortController','HTMLElement','HTMLInputElement','HTMLTextAreaElement','CustomEvent','Event','Element','Node','HTMLCanvasElement'])globalThis[prop]=prop==='window'?window:window[prop];
@@ -289,7 +297,7 @@ window.fetch=async(url,init)=>{
 };
 ` + BuildCanvasPreloadScript(f.s) + `
 globalThis.fetch=window.fetch;
-const {createProductSession}=await import(pathToFileURL(root+'/packages/design-bento/src/product-session.ts'));
+const {createProductSession}=await import(pathToFileURL(join(root,'packages/design-bento/src/product-session.ts')));
 const initial=` + string(raw) + `;
 const doc=initial.doc;
 const assets={};

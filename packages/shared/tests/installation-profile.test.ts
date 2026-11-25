@@ -36,7 +36,7 @@ describe('installation profile', () => {
     const stable = getInstallationProfile('local', 'stable');
     expect(preview.desktopAppId).not.toBe(stable.desktopAppId);
     expect(preview.desktopProtocol).not.toBe(stable.desktopProtocol);
-    expect(getMollyDataDir('local', '/home/alice')).toBe('/home/alice/.molly-preview');
+    expect(getMollyDataDir('local', '/home/alice')).toBe(path.join('/home/alice', '.molly-preview'));
     expect(getLocalWorkspaceCatalogPath('local')).toContain('.molly-preview');
     expect(getLocalControlSocketPath('local')).toContain('molly-preview-control');
     expect(getLocalLoroDataPlaneSocketPath('local')).toContain('molly-preview-loro-data-plane');

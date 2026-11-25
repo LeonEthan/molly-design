@@ -65,7 +65,7 @@ jobs:
         run: |
           pnpm --dir packages/shared exec vitest run tests/installation-profile.test.ts tests/local-ipc.test.ts tests/local-cli-host-lease.test.ts tests/file-lock.test.ts 2>&1 | Tee-Object shared.log
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          pnpm --dir apps/cli test cli-platform operation-store sqlite-repo-store local-supervisor-control 2>&1 | Tee-Object cli.log
+          pnpm --dir apps/cli test src/lib/cli-platform.test.ts tests/cli-platform.test.ts src/orchestration/operation-store.test.ts src/lib/loro/sqlite-repo-store.test.ts src/lib/local-supervisor-control.test.ts 2>&1 | Tee-Object cli.log
           exit $LASTEXITCODE
       - uses: actions/upload-artifact@v4
         if: always()

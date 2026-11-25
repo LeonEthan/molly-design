@@ -6,11 +6,11 @@ Translation: pending
 
 ## Abstract
 
-Molly needs to bound custom-scheme uploads before MyGo copies the body into Go memory and to check public browser destinations at connection time. The proposed MyGo patch adds request and aggregate byte limits and gives a desktop session its own proxy configuration. Local tests cover byte accounting, proxy destination pinning and installation on a macOS data store. Browser traffic on each supported platform still needs verification before enabling public browsing.
+Molly needs to bound custom-scheme uploads before MyGo copies the body into Go memory and to check public browser destinations at connection time. The proposed MyGo patch adds request and aggregate byte limits and gives a desktop session its own proxy configuration. Local tests cover byte accounting, proxy destination pinning and installation on a macOS data store. The macOS native transport passed its opt-in test. The remaining G4 gates are recorded below.
 
 ## Patch identity
 
-The local branch `feat/scheme-body-limits-and-session-proxy` contains commit `3a0110a8ee88f29aa9a827279cf6d4c4c71019a3`, based on `v0.10.0` (`ebde9399baf2734b3361856a53f4036859973d1d`). The diff changes 18 files with 560 insertions and 53 deletions. The exported email patch is `g4-g5.patch` in the temporary clone. Its SHA-256 is `37b25540d8dee51de3b1001ad499da4524ffaf26c6fef7e7008cee89324a6a22`.
+The initial fork patch on `feat/scheme-body-limits-and-session-proxy` was commit `3a0110a8ee88f29aa9a827279cf6d4c4c71019a3`, based on `v0.10.0` (`ebde9399baf2734b3361856a53f4036859973d1d`). The diff changes 18 files with 560 insertions and 53 deletions. The exported email patch is `g4-g5.patch` in the temporary clone. Its SHA-256 is `37b25540d8dee51de3b1001ad499da4524ffaf26c6fef7e7008cee89324a6a22`.
 
 ## Draft upstream PR
 
@@ -47,12 +47,12 @@ The tests cover 5 MiB request and 32 MiB aggregate limits, reservation recovery 
 
 Reuse the existing hostname/IP classifications and resolver interface. The existing public dialer pins DNS answers, but its concrete dialer prevents local transport substitution and its IP policy permits some IPv6 transition addresses. The loopback proxy therefore validates a request's complete answer set and passes only the selected numeric endpoint to its dial transport. Go's reverse proxy handles HTTP header forwarding and removal of hop-by-hop credentials. Both new listeners and credentials belong to one proxy instance.
 
-Molly pins the [fork branch](https://github.com/LeonEthan/mygo/tree/feat/scheme-body-limits-and-session-proxy) at [commit 3a0110a8ee88f29aa9a827279cf6d4c4c71019a3](https://github.com/LeonEthan/mygo/commit/3a0110a8ee88f29aa9a827279cf6d4c4c71019a3). The upstream PR text above remains a draft.
-
-```go
-replace github.com/egoist/mygo => github.com/LeonEthan/mygo v0.10.1-0.20261125123958-3a0110a8ee88
-```
+Step 2 opened an upstream draft from `pr/scheme-body-limits-and-session-proxy` @ `610f4d50`. Step 3A pins `github.com/LeonEthan/mygo v0.10.1-0.20261125154445-f1967691cfde` from `feat/scheme-body-limits-proxy-rules`. [egoist/mygo#2360](https://github.com/egoist/mygo/pull/2360)
 
 The desktop installs scheme limits before registering handlers. Live macOS WKWebView tests received HTTP 413 for a request one byte above 5 MiB and HTTP 503 for one byte above 32 MiB in flight. Neither rejection reached the design handler. A second batch held the full 32 MiB simultaneously after success, HTTP 500 and cancellation released the first batch.
 
-**G4 remains blocked on macOS.** WKWebView loaded a simulated public origin through the authenticated proxy, and the origin received no proxy credentials. A hostname resolving to loopback was denied before dialing. In a separate literal-loopback check, the private HTTP server received one request even though the browser reported a fetch error. The desktop therefore leaves its public browser adapter unset on macOS, including with explicit opt-in. The native transport test exercises the proxied session directly. Closing the host destroyed the window and closed the listener. MyGo owns the named data store until process exit. Windows still requires native WebView2 verification.
+The opt-in macOS arm64 WKWebView test passed with WKContentRuleList and PublicEgressProxy. Requests to `http://127.0.0.1`, `http://localhost`, `http://[::1]` and `http://rebind.test:80` produced zero private-server hits. The simulated public page loaded and its origin received no `Proxy-Authorization`.
+
+G4 remains BLOCKED pending real-host Windows WebView2 verification, enforcement under registry overrides and controlled-account OAuth/Cookie injection. Default desktop builds keep `publicBrowser.navigate` disabled.
+
+Step 3B adds the [macOS release workflow](../../../../.github/workflows/release-mygo-macos.yml) and API-key notarization and optional Sparkle Info.plist settings in [the packaging script](../../../../scripts/package-mygo-desktop.mjs). Release and update verification remain pending. [Sparkle updater parity](2026-11-25-mygo-sparkle-updater-parity.zh.md)

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"net"
@@ -600,7 +601,7 @@ func TestMollyBridgeAllowlistDocGenAndConservativeGates(t *testing.T) {
 	}
 
 	t.Setenv("MOLLY_MYGO_ENABLE_UNTRUSTED_BROWSER", "1")
-	b := newDesktopBridge(DesktopOptions{EnablePublicBrowser: true, AppVersion: "0.2.0-test"}, BridgeConfig{DataDir: dataDir})
+	b := newDesktopBridge(DesktopOptions{AppVersion: "0.2.0-test"}, BridgeConfig{DataDir: dataDir})
 	gen := b.CurrentDocGeneration()
 	syncedGen, err := b.SyncDocGen(context.Background())
 	if err != nil || syncedGen != gen {
@@ -710,6 +711,9 @@ func shortTempDir(t *testing.T) string {
 }
 
 func TestSessionControlSendStreamsNDJSONAndUnwrapsJSONEnvelope(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX unix-socket control transport test; Windows uses named pipes")
+	}
 	sockDir := shortTempDir(t)
 	sockPath := filepath.Join(sockDir, "ctrl.sock")
 
@@ -921,6 +925,9 @@ func TestProfileIsolationWindowsPipeHashAndDirtyReloadGuard(t *testing.T) {
 }
 
 func TestLocalProjectsPositionalForwardingAndMachineIDInjection(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX unix-socket control transport test; Windows uses named pipes")
+	}
 	sockDir := shortTempDir(t)
 	ctrlSock := filepath.Join(sockDir, "ctrl.sock")
 	probeSock := filepath.Join(sockDir, "probe.sock")
@@ -1039,4 +1046,48 @@ func TestLocalProjectsPositionalForwardingAndMachineIDInjection(t *testing.T) {
 		t.Fatalf("unexpected forwarded /project-control requests: %#v", requests)
 	}
 	mu.Unlock()
+}
+
+type desktopTestBrowser struct{ url string }
+
+func (h *desktopTestBrowser) OpenAndNavigate(_ context.Context, _ string, url string) error {
+	h.url = url
+	return nil
+}
+func (*desktopTestBrowser) CloseBrowser(string) {}
+func (*desktopTestBrowser) CloseAll()           {}
+
+func TestPublicBrowserDesktopOptIn(t *testing.T) {
+	for _, osName := range []string{"darwin", "linux", "windows"} {
+		for _, enabled := range []bool{false, true} {
+			for _, fail := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/enabled=%t/fail=%t", osName, enabled, fail), func(t *testing.T) {
+					opts := DesktopOptions{EnablePublicBrowser: enabled}
+					b := newDesktopBridge(opts, BridgeConfig{DataDir: t.TempDir()})
+					host := &desktopTestBrowser{}
+					b.enableDesktopPublicBrowser(opts, osName, func() (PublicBrowserHost, error) {
+						if !enabled || osName != "darwin" {
+							t.Fatal("unexpected host setup")
+						}
+						if fail {
+							return nil, errors.New("setup failed")
+						}
+						return host, nil
+					})
+					result, err := b.Invoke(t.Context(), b.CurrentDocGeneration(), "publicBrowser.navigate", []json.RawMessage{json.RawMessage(`{"browserId":"g4","url":"https://8.8.8.8/"}`)})
+					if err != nil {
+						t.Fatal(err)
+					}
+					got := result.(map[string]any)
+					if enabled && osName == "darwin" && !fail {
+						if got["ok"] != true || host.url != "https://8.8.8.8/" {
+							t.Fatal(got)
+						}
+					} else if got["error"] != "public_browser_disabled_pending_g4" {
+						t.Fatal(got)
+					}
+				})
+			}
+		}
+	}
 }

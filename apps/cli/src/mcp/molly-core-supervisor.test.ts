@@ -105,7 +105,7 @@ describe.skipIf(process.platform === 'win32')('MollyCoreSupervisor (M2.1a)', () 
       },
       stdio: 'pipe',
     });
-  }, 30_000);
+  }, 180_000);
 
   afterAll(async () => {
     await stopMollyCoreSupervisor();

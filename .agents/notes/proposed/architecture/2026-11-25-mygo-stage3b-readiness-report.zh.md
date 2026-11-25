@@ -7,7 +7,7 @@ Related: [Stage 3A 设计](2026-11-25-mygo-stack-stage3a-design.zh.md) · [Stage
 
 ## 摘要
 
-默认生产壳继续使用 Electron，Stage 3B 切换结论为 **HOLD**。macOS arm64 按本轮所有者显式批准的 Stage 3B 双层修订口径通过 G3，按 Stage 3A 原口径仍为 PARTIAL。G5 请求体预算门禁通过。G1 尚待 OAuth 轮换交接、CI 公证及更新链路验证。G4 因 WKWebView 字面回环绕过代理、WebView2 注册表参数可覆盖代理配置而阻塞。切换还需 Windows WebView2 真机验证通过，并等待 MyGo 上游补丁合并或形成明确的依赖决策。
+默认生产壳继续使用 Electron，Stage 3B 切换结论为 **HOLD**。macOS arm64 按本轮所有者显式批准的 Stage 3B 双层修订口径通过 G3，按 Stage 3A 原口径仍为 PARTIAL。G5 请求体预算门禁通过。G1 尚待 OAuth 轮换交接、CI 公证及更新链路验证。G4 的 macOS 传输与字面回环验证通过，整体仍待 Windows 和受控账户验证。切换还需 Windows WebView2 真机验证通过，并等待 MyGo 上游补丁合并或形成明确的依赖决策。
 
 | macOS arm64 门禁 | 结论 |
 | --- | --- |
@@ -34,6 +34,8 @@ identifier "com.molly.stage3b.acl-test" and anchor apple generic and certificate
 
 该证明覆盖经典文件钥匙串中的合成 generic password。生产旧包、实际创建凭据的进程与发布候选包仍需在升级演练中核对。本地 Developer ID 签名、Hardened Runtime、跨壳写租约和同 CFBundleIdentifier、同 TeamID 的原位替换 ACL 均通过。切换前必须先停止 Electron 发起新 OAuth 刷新，等待所有在途轮换完成并确认新令牌已落盘，再允许 MyGo 封存 v2。此单壳交接仍待验证。其余门禁为 CI 通过 Apple notarytool 完成公证，以及验证 Sparkle 或对应更新器的升级行为。
 
+Step 3B 新增 [macOS 发布工作流](../../../../.github/workflows/release-mygo-macos.yml)。[打包脚本](../../../../scripts/package-mygo-desktop.mjs) 支持使用 API 密钥公证，并可选写入 Sparkle Info.plist 配置。发布候选包的公证与实际更新仍待验证。[Sparkle 更新器对齐记录](2026-11-25-mygo-sparkle-updater-parity.zh.md)
+
 ## G3 像素门禁
 
 **Stage 3A 原口径：PARTIAL。** 两个大图夹具的跨引擎局部滑窗误差分别为 3.14/255 与 3.98/255，超过 1.5/255。WKWebView 默认保留瓦片外元素投下的阴影，纯 `bleedPx=0` 无裁切变异实测为 0/255，未触发门禁。[Stage 3A 实测记录](2026-11-25-mygo-stage3a-gate-report.zh.md)
@@ -42,20 +44,13 @@ identifier "com.molly.stage3b.acl-test" and anchor apple generic and certificate
 
 ## G4 公共浏览器网络隔离 — BLOCKED
 
-macOS 真机上，Go 的 `PublicEgressProxy` 与 `mygo.NewProxiedSession` 配合，通过认证代理加载了模拟公网页面。源站未收到 `Proxy-Authorization`，解析到回环地址的 DNS 重绑定主机名也在拨号前被拒绝。但 WKWebView 使用 Network.framework 的 `nw_proxy_config_create_http_connect` 时，对字面地址 `127.0.0.1` 的请求绕过了代理。浏览器报告 CORS 错误，私有回环服务器仍收到一次请求。因此 macOS 即使配置 `EnablePublicBrowser: true`，也继续禁用 `publicBrowser.navigate`，返回 `public_browser_disabled_pending_g4`。[原生代理验证](../../../../internal/shell/g4_browser_proxy_test.go)
+macOS arm64 显式启用的真机 WKWebView 测试通过。WKContentRuleList 与 PublicEgressProxy 配合，阻止了对 `http://127.0.0.1`、`http://localhost`、`http://[::1]` 和 `http://rebind.test:80` 的请求，私有服务端收到 0 次访问。模拟公网页面成功加载，源站未收到 `Proxy-Authorization`。[原生验证](../../../../internal/shell/g4_browser_proxy_test.go)
 
-Windows 上 WebView2 可追加注册表配置的浏览器参数，覆盖 `--proxy-server`；Cookie 查询仍可成功。代理强制执行尚待验证，Windows 与未验证的 Linux 同样禁用桌面公共浏览器。
-
-1. macOS 需将代理与 WebKit 的 `WKContentRuleList` 配合，在子资源请求进入网络栈之前阻止字面回环或私有 IP、`localhost` 和 `*.local`，并以私有服务器未收到请求验证隔离。
-2. 在 `windows-latest` 运行现有工作流，补齐 Windows WebView2 真机宿主及 OAuth/Cookie 验证并记录绿色运行。[Windows 工作流](../../../../.github/workflows/mygo-windows-verify.yml)
+macOS 传输与字面回环层为 PASS。整体 G4 仍为 BLOCKED，默认桌面继续禁用 `publicBrowser.navigate`。待验证项包括 Windows WebView2 真机宿主、注册表参数覆盖时的代理强制执行，以及受控账户 OAuth/Cookie 注入。[Windows 工作流](../../../../.github/workflows/mygo-windows-verify.yml)
 
 ## G5 原生请求体预算 — PASS（macOS 真机）
 
-`go.mod` 固定了下列替换版本，对应 LeonEthan/mygo 的 `feat/scheme-body-limits-and-session-proxy` 分支提交 `3a0110a8ee88f29aa9a827279cf6d4c4c71019a3`。上游 PR 草稿已备妥，尚未提交至 egoist/mygo。[上游补丁及草稿](2026-11-25-mygo-upstream-g4-g5-patch.md)
-
-```go
-replace github.com/egoist/mygo => github.com/LeonEthan/mygo v0.10.1-0.20261125123958-3a0110a8ee88
-```
+Step 2 上游草稿 PR 来自 `pr/scheme-body-limits-and-session-proxy` @ `610f4d50`。Step 3A 的 `go.mod` 固定 `github.com/LeonEthan/mygo v0.10.1-0.20261125154445-f1967691cfde`，对应分支 `feat/scheme-body-limits-proxy-rules`。[egoist/mygo#2360](https://github.com/egoist/mygo/pull/2360)
 
 macOS 真机上，单请求达到 5 MiB + 1 B 时返回 HTTP 413，在途请求体合计达到 32 MiB + 1 B 时返回 HTTP 503。两次拒绝均发生在到达 `DesignProtocolHost` 之前。首批请求经历正常完成、错误和取消后，第二批请求再次同时占用了完整的 32 MiB 预算。[原生预算验证](../../../../internal/shell/g5_budget_test.go)
 

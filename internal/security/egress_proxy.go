@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -211,4 +212,45 @@ func (p *PublicEgressProxy) destination(ctx context.Context, host string) (netip
 		}
 	}
 	return ips[0].Unmap(), nil
+}
+
+type browserBlockRule struct {
+	Trigger struct {
+		URLFilter string `json:"url-filter"`
+	} `json:"trigger"`
+	Action struct {
+		Type string `json:"type"`
+	} `json:"action"`
+}
+
+func PublicBrowserContentRulesJSON() string {
+	var rules []browserBlockRule
+	add := func(filter string) {
+		var r browserBlockRule
+		r.Trigger.URLFilter = filter
+		r.Action.Type = "block"
+		rules = append(rules, r)
+	}
+	for _, filter := range []string{"^[^h]", "^h[^t]", "^ht[^t]", "^htt[^p]", "^http[^s:]", "^https[^:]"} {
+		add(filter)
+	}
+	octet := `[0-9]+`
+	two := octet + `\.` + octet
+	three := two + `\.` + octet
+	for _, host := range []string{
+		`127\.` + three, `10\.` + three, `0\.0\.0\.0`,
+		`169\.254\.` + two, `192\.168\.` + two,
+		`172\.1[6-9]\.` + two, `172\.2[0-9]\.` + two, `172\.3[01]\.` + two,
+		`100\.6[4-9]\.` + two, `100\.[7-9][0-9]\.` + two, `100\.1[01][0-9]\.` + two, `100\.12[0-7]\.` + two,
+		`([^./:@?#]+\.)*localhost`, `([^./:@?#]+\.)+local`, `host\.docker\.internal`,
+		`\[::1?\]`, `\[fe[89ab][0-9a-f]:[0-9a-f:.]*\]`, `\[f[cd][0-9a-f][0-9a-f]:[0-9a-f:.]*\]`, `\[::ffff:[0-9a-f:.]+\]`,
+	} {
+		add(`^https?://([^/@?#]*@)?` + host + `\.?[:/?#]`)
+		add(`^https?://([^/@?#]*@)?` + host + `\.?$`)
+	}
+	encoded, err := json.Marshal(rules)
+	if err != nil {
+		panic(err)
+	}
+	return string(encoded)
 }

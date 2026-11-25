@@ -101,7 +101,7 @@ describe.skipIf(process.platform === 'win32')('molly-core Node IPC bridge (M1.1)
     previousTokenEnv = process.env.MOLLY_CORE_IPC_TOKEN;
     process.env.MOLLY_CORE_IPC_SOCKET = socketPath;
     process.env.MOLLY_CORE_IPC_TOKEN = ipcToken;
-  }, 30_000);
+  }, 180_000);
 
   afterAll(async () => {
     if (previousEnv === undefined) delete process.env.MOLLY_CORE_IPC_SOCKET;

@@ -99,6 +99,11 @@ export function signingOptions(args, env = process.env) {
       'no-sign': { type: 'boolean' },
       notarize: { type: 'boolean' },
       'notary-profile': { type: 'string' },
+      'notary-key': { type: 'string' },
+      'notary-key-id': { type: 'string' },
+      'notary-issuer': { type: 'string' },
+      'sparkle-feed-url': { type: 'string' },
+      'sparkle-public-key': { type: 'string' },
       out: { type: 'string' },
       'no-node': { type: 'boolean' },
       'require-standalone-node': { type: 'boolean' }
@@ -122,16 +127,13 @@ export function signingOptions(args, env = process.env) {
   if (values.notarize) {
     if (!signIdentity) throw new Error('Notarization requires Developer ID signing')
     if (values['notary-profile']) notaryArgs = ['--keychain-profile', values['notary-profile']]
-    else if (env.APPLE_API_KEY && env.APPLE_API_KEY_ID && env.APPLE_API_ISSUER)
-      notaryArgs = [
-        '--key',
-        env.APPLE_API_KEY,
-        '--key-id',
-        env.APPLE_API_KEY_ID,
-        '--issuer',
-        env.APPLE_API_ISSUER
-      ]
-    else
+    else {
+      const key = values['notary-key'] ?? env.APPLE_API_KEY
+      const id = values['notary-key-id'] ?? env.APPLE_API_KEY_ID
+      const issuer = values['notary-issuer'] ?? env.APPLE_API_ISSUER
+      if (key && id && issuer) notaryArgs = ['--key', key, '--key-id', id, '--issuer', issuer]
+    }
+    if (!notaryArgs)
       throw new Error(
         'Missing notarization credentials: provide --notary-profile or Apple API key credentials'
       )
@@ -140,10 +142,51 @@ export function signingOptions(args, env = process.env) {
     signIdentity,
     notaryArgs,
     adHocSign: !signIdentity && !values['no-sign'],
+    sparkleFeedUrl: values['sparkle-feed-url'],
+    sparklePublicKey: values['sparkle-public-key'],
     outputDir: values.out,
     bundleNode: !values['no-node'],
     requireStandaloneNode: values['require-standalone-node']
   }
+}
+
+export function renderInfoPlist({ appName, bundleId, sparkleFeedUrl, sparklePublicKey }) {
+  const escape = (value) =>
+    value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  const metadata = [
+    ['SUFeedURL', sparkleFeedUrl],
+    ['SUPublicEDKey', sparklePublicKey]
+  ]
+    .filter(([, value]) => value)
+    .map(([key, value]) => `  <key>${key}</key>\n  <string>${escape(value)}</string>\n`)
+    .join('')
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>${escape(appName)}</string>
+  <key>CFBundleDisplayName</key>
+  <string>${escape(appName)}</string>
+  <key>CFBundleIdentifier</key>
+  <string>${escape(bundleId)}</string>
+  <key>CFBundleVersion</key>
+  <string>0.2.0</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.2.0</string>
+  <key>CFBundleExecutable</key>
+  <string>${escape(appName)}</string>
+  <key>CFBundleIconFile</key>
+  <string>icon.icns</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+${metadata}</dict>
+</plist>
+`
 }
 
 function dirSizeBytes(target) {
@@ -181,9 +224,13 @@ export async function packageMyGoDesktop({
   adHocSign = process.platform === 'darwin',
   signIdentity,
   notaryArgs,
+  sparkleFeedUrl,
+  sparklePublicKey,
   includeCliResources = true,
   cliResourcesDir = path.join(repoRoot, 'apps', 'electron', 'resources', 'cli')
 } = {}) {
+  if (notaryArgs && (!signIdentity || process.platform !== 'darwin'))
+    throw new Error('Notarization requires Developer ID signing on macOS')
   if (platform !== 'darwin') {
     throw new Error(
       `Experimental MyGo .app packager currently targets darwin only (got ${platform})`
@@ -308,33 +355,7 @@ export async function packageMyGoDesktop({
     fs.copyFileSync(iconSrc, path.join(resourcesDir, 'icon.icns'))
   }
 
-  const infoPlist = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleName</key>
-  <string>${appName}</string>
-  <key>CFBundleDisplayName</key>
-  <string>${appName}</string>
-  <key>CFBundleIdentifier</key>
-  <string>${bundleId}</string>
-  <key>CFBundleVersion</key>
-  <string>0.2.0</string>
-  <key>CFBundleShortVersionString</key>
-  <string>0.2.0</string>
-  <key>CFBundleExecutable</key>
-  <string>${appName}</string>
-  <key>CFBundleIconFile</key>
-  <string>icon.icns</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>13.0</string>
-  <key>NSHighResolutionCapable</key>
-  <true/>
-</dict>
-</plist>
-`
+  const infoPlist = renderInfoPlist({ appName, bundleId, sparkleFeedUrl, sparklePublicKey })
   fs.writeFileSync(path.join(contentsDir, 'Info.plist'), infoPlist)
 
   let compositionProbe = null
@@ -427,9 +448,9 @@ export async function packageMyGoDesktop({
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'mygo-notary-'))
     try {
       const zip = path.join(temp, 'application.zip')
-      run('ditto', ['-c', '-k', '--keepParent', appPath, zip])
+      run('/usr/bin/ditto', ['-c', '-k', '--keepParent', appPath, zip])
       const receipt = JSON.parse(
-        run('xcrun', [
+        run('/usr/bin/xcrun', [
           'notarytool',
           'submit',
           zip,
@@ -440,7 +461,10 @@ export async function packageMyGoDesktop({
         ])
       )
       if (receipt.status !== 'Accepted') throw new Error(`Notarization status: ${receipt.status}`)
-      run('xcrun', ['stapler', 'staple', appPath])
+      run('/usr/bin/xcrun', ['stapler', 'staple', appPath])
+      run('/usr/bin/xcrun', ['stapler', 'validate', appPath])
+      run('/usr/bin/spctl', ['--assess', '--type', 'execute', '--verbose=4', appPath])
+      breakdown.notarization = { id: receipt.id, status: receipt.status, gatekeeperAccepted: true }
     } finally {
       fs.rmSync(temp, { recursive: true, force: true })
     }
@@ -450,7 +474,7 @@ export async function packageMyGoDesktop({
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  console.log(
-    JSON.stringify(await packageMyGoDesktop(signingOptions(process.argv.slice(2))), null, 2)
-  )
+  console.log = console.error
+  const report = await packageMyGoDesktop(signingOptions(process.argv.slice(2)))
+  process.stdout.write(JSON.stringify(report, null, 2) + '\n')
 }

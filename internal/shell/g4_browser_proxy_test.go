@@ -4,6 +4,7 @@ package shell
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -79,7 +81,7 @@ func TestG4PublicBrowserProxy(t *testing.T) {
 		switch h {
 		case "public.test":
 			return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
-		case "private.test":
+		case "rebind.test":
 			deniedLookups.Add(1)
 			return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
 		}
@@ -97,15 +99,26 @@ func TestG4PublicBrowserProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var h *mygoPublicBrowserHost
-	mygo.RunOnMain(func() { h, err = openMygoPublicBrowserSession(p, resolver) })
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer h.CloseAll()
+	opts := DesktopOptions{EnablePublicBrowser: true}
+	bridge := newDesktopBridge(opts, BridgeConfig{CanvasGate: NewCanvasAccessGate(), DataDir: t.TempDir()})
+	defer p.Close()
 	loaded := make(chan struct{}, 1)
+	var h *mygoPublicBrowserHost
 	mygo.RunOnMain(func() {
-		err = h.OpenAndNavigate(t.Context(), "g4", "http://public.test/")
+		bridge.enableDesktopPublicBrowser(opts, runtime.GOOS, func() (PublicBrowserHost, error) {
+			return openMygoPublicBrowserSession(p, resolver)
+		})
+		var ok bool
+		h, ok = bridge.cfg.PublicBrowserHost.(*mygoPublicBrowserHost)
+		if !ok {
+			err = fmt.Errorf("desktop opt-in did not activate protected host")
+			return
+		}
+		var result any
+		result, err = bridge.Invoke(t.Context(), bridge.CurrentDocGeneration(), "publicBrowser.navigate", []json.RawMessage{json.RawMessage(`{"browserId":"g4","url":"http://8.8.8.8/"}`)})
+		if err == nil && result.(map[string]any)["ok"] != true {
+			err = fmt.Errorf("navigate: %v", result)
+		}
 		if err == nil {
 			h.windows["g4"].Page().OnDidFinishLoad(func() {
 				select {
@@ -126,11 +139,26 @@ func TestG4PublicBrowserProxy(t *testing.T) {
 	if err != nil || title != "Molly public fixture" || publicHits.Load() == 0 {
 		t.Fatalf("title %q, origin hits %d, error %v", title, publicHits.Load(), err)
 	}
-	result, err := page.Eval("fetch('http://private.test/').then(r=>r.status,()=> 'blocked')")
-	if err != nil || (result != "blocked" && result != float64(403)) || deniedLookups.Load() == 0 || privateHits.Load() != 0 {
-		t.Fatalf("private result %v, proxy lookups %d, private origin hits %d, error %v", result, deniedLookups.Load(), privateHits.Load(), err)
+	private6 := httptest.NewUnstartedServer(private.Config.Handler)
+	private6.Listener.Close()
+	private6.Listener, err = net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Fatal(err)
 	}
-	h.CloseAll()
+	private6.Start()
+	defer private6.Close()
+	port := private.Listener.Addr().(*net.TCPAddr).Port
+	for _, target := range []string{private.URL, fmt.Sprintf("http://localhost:%d", port), private6.URL, "http://rebind.test:80"} {
+		result, err := page.Eval(fmt.Sprintf("fetch(%q, {mode:'no-cors'}).then(()=> 'loaded',()=> 'blocked')", target+"/fixture"))
+		if err != nil || result != "blocked" || privateHits.Load() != 0 {
+			t.Fatalf("%s result %v, private origin hits %d, error %v", target, result, privateHits.Load(), err)
+		}
+		t.Logf("WKWebView %s %v, private origin hits %d", target, result, privateHits.Load())
+	}
+	if deniedLookups.Load() == 0 {
+		t.Fatal("rebinding hostname did not reach proxy resolver")
+	}
+	bridge.shutdownDesktop(func() {})
 	if !window.IsDestroyed() {
 		t.Fatal("public window survived CloseAll")
 	}
@@ -139,5 +167,5 @@ func TestG4PublicBrowserProxy(t *testing.T) {
 		conn.Close()
 		t.Fatal("proxy listener survived CloseAll")
 	}
-	t.Logf("WKWebView loaded %q, denied private fetch (%v), private origin hits %d, proxy listener closed", title, result, privateHits.Load())
+	t.Logf("WKWebView loaded %q, private origin hits %d, proxy listener closed", title, privateHits.Load())
 }

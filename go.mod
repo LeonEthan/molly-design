@@ -7,6 +7,7 @@ require (
 	github.com/egoist/mygo v0.10.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-text/typesetting v0.3.5
+	github.com/google/uuid v1.6.0
 	golang.org/x/image v0.48.0
 	golang.org/x/sys v0.50.0
 	modernc.org/sqlite v1.63.0
@@ -14,7 +15,6 @@ require (
 
 require (
 	github.com/dustin/go-humanize v1.1.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -25,4 +25,4 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
-replace github.com/egoist/mygo => github.com/LeonEthan/mygo v0.10.1-0.20261125123958-3a0110a8ee88
+replace github.com/egoist/mygo => github.com/LeonEthan/mygo v0.10.1-0.20261125154445-f1967691cfde

@@ -105,3 +105,46 @@ void test('rejects a signature with a different team or missing hardened runtime
   )
   assert.throws(() => inspect(stderr.replace('(runtime)', '(adhoc)')), /Invalid Developer ID/)
 })
+
+void test('constructs notarytool credentials from flags or the release environment', async () => {
+  const { signingOptions } = await import('./package-mygo-desktop.mjs')
+  const args = ['--developer-id', '--notarize']
+  const expected = ['--key', 'test.p8', '--key-id', 'id', '--issuer', 'issuer']
+  assert.deepEqual(
+    signingOptions(
+      [...args, '--notary-key', 'test.p8', '--notary-key-id', 'id', '--notary-issuer', 'issuer'],
+      {}
+    ).notaryArgs,
+    expected
+  )
+  assert.deepEqual(
+    signingOptions(args, {
+      APPLE_API_KEY: 'test.p8',
+      APPLE_API_KEY_ID: 'id',
+      APPLE_API_ISSUER: 'issuer'
+    }).notaryArgs,
+    expected
+  )
+  for (const mode of ['--ad-hoc', '--no-sign']) {
+    assert.throws(
+      () => signingOptions([mode, '--notarize', '--notary-profile', 'test'], {}),
+      /requires Developer ID/
+    )
+  }
+})
+
+void test('renders optional Sparkle metadata into the bundle plist', async () => {
+  const { renderInfoPlist, signingOptions } = await import('./package-mygo-desktop.mjs')
+  const app = { appName: 'Molly', bundleId: 'test.molly' }
+  assert.doesNotMatch(renderInfoPlist(app), /SUFeedURL|SUPublicEDKey/)
+  const options = signingOptions(
+    ['--sparkle-feed-url', 'https://test.invalid/feed?a=1&b=2', '--sparkle-public-key', 'abc='],
+    {}
+  )
+  const plist = renderInfoPlist({ ...app, ...options })
+  assert.match(
+    plist,
+    /<key>SUFeedURL<\/key>\s*<string>https:\/\/test.invalid\/feed\?a=1&amp;b=2<\/string>/
+  )
+  assert.match(plist, /<key>SUPublicEDKey<\/key>\s*<string>abc=<\/string>/)
+})

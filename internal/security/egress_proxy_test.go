@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -149,5 +151,63 @@ func TestEgressTLSOverConnect(t *testing.T) {
 	b, err := io.ReadAll(resp.Body)
 	if err != nil || string(b) != "tls" {
 		t.Fatal(string(b), err)
+	}
+}
+
+func TestPublicBrowserContentRules(t *testing.T) {
+	var rules []browserBlockRule
+	if err := json.Unmarshal([]byte(PublicBrowserContentRulesJSON()), &rules); err != nil {
+		t.Fatal(err)
+	}
+	var filters []*regexp.Regexp
+	for _, rule := range rules {
+		if rule.Action.Type != "block" || rule.Trigger.URLFilter == "" {
+			t.Fatalf("invalid rule %+v", rule)
+		}
+		filters = append(filters, regexp.MustCompile("(?i)"+rule.Trigger.URLFilter))
+	}
+	for want, urls := range map[bool][]string{
+		true: {
+			"http://127.1.2.3/",
+			"http://localhost:1234/",
+			"https://one.localhost./",
+			"http://[::1]/",
+			"http://[::]/",
+			"http://0.0.0.0/",
+			"http://169.254.169.254/",
+			"http://[fe80::1]/",
+			"http://10.1.2.3/",
+			"http://172.31.1.2/",
+			"http://192.168.1.1/",
+			"http://100.127.1.2/",
+			"http://printer.local/",
+			"http://host.docker.internal/",
+			"http://[fd00::1]/",
+			"http://[fc00::1]/",
+			"http://[::ffff:7f00:1]/",
+			"file:///tmp/test",
+			"ftp://public.test/",
+			"gopher://public.test/",
+		},
+		false: {
+			"https://example.com",
+			"http://public.test:8080/page",
+			"https://10-news.example.com",
+			"https://172.15.0.1/",
+			"https://127.0.0.1.example.com/",
+		},
+	} {
+		for _, u := range urls {
+			blocked := false
+			for _, filter := range filters {
+				if filter.MatchString(u) {
+					blocked = true
+					break
+				}
+			}
+			if blocked != want {
+				t.Errorf("%s blocked=%v, want %v", u, blocked, want)
+			}
+		}
 	}
 }

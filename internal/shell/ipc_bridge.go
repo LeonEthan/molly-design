@@ -96,6 +96,7 @@ type PublicBrowserRecord struct {
 type PublicBrowserHost interface {
 	OpenAndNavigate(ctx context.Context, browserID string, targetURL string) error
 	CloseBrowser(browserID string)
+	CloseAll()
 }
 
 type DesignBounds struct {

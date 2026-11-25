@@ -78,7 +78,7 @@ type mygoPublicBrowserHost struct {
 }
 
 func openMygoPublicBrowserSession(proxy *security.PublicEgressProxy, resolver security.IPResolver) (*mygoPublicBrowserHost, error) {
-	session, err := mygo.NewProxiedSession("molly-public-browser", mygo.SessionProxyConfig{HTTPProxy: proxy.URL, Username: proxy.Username, Password: proxy.Password})
+	session, err := mygo.NewProxiedSession("molly-public-browser", mygo.SessionProxyConfig{HTTPProxy: proxy.URL, Username: proxy.Username, Password: proxy.Password, ContentRulesJSON: security.PublicBrowserContentRulesJSON()})
 	if err == nil {
 		_, err = session.Cookies.List(mygo.CookieFilter{URL: "https://molly.invalid/"})
 	}
@@ -164,6 +164,26 @@ func newDesktopBridge(opts DesktopOptions, cfg BridgeConfig) *MollyBridge {
 	cfg.AppVersion = opts.AppVersion
 	cfg.PublicBrowserHost = nil
 	return NewMollyBridge(cfg)
+}
+
+func (b *MollyBridge) enableDesktopPublicBrowser(opts DesktopOptions, targetOS string, open func() (PublicBrowserHost, error)) {
+	if targetOS != "darwin" || !opts.EnablePublicBrowser {
+		return
+	}
+	host, err := open()
+	if err == nil {
+		b.mu.Lock()
+		b.cfg.PublicBrowserHost = host
+		b.mu.Unlock()
+	}
+}
+
+func openDesktopPublicBrowser() (PublicBrowserHost, error) {
+	proxy, err := security.NewPublicEgressProxy(nil)
+	if err != nil {
+		return nil, err
+	}
+	return openMygoPublicBrowserSession(proxy, nil)
 }
 
 func installationNamespace() string {
@@ -1093,6 +1113,7 @@ func RunDesktop(opts DesktopOptions) (runErr error) {
 	mygo.SetFrontend(rendererFiles{os.DirFS(opts.RendererDir), runtime.GOOS})
 
 	mygo.App.OnReady(func() {
+		bridge.enableDesktopPublicBrowser(opts, runtime.GOOS, openDesktopPublicBrowser)
 		bridge.startRenderHost(appCtx, supervisor)
 		if relay != nil {
 			go func() {
@@ -1156,6 +1177,13 @@ func RunDesktop(opts DesktopOptions) (runErr error) {
 
 func (bridge *MollyBridge) shutdownDesktop(cancelApp context.CancelFunc) {
 	cancelApp()
+	bridge.mu.Lock()
+	host := bridge.cfg.PublicBrowserHost
+	bridge.cfg.PublicBrowserHost = nil
+	bridge.mu.Unlock()
+	if host != nil {
+		host.CloseAll()
+	}
 	bridge.clearPreviews()
 	designHost, gate, worker, relay := bridge.cfg.DesignHost, bridge.cfg.CanvasGate, bridge.cfg.DesignWorker, bridge.cfg.LoroRelay
 

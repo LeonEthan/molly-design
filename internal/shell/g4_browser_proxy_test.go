@@ -65,11 +65,15 @@ func TestG4PublicBrowserProxy(t *testing.T) {
 		return
 	}
 	var deniedLookups, privateHits, publicHits atomic.Int32
+	var seenControlledCookie atomic.Bool
 	private := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { privateHits.Add(1); fmt.Fprint(w, "private") }))
 	defer private.Close()
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Proxy-Authorization") != "" {
 			t.Error("proxy credentials reached origin")
+		}
+		if c, err := r.Cookie("molly_controlled_account"); err == nil && c.Value == "isolated-oauth-fixture" {
+			seenControlledCookie.Store(true)
 		}
 		publicHits.Add(1)
 		w.Header().Set("Cache-Control", "no-store")
@@ -114,6 +118,15 @@ func TestG4PublicBrowserProxy(t *testing.T) {
 			err = fmt.Errorf("desktop opt-in did not activate protected host")
 			return
 		}
+		if err = h.session.Cookies.Set(mygo.Cookie{
+			Name:   "molly_controlled_account",
+			Value:  "isolated-oauth-fixture",
+			Domain: "8.8.8.8",
+			Path:   "/",
+		}); err != nil {
+			err = fmt.Errorf("inject controlled cookie: %w", err)
+			return
+		}
 		var result any
 		result, err = bridge.Invoke(t.Context(), bridge.CurrentDocGeneration(), "publicBrowser.navigate", []json.RawMessage{json.RawMessage(`{"browserId":"g4","url":"http://8.8.8.8/"}`)})
 		if err == nil && result.(map[string]any)["ok"] != true {
@@ -138,6 +151,18 @@ func TestG4PublicBrowserProxy(t *testing.T) {
 	title, err := page.Eval("document.title")
 	if err != nil || title != "Molly public fixture" || publicHits.Load() == 0 {
 		t.Fatalf("title %q, origin hits %d, error %v", title, publicHits.Load(), err)
+	}
+	if !seenControlledCookie.Load() {
+		t.Fatal("controlled-account cookie injected into isolated public browser session did not reach public origin")
+	}
+	defaultCookies, err := mygo.DefaultSession().Cookies.List(mygo.CookieFilter{URL: "http://8.8.8.8/"})
+	if err != nil {
+		t.Fatalf("list default session cookies: %v", err)
+	}
+	for _, c := range defaultCookies {
+		if c.Name == "molly_controlled_account" {
+			t.Fatal("controlled-account cookie leaked from isolated public browser session into default app session")
+		}
 	}
 	private6 := httptest.NewUnstartedServer(private.Config.Handler)
 	private6.Listener.Close()

@@ -13,6 +13,7 @@ import {
   startPublicBrowserAgentHost
 } from './services/public-browser-agent-host-service'
 import { startHarnessCredentialHost } from './services/harness-credential-host'
+import { getModelConnectionStore } from './services/model-connections'
 import { verifyDesignSample } from './services/design-sample-verification'
 import { registerDesignSampleScheme } from './services/design-sample-service'
 import {
@@ -227,9 +228,11 @@ if (hasSingleInstanceLock) {
         const ready = await flushOpenDesigns()
         if (!ready) throw new Error('Could not save your designs before updating')
         await cliService.shutdownForQuit()
+        await getModelConnectionStore().drainOAuthForHandoff()
         cliStoppedForRelaunch = true
       },
       abortRelaunch: () => {
+        getModelConnectionStore().resumeOAuthAfterAbortedHandoff()
         if (!cliStoppedForRelaunch) return
         cliStoppedForRelaunch = false
         cliService.autoStart(getMainWindow()?.webContents)

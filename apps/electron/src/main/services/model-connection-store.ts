@@ -184,6 +184,7 @@ export class ModelConnectionStore {
   private readonly platform: NodeJS.Platform
   private pending: Promise<unknown> = Promise.resolve()
   private readonly oauthPending = new Map<string, Promise<unknown>>()
+  private oauthDraining = false
 
   constructor(
     directory: string,
@@ -1040,11 +1041,24 @@ export class ModelConnectionStore {
     )
   }
 
+  async drainOAuthForHandoff(): Promise<void> {
+    this.oauthDraining = true
+    while (this.oauthPending.size > 0) {
+      await Promise.allSettled([...this.oauthPending.values()])
+    }
+    await this.pending
+  }
+
+  resumeOAuthAfterAbortedHandoff(): void {
+    this.oauthDraining = false
+  }
+
   mutateOAuth(
     connectionId: string,
     fn: (current: OAuthTokenSet | undefined) => Promise<OAuthTokenSet | undefined>,
     expectedRevision?: number
   ): Promise<OAuthTokenSet | undefined> {
+    if (this.oauthDraining) return Promise.reject(new Error('oauth_refresh_draining'))
     return this.serialConnection(connectionId, async () => {
       const initial = await this.serial(async () =>
         (await this.read()).entries.find((item) => item.connection.id === connectionId)

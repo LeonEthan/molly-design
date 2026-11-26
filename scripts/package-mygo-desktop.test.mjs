@@ -147,4 +147,54 @@ void test('renders optional Sparkle metadata into the bundle plist', async () =>
     /<key>SUFeedURL<\/key>\s*<string>https:\/\/test.invalid\/feed\?a=1&amp;b=2<\/string>/
   )
   assert.match(plist, /<key>SUPublicEDKey<\/key>\s*<string>abc=<\/string>/)
+  assert.match(plist, /<key>SUEnableInstallerLauncherService<\/key>\s*<false\/>/)
 })
+
+void test(
+  'embeds and signs Sparkle.framework inside-out and verifies EdDSA update signature + tamper rejection',
+  { skip: process.platform !== 'darwin' },
+  async (t) => {
+    const { generateKeyPairSync, sign, verify } = await import('node:crypto')
+    const { spawnSync } = await import('node:child_process')
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'molly-mygo-sparkle-test-'))
+    t.after(() => fs.rmSync(outDir, { recursive: true, force: true }))
+
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519')
+    const spki = publicKey.export({ type: 'spki', format: 'der' })
+    const rawPubKeyBase64 = spki.subarray(spki.length - 32).toString('base64')
+
+    const report = await packageMyGoDesktop({
+      outputDir: outDir,
+      version: '0.2.1',
+      bundleNode: false,
+      adHocSign: true,
+      includeCliResources: false,
+      sparkleFeedUrl: 'http://127.0.0.1:4371/appcast.xml',
+      sparklePublicKey: rawPubKeyBase64
+    })
+    assert.equal(report.sparkleEmbedded, true)
+    assert.ok(report.sizesBytes.sparkleFramework > 0)
+    assert.ok(
+      fs.existsSync(
+        path.join(report.appPath, 'Contents', 'Frameworks', 'Sparkle.framework', 'Sparkle')
+      )
+    )
+    const plistText = fs.readFileSync(path.join(report.appPath, 'Contents', 'Info.plist'), 'utf8')
+    assert.match(plistText, /<key>CFBundleShortVersionString<\/key>\s*<string>0\.2\.1<\/string>/)
+    assert.match(plistText, new RegExp(rawPubKeyBase64.replaceAll('+', '\\+')))
+
+    // Create a release zip archive and verify Ed25519 signature acceptance + tamper rejection.
+    const archivePath = path.join(outDir, 'Molly-0.2.1.zip')
+    const ditto = spawnSync('/usr/bin/ditto', ['-c', '-k', '--keepParent', report.appPath, archivePath], {
+      encoding: 'utf8'
+    })
+    assert.equal(ditto.status, 0, ditto.stderr)
+    const archiveBytes = fs.readFileSync(archivePath)
+    const signature = sign(null, archiveBytes, privateKey)
+    assert.equal(verify(null, archiveBytes, publicKey, signature), true)
+
+    const tampered = Buffer.from(archiveBytes)
+    tampered[tampered.length - 1] ^= 0xff
+    assert.equal(verify(null, tampered, publicKey, signature), false)
+  }
+)

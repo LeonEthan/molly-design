@@ -104,6 +104,9 @@ export function signingOptions(args, env = process.env) {
       'notary-issuer': { type: 'string' },
       'sparkle-feed-url': { type: 'string' },
       'sparkle-public-key': { type: 'string' },
+      'sparkle-framework': { type: 'string' },
+      'bundle-sparkle': { type: 'boolean' },
+      version: { type: 'string' },
       out: { type: 'string' },
       'no-node': { type: 'boolean' },
       'require-standalone-node': { type: 'boolean' }
@@ -144,13 +147,22 @@ export function signingOptions(args, env = process.env) {
     adHocSign: !signIdentity && !values['no-sign'],
     sparkleFeedUrl: values['sparkle-feed-url'],
     sparklePublicKey: values['sparkle-public-key'],
+    sparkleFrameworkPath: values['sparkle-framework'],
+    bundleSparkle: values['bundle-sparkle'],
+    version: values.version,
     outputDir: values.out,
     bundleNode: !values['no-node'],
     requireStandaloneNode: values['require-standalone-node']
   }
 }
 
-export function renderInfoPlist({ appName, bundleId, sparkleFeedUrl, sparklePublicKey }) {
+export function renderInfoPlist({
+  appName,
+  bundleId,
+  version = '0.2.0',
+  sparkleFeedUrl,
+  sparklePublicKey
+}) {
   const escape = (value) =>
     value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
   const metadata = [
@@ -160,6 +172,10 @@ export function renderInfoPlist({ appName, bundleId, sparkleFeedUrl, sparklePubl
     .filter(([, value]) => value)
     .map(([key, value]) => `  <key>${key}</key>\n  <string>${escape(value)}</string>\n`)
     .join('')
+  const sparklePolicy =
+    sparkleFeedUrl || sparklePublicKey
+      ? `  <key>SUEnableInstallerLauncherService</key>\n  <false/>\n  <key>SUScheduledCheckInterval</key>\n  <integer>3600</integer>\n`
+      : ''
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -171,9 +187,9 @@ export function renderInfoPlist({ appName, bundleId, sparkleFeedUrl, sparklePubl
   <key>CFBundleIdentifier</key>
   <string>${escape(bundleId)}</string>
   <key>CFBundleVersion</key>
-  <string>0.2.0</string>
+  <string>${escape(version)}</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.2.0</string>
+  <string>${escape(version)}</string>
   <key>CFBundleExecutable</key>
   <string>${escape(appName)}</string>
   <key>CFBundleIconFile</key>
@@ -184,7 +200,7 @@ export function renderInfoPlist({ appName, bundleId, sparkleFeedUrl, sparklePubl
   <string>13.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
-${metadata}</dict>
+${metadata}${sparklePolicy}</dict>
 </plist>
 `
 }
@@ -216,6 +232,7 @@ export async function packageMyGoDesktop({
   outputDir = path.join(repoRoot, 'dist', 'mygo-experimental'),
   appName = 'Molly Experimental',
   bundleId = 'dev.molly-design.mygo-experimental',
+  version = '0.2.0',
   platform = process.platform,
   arch = process.arch,
   bundleNode = true,
@@ -226,6 +243,17 @@ export async function packageMyGoDesktop({
   notaryArgs,
   sparkleFeedUrl,
   sparklePublicKey,
+  bundleSparkle = Boolean(sparkleFeedUrl || sparklePublicKey),
+  sparkleFrameworkPath = path.join(
+    repoRoot,
+    'apps',
+    'electron',
+    'node_modules',
+    'electron-sparkle-updater',
+    'native',
+    'vendor',
+    'Sparkle.framework'
+  ),
   includeCliResources = true,
   cliResourcesDir = path.join(repoRoot, 'apps', 'electron', 'resources', 'cli')
 } = {}) {
@@ -355,7 +383,25 @@ export async function packageMyGoDesktop({
     fs.copyFileSync(iconSrc, path.join(resourcesDir, 'icon.icns'))
   }
 
-  const infoPlist = renderInfoPlist({ appName, bundleId, sparkleFeedUrl, sparklePublicKey })
+  let sparkleEmbedded = false
+  const frameworksDir = path.join(contentsDir, 'Frameworks')
+  const sparkleDst = path.join(frameworksDir, 'Sparkle.framework')
+  if (bundleSparkle) {
+    if (!fs.existsSync(path.join(sparkleFrameworkPath, 'Versions', 'B', 'Sparkle'))) {
+      throw new Error(`Missing Sparkle.framework at ${sparkleFrameworkPath}`)
+    }
+    fs.mkdirSync(frameworksDir, { recursive: true })
+    run('/usr/bin/ditto', [sparkleFrameworkPath, sparkleDst])
+    sparkleEmbedded = true
+  }
+
+  const infoPlist = renderInfoPlist({
+    appName,
+    bundleId,
+    version,
+    sparkleFeedUrl,
+    sparklePublicKey
+  })
   fs.writeFileSync(path.join(contentsDir, 'Info.plist'), infoPlist)
 
   let compositionProbe = null
@@ -373,10 +419,12 @@ export async function packageMyGoDesktop({
     platform,
     arch,
     bundleId,
+    version,
     signingMode: signIdentity ? 'developer-id' : adHocSign ? 'ad-hoc' : 'unsigned',
     teamIdentifier: null,
     hardenedRuntime: false,
     adHocSigned: !signIdentity && adHocSign && process.platform === 'darwin',
+    sparkleEmbedded,
     bundledNodeVersion,
     nodeRuntimeSelfContained,
     nodeExternalDylibs,
@@ -389,6 +437,7 @@ export async function packageMyGoDesktop({
       designDir: dirSizeBytes(designDst),
       cliDir: includeCliResources ? dirSizeBytes(cliDst) : 0,
       nodeRuntime: bundleNode ? dirSizeBytes(path.join(resourcesDir, 'runtime', 'node')) : 0,
+      sparkleFramework: sparkleEmbedded ? dirSizeBytes(sparkleDst) : 0,
       totalApp: dirSizeBytes(appPath)
     }
   }
@@ -421,6 +470,18 @@ export async function packageMyGoDesktop({
       ])
     }
     if (signIdentity && includeCliResources) signMachOFiles(cliDst, signTarget)
+    if (sparkleEmbedded) {
+      const sparkleVersionDir = path.join(sparkleDst, 'Versions', 'B')
+      for (const nested of [
+        path.join(sparkleVersionDir, 'XPCServices', 'Installer.xpc'),
+        path.join(sparkleVersionDir, 'XPCServices', 'Downloader.xpc'),
+        path.join(sparkleVersionDir, 'Autoupdate'),
+        path.join(sparkleVersionDir, 'Updater.app'),
+        sparkleDst
+      ]) {
+        if (fs.existsSync(nested)) signTarget(nested)
+      }
+    }
     signTarget(path.join(mollyCoreDir, 'molly-core'))
     if (bundleNode) {
       signTarget(path.join(resourcesDir, 'runtime', 'node'))

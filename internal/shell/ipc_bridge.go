@@ -136,6 +136,7 @@ type BridgeConfig struct {
 	DesignController  DesignHostController
 	LoroRelay         *LoroRelay
 	PublicBrowserHost PublicBrowserHost
+	Updater           UpdaterService
 	OnEmitPush        func(channel string, payload any)
 }
 
@@ -174,6 +175,9 @@ func NewMollyBridge(cfg BridgeConfig) *MollyBridge {
 	}
 	if cfg.CanvasGate == nil {
 		cfg.CanvasGate = NewCanvasAccessGate()
+	}
+	if cfg.Updater == nil {
+		cfg.Updater = newDisabledUpdater(cfg.AppVersion, UpdaterDisabledReasonDefault, "updater_disabled_in_experimental_mygo_shell")
 	}
 	b := &MollyBridge{
 		cfg: cfg, vaultWake: make(chan struct{}, 1),
@@ -315,7 +319,7 @@ func (b *MollyBridge) Invoke(ctx context.Context, docGen int64, channel string, 
 	case "modelConnections":
 		return b.handleModelConnections(method, args)
 	case "updater":
-		return b.handleUpdater(method)
+		return b.handleUpdater(ctx, method)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrBlockedIpcChannel, channel)
 	}
@@ -1415,24 +1419,30 @@ func (b *MollyBridge) handlePublicBrowser(ctx context.Context, method string, ar
 	}
 }
 
-func (b *MollyBridge) handleUpdater(method string) (any, error) {
+func (b *MollyBridge) setUpdater(u UpdaterService) {
+	b.mu.Lock()
+	old := b.cfg.Updater
+	b.cfg.Updater = u
+	b.mu.Unlock()
+	if old != nil && old != u {
+		old.Close()
+	}
+}
+
+func (b *MollyBridge) handleUpdater(ctx context.Context, method string) (any, error) {
+	b.mu.RLock()
+	u := b.cfg.Updater
+	b.mu.RUnlock()
+	if u == nil {
+		u = newDisabledUpdater(b.cfg.AppVersion, UpdaterDisabledReasonDefault, "updater_disabled_in_experimental_mygo_shell")
+	}
 	switch method {
 	case "getState":
-		return map[string]any{
-			"phase":          "disabled",
-			"currentVersion": b.cfg.AppVersion,
-			"disabledReason": "experimental_mygo_shell",
-		}, nil
+		return u.GetState(), nil
 	case "checkForUpdates":
-		return map[string]any{
-			"started": false,
-			"error":   "updater_disabled_in_experimental_mygo_shell",
-		}, nil
+		return u.CheckForUpdates(ctx), nil
 	case "quitAndInstall":
-		return map[string]any{
-			"ok":    false,
-			"error": "updater_disabled_in_experimental_mygo_shell",
-		}, nil
+		return u.QuitAndInstall(ctx), nil
 	default:
 		return nil, fmt.Errorf("unknown updater method: %s", method)
 	}

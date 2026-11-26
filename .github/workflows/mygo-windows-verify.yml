@@ -57,10 +57,10 @@ jobs:
         env:
           MOLLY_TEST_REAL_BENTO_WORKER: '1'
         run: go test -v -count=1 ./internal/shell -run TestChunkedBentoFlushRealWorker
-      - name: Verify Electron and Go vault lease handoff
+      - name: Verify Electron and Go vault lease and OAuth drain handoff
         env:
           MOLLY_TEST_ELECTRON_CROSS_SHELL: '1'
-        run: go test -v -count=1 ./internal/security -run TestVaultWriterLeaseCrossProcessWithElectronStore
+        run: go test -v -count=1 ./internal/security -run 'TestVaultWriterLeaseCrossProcessWithElectronStore|TestOAuthRefreshDrainAndVaultHandoffWithElectronStore'
       - name: Verify shared IPC and CLI isolation
         run: |
           pnpm --dir packages/shared exec vitest run tests/installation-profile.test.ts tests/local-ipc.test.ts tests/local-cli-host-lease.test.ts tests/file-lock.test.ts 2>&1 | Tee-Object shared.log

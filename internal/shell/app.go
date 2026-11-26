@@ -78,7 +78,11 @@ type mygoPublicBrowserHost struct {
 }
 
 func openMygoPublicBrowserSession(proxy *security.PublicEgressProxy, resolver security.IPResolver) (*mygoPublicBrowserHost, error) {
-	session, err := mygo.NewProxiedSession("molly-public-browser", mygo.SessionProxyConfig{HTTPProxy: proxy.URL, Username: proxy.Username, Password: proxy.Password, ContentRulesJSON: security.PublicBrowserContentRulesJSON()})
+	cfg := mygo.SessionProxyConfig{HTTPProxy: proxy.URL, Username: proxy.Username, Password: proxy.Password}
+	if runtime.GOOS == "darwin" {
+		cfg.ContentRulesJSON = security.PublicBrowserContentRulesJSON()
+	}
+	session, err := mygo.NewProxiedSession("molly-public-browser", cfg)
 	if err == nil {
 		_, err = session.Cookies.List(mygo.CookieFilter{URL: "https://molly.invalid/"})
 	}
@@ -1114,6 +1118,29 @@ func RunDesktop(opts DesktopOptions) (runErr error) {
 
 	mygo.App.OnReady(func() {
 		bridge.enableDesktopPublicBrowser(opts, runtime.GOOS, openDesktopPublicBrowser)
+		bridge.setUpdater(NewDesktopUpdater(DesktopUpdaterConfig{
+			CurrentVersion:   bridge.cfg.AppVersion,
+			DataDir:          dataDir,
+			InstallationMode: os.Getenv("MOLLY_INSTALLATION_CHANNEL"),
+			Hooks: UpdaterHooks{
+				OnStateChange: func(state UpdaterState) {
+					_ = bridge.EmitToWorkbench("updater.state", state)
+				},
+				PrepareToRelaunch: func(ctx context.Context) error {
+					gate.SetUpdating(true)
+					if err := bridge.closePrivateCLI(); err != nil {
+						return err
+					}
+					bridge.closeSettings()
+					return nil
+				},
+				AbortRelaunch: func() {
+					gate.SetUpdating(false)
+				},
+				Quit:      mygo.App.Quit,
+				RunOnMain: mygo.RunOnMain,
+			},
+		}))
 		bridge.startRenderHost(appCtx, supervisor)
 		if relay != nil {
 			go func() {
@@ -1180,7 +1207,12 @@ func (bridge *MollyBridge) shutdownDesktop(cancelApp context.CancelFunc) {
 	bridge.mu.Lock()
 	host := bridge.cfg.PublicBrowserHost
 	bridge.cfg.PublicBrowserHost = nil
+	updater := bridge.cfg.Updater
+	bridge.cfg.Updater = nil
 	bridge.mu.Unlock()
+	if updater != nil {
+		updater.Close()
+	}
 	if host != nil {
 		host.CloseAll()
 	}

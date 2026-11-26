@@ -1782,3 +1782,72 @@ void test('Electron reclaims an expired MyGo lease before publishing its vault',
   )
   await assert.rejects(stat(file), { code: 'ENOENT' })
 })
+
+void test('OAuth refresh drain rejects new mutations, completes in-flight rotation, and resumes on abort', async (t) => {
+  const { store } = await fixture(t)
+  const { connection } = await store.saveOAuthConnection(
+    {
+      displayName: 'OpenAI OAuth',
+      providerPresetId: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      enabled: true,
+      authType: 'openai_oauth'
+    },
+    {
+      accessToken: 'at-initial',
+      refreshToken: 'rt-initial',
+      accessTokenExpiresAt: Date.now() + 60_000,
+      clientId: 'client-1'
+    },
+    { email: 'user@example.com' }
+  )
+
+  let releaseRotation
+  const rotationEntered = new Promise((resolve) => {
+    releaseRotation = resolve
+  })
+  let finishRotation
+  const rotationGate = new Promise((resolve) => {
+    finishRotation = resolve
+  })
+
+  const inFlight = store.mutateOAuth(connection.id, async (current) => {
+    releaseRotation()
+    await rotationGate
+    return {
+      ...current,
+      accessToken: 'at-rotated',
+      refreshToken: 'rt-rotated',
+      accessTokenExpiresAt: current.accessTokenExpiresAt + 60_000
+    }
+  })
+
+  await rotationEntered
+
+  let drained = false
+  const drainPromise = store.drainOAuthForHandoff().then(() => {
+    drained = true
+  })
+
+  await assert.rejects(
+    store.mutateOAuth(connection.id, async () => assert.fail('must not start while draining')),
+    { message: 'oauth_refresh_draining' }
+  )
+  assert.equal(drained, false)
+
+  finishRotation()
+  await inFlight
+  await drainPromise
+  assert.equal(drained, true)
+
+  const stored = await store.oauthFor(connection.id)
+  assert.equal(stored?.accessToken, 'at-rotated')
+  assert.equal(stored?.refreshToken, 'rt-rotated')
+
+  store.resumeOAuthAfterAbortedHandoff()
+  const resumed = await store.mutateOAuth(connection.id, async (current) => ({
+    ...current,
+    accessToken: 'at-resumed'
+  }))
+  assert.equal(resumed?.accessToken, 'at-resumed')
+})

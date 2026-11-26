@@ -1051,33 +1051,39 @@ export class ModelConnectionStore {
     )
   }
 
+  private async flushUnresolvedOAuthRotation(connectionId: string): Promise<void> {
+    const unresolved = this.unresolvedOAuthRotations.get(connectionId)
+    if (!unresolved) return
+    try {
+      await this.writeTransaction(async () => {
+        const store = await this.read()
+        const current = store.entries.find((item) => item.connection.id === connectionId)
+        if (
+          current?.oauth &&
+          current.connection.authType === 'openai_oauth' &&
+          current.connection.credentialRef === unresolved.credentialRef &&
+          current.connection.providerPresetId === unresolved.providerPresetId &&
+          current.connection.baseUrl === unresolved.baseUrl &&
+          JSON.stringify(current.oauth) === unresolved.expectedTokens
+        ) {
+          current.oauth = unresolved.next
+          await this.write(store)
+        }
+        this.unresolvedOAuthRotations.delete(connectionId)
+      }, rotatedGrantLeaseWaitMs)
+    } catch {
+      throw new Error('oauth_refresh_persist_failed')
+    }
+  }
+
   async drainOAuthForHandoff(): Promise<void> {
     this.oauthDraining = true
     while (this.oauthPending.size > 0) {
       await Promise.allSettled([...this.oauthPending.values()])
     }
     await this.pending
-    for (const [connectionId, unresolved] of [...this.unresolvedOAuthRotations.entries()]) {
-      try {
-        await this.writeTransaction(async () => {
-          const store = await this.read()
-          const current = store.entries.find((item) => item.connection.id === connectionId)
-          if (
-            current?.oauth &&
-            current.connection.authType === 'openai_oauth' &&
-            current.connection.credentialRef === unresolved.credentialRef &&
-            current.connection.providerPresetId === unresolved.providerPresetId &&
-            current.connection.baseUrl === unresolved.baseUrl &&
-            JSON.stringify(current.oauth) === unresolved.expectedTokens
-          ) {
-            current.oauth = unresolved.next
-            await this.write(store)
-          }
-          this.unresolvedOAuthRotations.delete(connectionId)
-        }, rotatedGrantLeaseWaitMs)
-      } catch {
-        throw new Error('oauth_refresh_persist_failed')
-      }
+    for (const connectionId of [...this.unresolvedOAuthRotations.keys()]) {
+      await this.flushUnresolvedOAuthRotation(connectionId)
     }
   }
 
@@ -1092,6 +1098,9 @@ export class ModelConnectionStore {
   ): Promise<OAuthTokenSet | undefined> {
     if (this.oauthDraining) return Promise.reject(new Error('oauth_refresh_draining'))
     return this.serialConnection(connectionId, async () => {
+      // Replay any retained accepted rotation before reading or mutating this row,
+      // so a subsequent refresh/denial cannot overwrite a valid replacement grant.
+      await this.flushUnresolvedOAuthRotation(connectionId)
       const initial = await this.serial(async () =>
         (await this.read()).entries.find((item) => item.connection.id === connectionId)
       )

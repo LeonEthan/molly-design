@@ -500,6 +500,11 @@ export class AppUpdaterService {
   private recoverFailedSparkleInstall(message: string): void {
     this.sparkleInstallTimer?.cancel()
     this.sparkleInstallTimer = null
+    try {
+      this.sparkleBridge?.cancelCheck?.()
+    } catch {
+      // Best-effort cancellation before restoring services.
+    }
     const release = this.sparkleInstallRelease
     this.sparkleInstallPending = false
     this.sparkleInstallRelease = undefined
@@ -530,17 +535,20 @@ export class AppUpdaterService {
         const patch = sparkleEventToStatePatch(event, Date.now())
         if (!patch) return
         if (patch.phase) this.sparkleSessionOpen = patch.phase === 'checking'
-        if (
-          this.sparkleInstallPending &&
-          (patch.phase === 'error' ||
-            patch.phase === 'up_to_date' ||
-            patch.phase === 'checking' ||
-            patch.phase === 'downloading')
-        ) {
-          const message = patch.error ?? 'update_install_canceled'
-          this.recoverFailedSparkleInstall(message)
-          if (patch.phase !== 'error') this.setState(patch)
-          return
+        if (this.sparkleInstallPending) {
+          if (patch.phase === 'checking' || patch.phase === 'downloading') {
+            // Sparkle resume flow emits checking/downloading progress before
+            // installing; keep the relaunch guard active and extend the watchdog.
+            this.armSparkleInstallWatchdog()
+            this.setState(patch)
+            return
+          }
+          if (patch.phase === 'error' || patch.phase === 'up_to_date') {
+            const message = patch.error ?? 'update_install_canceled'
+            this.recoverFailedSparkleInstall(message)
+            if (patch.phase !== 'error') this.setState(patch)
+            return
+          }
         }
         this.setState(patch)
       } catch (error) {

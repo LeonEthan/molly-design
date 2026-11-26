@@ -261,6 +261,13 @@ func (c *mygoDesignController) PrepareUpdateFlush(confirm func(*mygoCanvasInstan
 		x.mu.Unlock()
 	}
 
+	// Defer installation while any Agent turn or design preparation is active
+	// (or daemon state is unknown), even when no canvas editor window is open.
+	if err := c.gate.AssertIdleForUpdate(); err != nil {
+		rollback()
+		return nil, err
+	}
+
 	// Confirm and flush every open canvas while the gate is still writable and
 	// the private CLI/design worker are still running, so Retry Save works and
 	// Keep Editing leaves the session intact.
@@ -269,6 +276,14 @@ func (c *mygoDesignController) PrepareUpdateFlush(confirm func(*mygoCanvasInstan
 			rollback()
 			return nil, errors.New("update_canceled_unsaved_design")
 		}
+	}
+
+	// Fence new Agent turns/prepares, then confirm no turn started concurrently
+	// during the canvas flush before approving update quit.
+	c.gate.SetUpdating(true)
+	if err := c.gate.AssertIdleForUpdate(); err != nil {
+		rollback()
+		return nil, err
 	}
 
 	x.mu.Lock()
@@ -281,7 +296,6 @@ func (c *mygoDesignController) PrepareUpdateFlush(confirm func(*mygoCanvasInstan
 		rollback()
 		return nil, errors.New("canvas_close_in_progress")
 	}
-	c.gate.SetUpdating(true)
 	return rollback, nil
 }
 

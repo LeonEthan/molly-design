@@ -321,24 +321,8 @@ if (hasSingleInstanceLock) {
     let oauthDrainComplete = false
     let oauthDrainPending = false
     app.on('before-quit', (event) => {
-      if (!designShutdownComplete) {
-        event.preventDefault()
-        if (!designQuitPending) {
-          designQuitPending = true
-          void prepareDesignQuit()
-            .then((ready) => {
-              if (ready) {
-                designShutdownComplete = true
-                app.quit()
-              }
-            })
-            .catch((error) => console.error('Design save failed', error))
-            .finally(() => {
-              designQuitPending = false
-            })
-        }
-        return
-      }
+      // Drain OAuth rotations before prepareDesignQuit() disposes design views
+      // and seals the design worker, so a failed drain leaves the app usable.
       if (!oauthDrainComplete) {
         event.preventDefault()
         if (!oauthDrainPending) {
@@ -352,10 +336,34 @@ if (hasSingleInstanceLock) {
             .catch((error) => {
               console.error('OAuth refresh drain failed before quit', error)
               getModelConnectionStore().resumeOAuthAfterAbortedHandoff()
-              designShutdownComplete = false
             })
             .finally(() => {
               oauthDrainPending = false
+            })
+        }
+        return
+      }
+      if (!designShutdownComplete) {
+        event.preventDefault()
+        if (!designQuitPending) {
+          designQuitPending = true
+          void prepareDesignQuit()
+            .then((ready) => {
+              if (ready) {
+                designShutdownComplete = true
+                app.quit()
+              } else {
+                oauthDrainComplete = false
+                getModelConnectionStore().resumeOAuthAfterAbortedHandoff()
+              }
+            })
+            .catch((error) => {
+              console.error('Design save failed', error)
+              oauthDrainComplete = false
+              getModelConnectionStore().resumeOAuthAfterAbortedHandoff()
+            })
+            .finally(() => {
+              designQuitPending = false
             })
         }
         return

@@ -257,6 +257,7 @@ void test('a failed async Sparkle install restores relaunch services and release
   })
   let onSparkleEvent
   let appQuitting = false
+  let canceledNativeCheck = false
   const bridge = {
     init: () => true,
     setAutomaticChecks() {},
@@ -264,6 +265,9 @@ void test('a failed async Sparkle install restores relaunch services and release
       onSparkleEvent = fn
     },
     checkForUpdates() {},
+    cancelCheck() {
+      canceledNativeCheck = true
+    },
     installUpdateNow() {}
   }
   const module = { exports: {} }
@@ -323,16 +327,19 @@ void test('a failed async Sparkle install restores relaunch services and release
 
   let released = false
   let aborted = false
-  let installTimeout
+  const scheduledTimers = []
   const service = new module.exports.AppUpdaterService({
     enabled: true,
     scheduleTimeout(callback) {
-      installTimeout = callback
-      return {
+      const entry = {
+        callback,
+        active: true,
         cancel() {
-          installTimeout = undefined
+          this.active = false
         }
       }
+      scheduledTimers.push(entry)
+      return entry
     },
     prepareInstall: async () => async () => {
       released = true
@@ -358,16 +365,24 @@ void test('a failed async Sparkle install restores relaunch services and release
   assert.equal(service.getState().phase, 'downloaded')
   assert.equal(service.getState().error, 'sparkle_install_failed')
 
-  // Retry install, then simulate silent Sparkle cancellation (no native event emitted).
+  // Retry install, emit valid resume checking/downloading events (must KEEP guard active),
+  // then simulate silent Sparkle cancellation via watchdog (must call cancelCheck + restore).
   released = false
   aborted = false
+  canceledNativeCheck = false
   assert.deepEqual(await service.quitAndInstall(), { ok: true })
-  assert.equal(typeof installTimeout, 'function')
-  installTimeout()
+  onSparkleEvent({ type: 'checking' })
+  onSparkleEvent({ type: 'update-available', version: '0.1.3' })
+  assert.equal(appQuitting, true)
+  assert.equal(aborted, false)
+  assert.equal(released, false)
+  const activeTimer = scheduledTimers.findLast((entry) => entry.active)
+  assert.equal(typeof activeTimer?.callback, 'function')
+  activeTimer.callback()
+  assert.equal(canceledNativeCheck, true)
   assert.equal(appQuitting, false)
   assert.equal(aborted, true)
   assert.equal(released, true)
-  assert.equal(service.getState().phase, 'downloaded')
   assert.equal(service.getState().error, 'update_install_canceled')
   service.stop()
 })

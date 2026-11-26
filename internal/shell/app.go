@@ -1138,7 +1138,14 @@ func RunDesktop(opts DesktopOptions) (runErr error) {
 						releaseUpdateFlush = rel
 						updateFlushMu.Unlock()
 					} else {
+						if err := gate.AssertIdleForUpdate(); err != nil {
+							return err
+						}
 						gate.SetUpdating(true)
+						if err := gate.AssertIdleForUpdate(); err != nil {
+							gate.SetUpdating(false)
+							return err
+						}
 					}
 					return nil
 				},

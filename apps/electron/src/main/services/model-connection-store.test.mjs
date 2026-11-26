@@ -1956,3 +1956,56 @@ void test('OAuth refresh drain recovers a previously failed rotation on retry an
   assert.equal(stored?.accessToken, 'at-rotated')
   assert.equal(stored?.refreshToken, 'rt-rotated')
 })
+
+void test('normal mutateOAuth replays a retained rotation before running another refresh or denial', async (t) => {
+  const { directory } = await fixture(t)
+  let remainingEncryptFailures = 0
+  const store = new ModelConnectionStore(directory, {
+    ...cipher,
+    encryptString(value) {
+      if (remainingEncryptFailures > 0) {
+        remainingEncryptFailures -= 1
+        throw new Error('transient_vault_write_error')
+      }
+      return cipher.encryptString(value)
+    }
+  })
+  const { connection } = await store.saveOAuthConnection(
+    {
+      displayName: 'OpenAI OAuth',
+      providerPresetId: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      enabled: true,
+      authType: 'openai_oauth'
+    },
+    {
+      accessToken: 'at-old',
+      refreshToken: 'rt-old',
+      accessTokenExpiresAt: Date.now() + 60_000,
+      clientId: 'client-1'
+    },
+    { email: 'user@example.com' }
+  )
+
+  // First rotation succeeds with provider, fails to write to disk -> retained.
+  remainingEncryptFailures = 1
+  await assert.rejects(
+    store.mutateOAuth(connection.id, async (current) => ({
+      ...current,
+      accessToken: 'at-rotated',
+      refreshToken: 'rt-rotated'
+    })),
+    { message: 'credential_storage_write_failed' }
+  )
+
+  // Next mutateOAuth must flush the retained replacement first so the callback sees rt-rotated, not stale rt-old.
+  let observedRefreshToken
+  await store.mutateOAuth(connection.id, async (current) => {
+    observedRefreshToken = current?.refreshToken
+    return undefined
+  })
+  assert.equal(observedRefreshToken, 'rt-rotated')
+  const stored = await store.oauthFor(connection.id)
+  assert.equal(stored?.refreshToken, 'rt-rotated')
+  assert.equal(stored?.denied, undefined)
+})

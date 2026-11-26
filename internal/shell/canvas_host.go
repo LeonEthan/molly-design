@@ -105,6 +105,15 @@ func (g *CanvasAccessGate) SetUpdating(value bool) {
 	}
 }
 
+func (g *CanvasAccessGate) AssertIdleForUpdate() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.known || len(g.active) > 0 || len(g.inFlightPrepare) > 0 || len(g.permits) > 0 {
+		return errors.New("agent_execution_active_before_update")
+	}
+	return nil
+}
+
 func (g *CanvasAccessGate) State(artworkID string) map[string]any {
 	g.mu.Lock()
 	defer g.mu.Unlock()

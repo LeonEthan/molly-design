@@ -509,4 +509,17 @@ func TestPrepareUpdateFlushAllowsRetrySaveAndKeepEditingWithoutStoppingServices(
 	if !gate.IsWriteAllowed("art-1", "") || ctrl.exit.phase != quitIdle {
 		t.Fatalf("expected rollback to restore gate and idle phase: writable=%v phase=%v", gate.IsWriteAllowed("art-1", ""), ctrl.exit.phase)
 	}
+
+	// Even with zero open canvas windows, an active Agent turn must defer update installation.
+	delete(ctrl.instances, canvasInstanceKey("art-1", "host-1"))
+	gate.UpdateFromDaemon([]DesignCanvasState{{ArtworkID: "art-bg", TurnID: "turn-bg", Preparing: false}}, nil)
+	if rel, err := ctrl.PrepareUpdateFlush(nil); err == nil || rel != nil {
+		t.Fatalf("expected active Agent turn to defer update even with no open canvases: err=%v", err)
+	}
+	gate.UpdateFromDaemon(nil, nil)
+	rel, err = ctrl.PrepareUpdateFlush(nil)
+	if err != nil || rel == nil {
+		t.Fatalf("expected idle daemon with zero open canvases to approve update: err=%v", err)
+	}
+	rel()
 }

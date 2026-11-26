@@ -148,6 +148,31 @@ func rejectReparsePointsInPath(absPath string) error {
 	return nil
 }
 
+func stripWin32DevicePrefix(p string) string {
+	if strings.HasPrefix(p, `\\?\UNC\`) {
+		return `\\` + strings.TrimPrefix(p, `\\?\UNC\`)
+	}
+	return strings.TrimPrefix(p, `\\?\`)
+}
+
+func expandWin32LongPath(p string) (string, error) {
+	inPtr, err := windows.UTF16PtrFromString(p)
+	if err != nil {
+		return "", err
+	}
+	buf := make([]uint16, 260)
+	for {
+		n, err := windows.GetLongPathName(inPtr, &buf[0], uint32(len(buf)))
+		if err != nil {
+			return "", fmt.Errorf("installer_long_path:%w", err)
+		}
+		if int(n) < len(buf) {
+			return windows.UTF16ToString(buf[:n]), nil
+		}
+		buf = make([]uint16, n+1)
+	}
+}
+
 func finalPathByHandle(h windows.Handle) (string, error) {
 	buf := make([]uint16, 260)
 	for {
@@ -156,9 +181,7 @@ func finalPathByHandle(h windows.Handle) (string, error) {
 			return "", fmt.Errorf("installer_final_path:%w", err)
 		}
 		if int(n) < len(buf) {
-			resolved := windows.UTF16ToString(buf[:n])
-			resolved = strings.TrimPrefix(resolved, `\\?\`)
-			return resolved, nil
+			return stripWin32DevicePrefix(windows.UTF16ToString(buf[:n])), nil
 		}
 		buf = make([]uint16, n+1)
 	}
@@ -169,6 +192,11 @@ func openLockedInstallerAndDir(installerPath string) (*windowsLockedInstaller, w
 	if err != nil {
 		return nil, 0, nil, err
 	}
+	longPath, err := expandWin32LongPath(absPath)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	absPath = filepath.Clean(longPath)
 	if err := rejectReparsePointsInPath(absPath); err != nil {
 		return nil, 0, nil, err
 	}

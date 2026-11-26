@@ -104,7 +104,6 @@ export class AppUpdaterService {
   private preparationInFlight = false
   private sparkleInstallPending = false
   private sparkleInstallRelease?: () => Promise<void>
-  private sparkleInstallTimer: TimeoutHandle | null = null
   private configurationUnavailable = false
   private checkingWatchdog: ReturnType<typeof createCheckingWatchdog> | null = null
 
@@ -116,7 +115,6 @@ export class AppUpdaterService {
       prepareToRelaunch?: () => Promise<void>
       abortRelaunch?: () => void
       checkTimeoutMs?: number
-      installTimeoutMs?: number
       scheduleTimeout?: (callback: () => void, delayMs: number) => TimeoutHandle
     } = {}
   ) {}
@@ -188,8 +186,6 @@ export class AppUpdaterService {
       this.intervalRef = null
     }
     this.checkingWatchdog?.stop()
-    this.sparkleInstallTimer?.cancel()
-    this.sparkleInstallTimer = null
   }
 
   async checkForUpdates(): Promise<CheckForElectronUpdateResult> {
@@ -327,13 +323,10 @@ export class AppUpdaterService {
       try {
         this.sparkleInstallPending = true
         this.sparkleInstallRelease = release
-        this.armSparkleInstallWatchdog()
         setAppQuitting(true)
         this.sparkleBridge.installUpdateNow()
         return { ok: true }
       } catch (error) {
-        this.sparkleInstallTimer?.cancel()
-        this.sparkleInstallTimer = null
         this.sparkleInstallPending = false
         this.sparkleInstallRelease = undefined
         setAppQuitting(false)
@@ -480,31 +473,7 @@ export class AppUpdaterService {
     return bridge
   }
 
-  private armSparkleInstallWatchdog(): void {
-    this.sparkleInstallTimer?.cancel()
-    const delayMs = this.options.installTimeoutMs ?? 30_000
-    const schedule =
-      this.options.scheduleTimeout ??
-      ((callback: () => void, ms: number): TimeoutHandle => {
-        const timer = setTimeout(callback, ms)
-        timer.unref?.()
-        return { cancel: () => clearTimeout(timer) }
-      })
-    this.sparkleInstallTimer = schedule(() => {
-      this.sparkleInstallTimer = null
-      if (!this.sparkleInstallPending) return
-      this.recoverFailedSparkleInstall('update_install_canceled')
-    }, delayMs)
-  }
-
   private recoverFailedSparkleInstall(message: string): void {
-    this.sparkleInstallTimer?.cancel()
-    this.sparkleInstallTimer = null
-    try {
-      this.sparkleBridge?.cancelCheck?.()
-    } catch {
-      // Best-effort cancellation before restoring services.
-    }
     const release = this.sparkleInstallRelease
     this.sparkleInstallPending = false
     this.sparkleInstallRelease = undefined
@@ -538,8 +507,7 @@ export class AppUpdaterService {
         if (this.sparkleInstallPending) {
           if (patch.phase === 'checking' || patch.phase === 'downloading') {
             // Sparkle resume flow emits checking/downloading progress before
-            // installing; keep the relaunch guard active and extend the watchdog.
-            this.armSparkleInstallWatchdog()
+            // installing; keep the relaunch guard active until a terminal outcome.
             this.setState(patch)
             return
           }
@@ -705,7 +673,7 @@ export class AppUpdaterService {
         }
       })
     }
-    this.checkingWatchdog.sync(this.state.phase)
+    this.checkingWatchdog.sync(this.sparkleInstallPending ? 'idle' : this.state.phase)
   }
 
   private emitState(): void {

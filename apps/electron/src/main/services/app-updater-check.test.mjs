@@ -257,7 +257,6 @@ void test('a failed async Sparkle install restores relaunch services and release
   })
   let onSparkleEvent
   let appQuitting = false
-  let canceledNativeCheck = false
   const bridge = {
     init: () => true,
     setAutomaticChecks() {},
@@ -265,9 +264,7 @@ void test('a failed async Sparkle install restores relaunch services and release
       onSparkleEvent = fn
     },
     checkForUpdates() {},
-    cancelCheck() {
-      canceledNativeCheck = true
-    },
+    cancelCheck() {},
     installUpdateNow() {}
   }
   const module = { exports: {} }
@@ -366,20 +363,16 @@ void test('a failed async Sparkle install restores relaunch services and release
   assert.equal(service.getState().error, 'sparkle_install_failed')
 
   // Retry install, emit valid resume checking/downloading events (must KEEP guard active),
-  // then simulate silent Sparkle cancellation via watchdog (must call cancelCheck + restore).
+  // and release services only when the native bridge acknowledges terminal cancellation.
   released = false
   aborted = false
-  canceledNativeCheck = false
   assert.deepEqual(await service.quitAndInstall(), { ok: true })
   onSparkleEvent({ type: 'checking' })
   onSparkleEvent({ type: 'update-available', version: '0.1.3' })
   assert.equal(appQuitting, true)
   assert.equal(aborted, false)
   assert.equal(released, false)
-  const activeTimer = scheduledTimers.findLast((entry) => entry.active)
-  assert.equal(typeof activeTimer?.callback, 'function')
-  activeTimer.callback()
-  assert.equal(canceledNativeCheck, true)
+  onSparkleEvent({ type: 'install-cancelled' })
   assert.equal(appQuitting, false)
   assert.equal(aborted, true)
   assert.equal(released, true)

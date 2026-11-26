@@ -111,12 +111,37 @@ func (l *windowsLockedInstaller) Close() error {
 	return errors.Join(err1, err2)
 }
 
+func stripWin32DevicePrefix(p string) string {
+	if strings.HasPrefix(p, `\\?\UNC\`) {
+		return `\\` + strings.TrimPrefix(p, `\\?\UNC\`)
+	}
+	return strings.TrimPrefix(p, `\\?\`)
+}
+
+func canonicalCompareWin32Path(p string) string {
+	return filepath.Clean(stripWin32DevicePrefix(p))
+}
+
+func win32VolumePrefix(cleaned string) string {
+	if strings.HasPrefix(cleaned, `\\?\UNC\`) {
+		rest := strings.TrimPrefix(cleaned, `\\?\UNC\`)
+		parts := strings.SplitN(rest, `\`, 3)
+		if len(parts) >= 2 {
+			return `\\?\UNC\` + parts[0] + `\` + parts[1]
+		}
+	}
+	if strings.HasPrefix(cleaned, `\\?\`) && len(cleaned) >= 6 && cleaned[5] == ':' {
+		return cleaned[:6]
+	}
+	return filepath.VolumeName(cleaned)
+}
+
 // rejectReparsePointsInPath verifies that no component along absPath (including
 // parent directories and the target itself) is an NTFS symlink, mount point, or
-// directory junction.
+// directory junction, preserving extended-length \\?\ prefixes for Win32 calls.
 func rejectReparsePointsInPath(absPath string) error {
 	cleaned := filepath.Clean(absPath)
-	vol := filepath.VolumeName(cleaned)
+	vol := win32VolumePrefix(cleaned)
 	rest := strings.TrimPrefix(cleaned, vol)
 	rest = strings.TrimLeft(rest, `\/`)
 	if rest == "" {
@@ -148,13 +173,6 @@ func rejectReparsePointsInPath(absPath string) error {
 	return nil
 }
 
-func stripWin32DevicePrefix(p string) string {
-	if strings.HasPrefix(p, `\\?\UNC\`) {
-		return `\\` + strings.TrimPrefix(p, `\\?\UNC\`)
-	}
-	return strings.TrimPrefix(p, `\\?\`)
-}
-
 func expandWin32LongPath(p string) (string, error) {
 	inPtr, err := windows.UTF16PtrFromString(p)
 	if err != nil {
@@ -181,16 +199,20 @@ func finalPathByHandle(h windows.Handle) (string, error) {
 			return "", fmt.Errorf("installer_final_path:%w", err)
 		}
 		if int(n) < len(buf) {
-			return stripWin32DevicePrefix(windows.UTF16ToString(buf[:n])), nil
+			return windows.UTF16ToString(buf[:n]), nil
 		}
 		buf = make([]uint16, n+1)
 	}
 }
 
 func openLockedInstallerAndDir(installerPath string) (*windowsLockedInstaller, windows.Handle, *uint16, error) {
-	absPath, err := filepath.Abs(installerPath)
-	if err != nil {
-		return nil, 0, nil, err
+	absPath := installerPath
+	if !strings.HasPrefix(absPath, `\\?\`) {
+		var err error
+		absPath, err = filepath.Abs(installerPath)
+		if err != nil {
+			return nil, 0, nil, err
+		}
 	}
 	longPath, err := expandWin32LongPath(absPath)
 	if err != nil {
@@ -268,7 +290,7 @@ func openLockedInstallerAndDir(installerPath string) (*windowsLockedInstaller, w
 		_ = windows.CloseHandle(dirHandle)
 		return nil, 0, nil, err
 	}
-	if !strings.EqualFold(filepath.Clean(finalPath), filepath.Clean(absPath)) {
+	if !strings.EqualFold(canonicalCompareWin32Path(finalPath), canonicalCompareWin32Path(absPath)) {
 		_ = file.Close()
 		_ = windows.CloseHandle(dirHandle)
 		return nil, 0, nil, errors.New("installer_canonical_path_mismatch")
@@ -279,6 +301,10 @@ func openLockedInstallerAndDir(installerPath string) (*windowsLockedInstaller, w
 		return nil, 0, nil, err
 	}
 
+	launchPath := finalPath
+	if !strings.HasPrefix(installerPath, `\\?\`) {
+		launchPath = stripWin32DevicePrefix(finalPath)
+	}
 	finalPtr, err := windows.UTF16PtrFromString(finalPath)
 	if err != nil {
 		_ = file.Close()
@@ -286,7 +312,7 @@ func openLockedInstallerAndDir(installerPath string) (*windowsLockedInstaller, w
 		return nil, 0, nil, err
 	}
 	return &windowsLockedInstaller{
-		path:     finalPath,
+		path:     launchPath,
 		file:     file,
 		dirGuard: dirHandle,
 	}, handle, finalPtr, nil

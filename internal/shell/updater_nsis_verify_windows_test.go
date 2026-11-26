@@ -42,6 +42,17 @@ func TestWindowsLockedInstallerPreventsConcurrentModifyAndDelete(t *testing.T) {
 	if err := locked.Close(); err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
+
+	// Extended-length \\?\ drive paths must also validate and lock cleanly.
+	extPath := `\\?\` + target
+	extLocked, _, _, err := openLockedInstallerAndDir(extPath)
+	if err != nil {
+		t.Fatalf("openLockedInstallerAndDir(%q) failed: %v", extPath, err)
+	}
+	if err := extLocked.Close(); err != nil {
+		t.Fatalf("Close extended failed: %v", err)
+	}
+
 	// After release, normal cleanup succeeds.
 	if err := os.Remove(target); err != nil {
 		t.Fatalf("expected remove after Close to succeed: %v", err)

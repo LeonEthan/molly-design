@@ -403,10 +403,12 @@ func (u *NSISUpdater) QuitAndInstall(ctx context.Context) QuitAndInstallUpdateRe
 	}
 	// Hold a read-only (deny write/delete on Windows) handle across verification,
 	// relaunch preparation, and process launch so the verified installer cannot
-	// be swapped in the cache directory before execution.
+	// be swapped in the cache directory before execution. If the cached file is
+	// missing or fails integrity/signature verification, invalidate it so a new
+	// manual check can re-download a clean replacement.
 	lockedInstaller, err := u.cfg.Verifier.LockAndVerifyInstaller(ctx, installerPath, expectedSHA512, u.cfg.ExpectedPublisher)
 	if err != nil {
-		u.recordError(err.Error())
+		u.invalidateCachedInstaller(err.Error())
 		return QuitAndInstallUpdateResult{OK: false, Error: err.Error()}
 	}
 	defer func() {
@@ -455,6 +457,26 @@ func (u *NSISUpdater) setState(next UpdaterState) {
 	u.state = next
 	snap := cloneUpdaterState(u.state)
 	u.mu.Unlock()
+	u.emit(snap)
+}
+
+func (u *NSISUpdater) invalidateCachedInstaller(message string) {
+	nowMs := u.cfg.Now().UnixMilli()
+	u.mu.Lock()
+	stalePath := u.downloadedPath
+	u.downloadedPath = ""
+	u.downloadedSHA512B64 = ""
+	u.state = UpdaterState{
+		Phase:          UpdaterPhaseError,
+		CurrentVersion: u.cfg.CurrentVersion,
+		Error:          message,
+		CheckedAtMs:    &nowMs,
+	}
+	snap := cloneUpdaterState(u.state)
+	u.mu.Unlock()
+	if stalePath != "" {
+		_ = os.Remove(stalePath)
+	}
 	u.emit(snap)
 }
 

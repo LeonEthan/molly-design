@@ -393,7 +393,8 @@ func TestNSISUpdaterUpToDateAndRejectionPaths(t *testing.T) {
 			t.Fatalf("expected downloaded phase preserved for retry, got %+v", st)
 		}
 
-		// Simulate disk tampering before retry: QuitAndInstall must fail closed.
+		// Simulate disk tampering before retry: QuitAndInstall must fail closed,
+		// invalidate the corrupt cached file, and allow a fresh CheckForUpdates to recover.
 		launcher.err = nil
 		if err := os.WriteFile(filepath.Join(dlDir, "MollyDesign-0.3.0-x64-setup.exe"), []byte("corrupted"), 0o600); err != nil {
 			t.Fatal(err)
@@ -401,6 +402,15 @@ func TestNSISUpdaterUpToDateAndRejectionPaths(t *testing.T) {
 		retry := u.QuitAndInstall(t.Context())
 		if retry.OK || !strings.Contains(retry.Error, "installer_sha512_mismatch") {
 			t.Fatalf("expected TOCTOU tampering to fail closed, got %+v", retry)
+		}
+		if st := u.GetState(); st.Phase != UpdaterPhaseError {
+			t.Fatalf("expected corrupt installer to transition to error phase for re-download, got %+v", st)
+		}
+		if recheck := u.CheckForUpdates(t.Context()); !recheck.Started {
+			t.Fatalf("expected fresh CheckForUpdates to succeed after cache invalidation, got %+v", recheck)
+		}
+		if st := u.GetState(); st.Phase != UpdaterPhaseDownloaded {
+			t.Fatalf("expected fresh verified download to reach downloaded phase, got %+v", st)
 		}
 	})
 

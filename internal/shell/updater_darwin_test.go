@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/ebitengine/purego/objc"
 )
@@ -109,5 +110,47 @@ func TestSparklePureGoFrameworkLoadAndBlockInvoke(t *testing.T) {
 	}
 	if sparkleDriverClass == 0 || sparkleDelegateClass == 0 {
 		t.Fatal("Molly Sparkle ObjC classes were not registered")
+	}
+}
+
+func TestSparkleCycleCompletionSettlesCheckingAndAbortsPendingRelaunch(t *testing.T) {
+	var aborted bool
+	u := &SparkleUpdater{
+		now: time.Now,
+		hooks: UpdaterHooks{
+			AbortRelaunch: func() { aborted = true },
+		},
+		state: UpdaterState{
+			Phase:          UpdaterPhaseChecking,
+			CurrentVersion: "0.2.0",
+		},
+	}
+
+	// Silent cycle completion with nil error must settle checking -> up_to_date.
+	u.handleUpdateCycleFinished("")
+	if st := u.GetState(); st.Phase != UpdaterPhaseUpToDate {
+		t.Fatalf("expected checking to settle to up_to_date, got %+v", st)
+	}
+
+	// Cycle completion with error must settle checking -> error.
+	u.state.Phase = UpdaterPhaseChecking
+	u.handleUpdateCycleFinished("network_timeout")
+	if st := u.GetState(); st.Phase != UpdaterPhaseError || st.Error != "network_timeout" {
+		t.Fatalf("expected checking to settle to error, got %+v", st)
+	}
+
+	// Pending relaunch failure must preserve downloaded state and trigger AbortRelaunch.
+	u.state = UpdaterState{
+		Phase:             UpdaterPhaseDownloaded,
+		CurrentVersion:    "0.2.0",
+		DownloadedVersion: "0.2.1",
+	}
+	u.relaunchPending = true
+	u.handleUpdateCycleFinished("install_aborted")
+	if !aborted {
+		t.Fatal("expected AbortRelaunch to run when Sparkle cycle ends during pending relaunch")
+	}
+	if st := u.GetState(); st.Phase != UpdaterPhaseDownloaded || st.Error != "install_aborted" {
+		t.Fatalf("expected downloaded phase preserved with error, got %+v", st)
 	}
 }

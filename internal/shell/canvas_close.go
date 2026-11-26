@@ -2,6 +2,7 @@ package shell
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"sync"
 
@@ -228,9 +229,60 @@ func (c *mygoDesignController) guardQuit() {
 	})
 	mygo.App.OnQuitCanceled(func() {
 		if owner := x.canceled(); owner != "" {
+			c.gate.SetUpdating(false)
 			c.gate.ReleaseCloseFreezeByOwner(owner)
 		}
 	})
+}
+
+func (c *mygoDesignController) PrepareUpdateFlush(confirm func(*mygoCanvasInstance, string) (bool, bool)) (func(), error) {
+	if confirm == nil {
+		confirm = c.confirmCanvasClose
+	}
+	x := &c.exit
+	x.mu.Lock()
+	if x.phase != quitIdle || len(x.closing) > 0 || len(x.closingArtwork) > 0 {
+		x.mu.Unlock()
+		return nil, errors.New("canvas_close_in_progress")
+	}
+	owner := randomHexToken(16)
+	x.phase = quitConfirming
+	x.token = owner
+	x.mu.Unlock()
+
+	rollback := func() {
+		c.gate.SetUpdating(false)
+		c.gate.ReleaseCloseFreezeByOwner(owner)
+		x.mu.Lock()
+		if x.token == owner {
+			x.phase = quitIdle
+			x.token = ""
+		}
+		x.mu.Unlock()
+	}
+
+	// Confirm and flush every open canvas while the gate is still writable and
+	// the private CLI/design worker are still running, so Retry Save works and
+	// Keep Editing leaves the session intact.
+	for _, i := range c.targets("", "", nil) {
+		if ok, _ := confirm(i, owner); !ok {
+			rollback()
+			return nil, errors.New("update_canceled_unsaved_design")
+		}
+	}
+
+	x.mu.Lock()
+	approved := x.phase == quitConfirming && x.token == owner
+	if approved {
+		x.phase = quitApproved
+	}
+	x.mu.Unlock()
+	if !approved {
+		rollback()
+		return nil, errors.New("canvas_close_in_progress")
+	}
+	c.gate.SetUpdating(true)
+	return rollback, nil
 }
 
 func (x *canvasExit) canceled() string {

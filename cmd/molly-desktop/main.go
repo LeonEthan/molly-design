@@ -13,7 +13,7 @@ import (
 	"github.com/LeonEthan/molly-design/internal/shell"
 )
 
-const desktopVersion = "0.2.0-mygo-experimental"
+var desktopVersion = "0.2.0-mygo-experimental"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))

@@ -235,3 +235,117 @@ void test('replacement construction failure leaves the timed-out generation reti
   assert.equal(service.getState().phase, 'error')
   service.stop()
 })
+
+void test('a failed async Sparkle install restores relaunch services and releases install guard', async () => {
+  const { createRequire } = await import('node:module')
+  const { fileURLToPath } = await import('node:url')
+  const { compileFunction } = await import('node:vm')
+  const check = await import('./app-updater-check.ts')
+  const sparkleEvents = await import('./app-updater-sparkle-events.ts')
+  const require = createRequire(import.meta.url)
+  const { build } = createRequire(new URL('../../../../cli/package.json', import.meta.url))(
+    'esbuild'
+  )
+  const compiled = await build({
+    entryPoints: [fileURLToPath(new URL('./app-updater-service.ts', import.meta.url))],
+    bundle: true,
+    write: false,
+    platform: 'node',
+    format: 'cjs',
+    external: ['*'],
+    define: { 'import.meta.env': '{}' }
+  })
+  let onSparkleEvent
+  let appQuitting = false
+  const bridge = {
+    init: () => true,
+    setAutomaticChecks() {},
+    setEventHandler(fn) {
+      onSparkleEvent = fn
+    },
+    checkForUpdates() {},
+    installUpdateNow() {}
+  }
+  const module = { exports: {} }
+  compileFunction(compiled.outputFiles[0].text, [
+    'module',
+    'exports',
+    'require',
+    'setInterval',
+    'process'
+  ])(
+    module,
+    module.exports,
+    (name) => {
+      if (name === 'electron-updater') return { autoUpdater: { on() {} } }
+      if (name === 'electron')
+        return {
+          app: {
+            getVersion: () => '0.1.2',
+            getAppPath: () => '/app',
+            getPath: () => '/synthetic',
+            isPackaged: true
+          },
+          BrowserWindow: { getAllWindows: () => [] }
+        }
+      if (name === './app-updater-check') return check
+      if (name === './app-updater-sparkle-events') return sparkleEvents
+      if (name === './app-updater-sparkle-policy')
+        return {
+          shouldUseSparkleUpdater: () => true,
+          resolveSparkleAppcastUrl: () => 'https://example.invalid/appcast.xml',
+          resolveSparkleAddonPath: () => '/synthetic/sparkle.node',
+          sparklePackageJsonPathFromModuleEntry: () => '/synthetic/package.json'
+        }
+      if (name === './app-updater-metadata') return { readUpdaterReleaseMetadata: () => ({}) }
+      if (name === '../utils') return { formatUnknownError: (error) => error.message }
+      if (name === '../window-state')
+        return {
+          setAppQuitting(value) {
+            appQuitting = value
+          }
+        }
+      if (name === '@molly/shared/electron-ipc')
+        return {
+          IPC_PUSH_CHANNELS: { updaterState: 'updater.state' },
+          UPDATE_CHECK_UNANSWERED: 'unanswered'
+        }
+      if (name === 'electron-sparkle-updater')
+        return {
+          loadSparkleBridge: () => bridge,
+          SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER: 'SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER'
+        }
+      return require(name)
+    },
+    () => undefined,
+    { platform: 'darwin', env: {}, resourcesPath: '/synthetic' }
+  )
+
+  let released = false
+  let aborted = false
+  const service = new module.exports.AppUpdaterService({
+    enabled: true,
+    prepareInstall: async () => async () => {
+      released = true
+    },
+    prepareToRelaunch: async () => {},
+    abortRelaunch: () => {
+      aborted = true
+    }
+  })
+  service.start()
+  onSparkleEvent({ type: 'update-downloaded', version: '0.1.3' })
+  assert.deepEqual(await service.quitAndInstall(), { ok: true })
+  assert.equal(appQuitting, true)
+  assert.deepEqual(await service.quitAndInstall(), {
+    ok: false,
+    error: 'update_install_in_progress'
+  })
+
+  onSparkleEvent({ type: 'error', message: 'sparkle_install_failed' })
+  assert.equal(appQuitting, false)
+  assert.equal(aborted, true)
+  assert.equal(released, true)
+  assert.equal(service.getState().error, 'sparkle_install_failed')
+  service.stop()
+})

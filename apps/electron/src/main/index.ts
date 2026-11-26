@@ -356,7 +356,8 @@ if (hasSingleInstanceLock) {
       event.preventDefault()
       void Promise.allSettled([
         cliService.shutdownForQuit(),
-        publicBrowserService.shutdownForQuit()
+        publicBrowserService.shutdownForQuit(),
+        getModelConnectionStore().drainOAuthForHandoff()
       ]).finally(() => {
         publicBrowserService.destroyAll()
         cliShutdownComplete = true

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,16 +18,40 @@ import (
 	"time"
 )
 
+type stubLockHandle struct {
+	closed bool
+}
+
+func (h *stubLockHandle) Close() error {
+	h.closed = true
+	return nil
+}
+
 type stubNSISVerifier struct {
-	err       error
-	publisher string
-	path      string
+	err        error
+	publisher  string
+	path       string
+	lastHandle *stubLockHandle
 }
 
 func (v *stubNSISVerifier) VerifyInstaller(_ context.Context, installerPath, expectedPublisher string) error {
 	v.path = installerPath
 	v.publisher = expectedPublisher
 	return v.err
+}
+
+func (v *stubNSISVerifier) LockAndVerifyInstaller(_ context.Context, installerPath, expectedSHA512, expectedPublisher string) (io.Closer, error) {
+	v.path = installerPath
+	v.publisher = expectedPublisher
+	if err := verifyFileSHA512Base64(installerPath, expectedSHA512); err != nil {
+		return nil, err
+	}
+	if v.err != nil {
+		return nil, fmt.Errorf("installer_signature_invalid:%w", v.err)
+	}
+	h := &stubLockHandle{}
+	v.lastHandle = h
+	return h, nil
 }
 
 type stubNSISLauncher struct {
@@ -376,4 +401,110 @@ func TestNSISUpdaterUpToDateAndRejectionPaths(t *testing.T) {
 			t.Fatalf("expected TOCTOU tampering to fail closed, got %+v", retry)
 		}
 	})
+
+	t.Run("holds_installer_lock_across_relaunch_hook_and_launch", func(t *testing.T) {
+		payload := []byte("signed-locked-installer")
+		dlDir := t.TempDir()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/latest.yml" {
+				fmt.Fprintf(w, "version: 0.3.0\npath: MollyDesign-0.3.0-x64-setup.exe\nsha512: %s\n", sha512Base64(payload))
+				return
+			}
+			_, _ = w.Write(payload)
+		}))
+		defer srv.Close()
+
+		verifier := &stubNSISVerifier{}
+		lockOpenDuringPrepare := false
+		lockOpenDuringLaunch := false
+		launcher := &stubNSISLauncher{}
+		u, err := NewNSISUpdater(NSISUpdaterConfig{
+			CurrentVersion:    "0.2.0",
+			FeedURL:           srv.URL + "/latest.yml",
+			DownloadDir:       dlDir,
+			AllowLoopbackHTTP: true,
+			HTTPClient:        srv.Client(),
+			Verifier:          verifier,
+			Launcher:          launcher,
+			Hooks: UpdaterHooks{
+				PrepareToRelaunch: func(context.Context) error {
+					lockOpenDuringPrepare = verifier.lastHandle != nil && !verifier.lastHandle.closed
+					return nil
+				},
+				Quit: func() {
+					lockOpenDuringLaunch = verifier.lastHandle != nil && !verifier.lastHandle.closed
+				},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res := u.CheckForUpdates(t.Context()); !res.Started {
+			t.Fatalf("download failed: %+v", res)
+		}
+		if res := u.QuitAndInstall(t.Context()); !res.OK {
+			t.Fatalf("QuitAndInstall failed: %+v", res)
+		}
+		if !lockOpenDuringPrepare || !lockOpenDuringLaunch || !verifier.lastHandle.closed {
+			t.Fatalf("expected installer handle held during prepare/launch and closed after: prepare=%v launch=%v closed=%v",
+				lockOpenDuringPrepare, lockOpenDuringLaunch, verifier.lastHandle.closed)
+		}
+	})
+
+	t.Run("rejects_redirects_to_disallowed_scheme_or_non_loopback_http", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "http://example.com/evil-latest.yml", http.StatusFound)
+		}))
+		defer srv.Close()
+
+		u, err := NewNSISUpdater(NSISUpdaterConfig{
+			CurrentVersion:    "0.2.0",
+			FeedURL:           srv.URL + "/latest.yml",
+			DownloadDir:       t.TempDir(),
+			AllowLoopbackHTTP: true,
+			HTTPClient:        srv.Client(),
+			Verifier:          &stubNSISVerifier{},
+			Launcher:          &stubNSISLauncher{},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res := u.CheckForUpdates(t.Context())
+		if res.Started || !strings.Contains(res.Error, "update_redirect_rejected") {
+			t.Fatalf("expected redirect to non-loopback HTTP to be rejected, got %+v", res)
+		}
+	})
+}
+
+func TestPrepareUpdateFlushAllowsRetrySaveAndKeepEditingWithoutStoppingServices(t *testing.T) {
+	gate := NewCanvasAccessGate()
+	gate.UpdateFromDaemon(nil, nil)
+	ctrl := newMygoDesignController(nil, gate, nil)
+	ctrl.instances[canvasInstanceKey("art-1", "host-1")] = &mygoCanvasInstance{artworkID: "art-1", hostID: "host-1"}
+
+	// First attempt: user clicks Keep Editing -> gate stays writable and phase returns to idle.
+	var sawWritableDuringConfirm bool
+	rel, err := ctrl.PrepareUpdateFlush(func(_ *mygoCanvasInstance, _ string) (bool, bool) {
+		sawWritableDuringConfirm = gate.IsWriteAllowed("art-1", "")
+		return false, false
+	})
+	if err == nil || rel != nil || !sawWritableDuringConfirm || !gate.IsWriteAllowed("art-1", "") {
+		t.Fatalf("expected canceled update flush to keep gate writable: err=%v rel=%v sawWritable=%v writable=%v",
+			err, rel != nil, sawWritableDuringConfirm, gate.IsWriteAllowed("art-1", ""))
+	}
+
+	// Second attempt: canvas flushes clean -> gate blocks writes while updating and rollback restores it.
+	rel, err = ctrl.PrepareUpdateFlush(func(_ *mygoCanvasInstance, _ string) (bool, bool) {
+		if !gate.IsWriteAllowed("art-1", "") {
+			t.Error("gate should remain writable while flushing before update")
+		}
+		return true, false
+	})
+	if err != nil || rel == nil || gate.IsWriteAllowed("art-1", "") {
+		t.Fatalf("expected update flush to approve and freeze: err=%v writable=%v", err, gate.IsWriteAllowed("art-1", ""))
+	}
+	rel()
+	if !gate.IsWriteAllowed("art-1", "") || ctrl.exit.phase != quitIdle {
+		t.Fatalf("expected rollback to restore gate and idle phase: writable=%v phase=%v", gate.IsWriteAllowed("art-1", ""), ctrl.exit.phase)
+	}
 }

@@ -35,16 +35,24 @@ type objcBlockABI struct {
 }
 
 var loadDarwinLibC = sync.OnceValue(func() struct {
-	memcpy func(dst unsafe.Pointer, src uintptr, n uintptr)
-	strlen func(src uintptr) uintptr
+	memcpy         func(dst unsafe.Pointer, src uintptr, n uintptr)
+	strlen         func(src uintptr) uintptr
+	msgSendBool    func(self objc.ID, sel objc.SEL) bool
+	msgSendOutBool func(self objc.ID, sel objc.SEL, errOut *objc.ID) bool
 } {
 	var api struct {
-		memcpy func(dst unsafe.Pointer, src uintptr, n uintptr)
-		strlen func(src uintptr) uintptr
+		memcpy         func(dst unsafe.Pointer, src uintptr, n uintptr)
+		strlen         func(src uintptr) uintptr
+		msgSendBool    func(self objc.ID, sel objc.SEL) bool
+		msgSendOutBool func(self objc.ID, sel objc.SEL, errOut *objc.ID) bool
 	}
 	if lib, err := purego.Dlopen("/usr/lib/libSystem.B.dylib", purego.RTLD_GLOBAL|purego.RTLD_NOW); err == nil {
 		purego.RegisterLibFunc(&api.memcpy, lib, "memcpy")
 		purego.RegisterLibFunc(&api.strlen, lib, "strlen")
+	}
+	if libObjC, err := purego.Dlopen("/usr/lib/libobjc.A.dylib", purego.RTLD_GLOBAL|purego.RTLD_NOW); err == nil {
+		purego.RegisterLibFunc(&api.msgSendBool, libObjC, "objc_msgSend")
+		purego.RegisterLibFunc(&api.msgSendOutBool, libObjC, "objc_msgSend")
 	}
 	return api
 })
@@ -162,6 +170,7 @@ type SparkleUpdater struct {
 	readyReplyBlock objc.Block
 	checkCancelBlk  objc.Block
 	installInFlight bool
+	relaunchPending bool
 	closed          bool
 }
 
@@ -234,9 +243,14 @@ func NewSparkleUpdater(currentVersion string, bundleCfg SparkleBundleConfig, hoo
 			initErr = errors.New("sparkle_init_failed")
 			return
 		}
+		api := loadDarwinLibC()
+		if api.msgSendOutBool == nil {
+			initErr = errors.New("sparkle_objc_msgsend_unavailable")
+			return
+		}
 		var nsErr objc.ID
-		started := updater.Send(objc.RegisterName("startUpdater:"), uintptr(unsafe.Pointer(&nsErr)))
-		if started == 0 {
+		started := api.msgSendOutBool(updater, objc.RegisterName("startUpdater:"), &nsErr)
+		if !started {
 			msg := "sparkle_start_failed"
 			if nsErr != 0 {
 				if desc := nsStringToGo(nsErr.Send(objc.RegisterName("localizedDescription"))); desc != "" {
@@ -282,24 +296,41 @@ func (u *SparkleUpdater) CheckForUpdates(context.Context) CheckForUpdateResult {
 		u.emit(snap)
 		return CheckForUpdateResult{Started: false}
 	}
-	nowMs := u.now().UnixMilli()
-	u.state = UpdaterState{
-		Phase:          UpdaterPhaseChecking,
-		CurrentVersion: u.state.CurrentVersion,
-		CheckedAtMs:    &nowMs,
-	}
-	snap := cloneUpdaterState(u.state)
 	updater := u.updaterID
 	u.mu.Unlock()
-	u.emit(snap)
 
-	trigger := func() {
+	var (
+		canCheck bool
+		inFlight bool
+	)
+	checkAndTrigger := func() {
+		api := loadDarwinLibC()
+		if api.msgSendBool != nil {
+			canCheck = api.msgSendBool(updater, objc.RegisterName("canCheckForUpdates"))
+			inFlight = api.msgSendBool(updater, objc.RegisterName("sessionInProgress"))
+		}
+		if !canCheck || inFlight {
+			return
+		}
+		nowMs := u.now().UnixMilli()
+		u.mu.Lock()
+		u.state = UpdaterState{
+			Phase:          UpdaterPhaseChecking,
+			CurrentVersion: u.state.CurrentVersion,
+			CheckedAtMs:    &nowMs,
+		}
+		snap := cloneUpdaterState(u.state)
+		u.mu.Unlock()
+		u.emit(snap)
 		updater.Send(objc.RegisterName("checkForUpdates"))
 	}
 	if u.hooks.RunOnMain != nil {
-		u.hooks.RunOnMain(trigger)
+		u.hooks.RunOnMain(checkAndTrigger)
 	} else {
-		trigger()
+		checkAndTrigger()
+	}
+	if !canCheck || inFlight {
+		return CheckForUpdateResult{Started: false, Error: "check_in_progress"}
 	}
 	return CheckForUpdateResult{Started: true}
 }
@@ -314,7 +345,7 @@ func (u *SparkleUpdater) QuitAndInstall(ctx context.Context) QuitAndInstallUpdat
 		u.mu.Unlock()
 		return QuitAndInstallUpdateResult{OK: false, Error: "update_not_downloaded"}
 	}
-	if u.installInFlight {
+	if u.installInFlight || u.relaunchPending {
 		u.mu.Unlock()
 		return QuitAndInstallUpdateResult{OK: false, Error: "update_install_in_progress"}
 	}
@@ -339,6 +370,10 @@ func (u *SparkleUpdater) QuitAndInstall(ctx context.Context) QuitAndInstallUpdat
 			return QuitAndInstallUpdateResult{OK: false, Error: err.Error()}
 		}
 	}
+
+	u.mu.Lock()
+	u.relaunchPending = true
+	u.mu.Unlock()
 
 	install := func() {
 		u.mu.Lock()
@@ -449,6 +484,54 @@ func cStringToGo(ptr uintptr) string {
 	return string(buf)
 }
 
+func (u *SparkleUpdater) abortPendingRelaunch() {
+	u.mu.Lock()
+	pending := u.relaunchPending
+	u.relaunchPending = false
+	u.mu.Unlock()
+	if pending && u.hooks.AbortRelaunch != nil {
+		u.hooks.AbortRelaunch()
+	}
+}
+
+func (u *SparkleUpdater) handleUpdateCycleFinished(errMsg string) {
+	u.retireCheckCancellation()
+	u.abortPendingRelaunch()
+	nowMs := u.now().UnixMilli()
+	u.mu.Lock()
+	if u.state.Phase != UpdaterPhaseChecking {
+		if errMsg != "" {
+			next := cloneUpdaterState(u.state)
+			next.Error = errMsg
+			next.CheckedAtMs = &nowMs
+			u.state = next
+			snap := cloneUpdaterState(u.state)
+			u.mu.Unlock()
+			u.emit(snap)
+			return
+		}
+		u.mu.Unlock()
+		return
+	}
+	if errMsg != "" {
+		u.state = UpdaterState{
+			Phase:          UpdaterPhaseError,
+			CurrentVersion: u.state.CurrentVersion,
+			Error:          errMsg,
+			CheckedAtMs:    &nowMs,
+		}
+	} else {
+		u.state = UpdaterState{
+			Phase:          UpdaterPhaseUpToDate,
+			CurrentVersion: u.state.CurrentVersion,
+			CheckedAtMs:    &nowMs,
+		}
+	}
+	snap := cloneUpdaterState(u.state)
+	u.mu.Unlock()
+	u.emit(snap)
+}
+
 func registerSparkleObjCClasses() error {
 	if sparkleDriverClass != 0 {
 		return nil
@@ -511,7 +594,8 @@ func registerSparkleObjCClasses() error {
 						return
 					}
 					u.retireCheckCancellation()
-					if item != 0 && item.Send(objc.RegisterName("isInformationOnlyUpdate")) != 0 {
+					api := loadDarwinLibC()
+					if item != 0 && api.msgSendBool != nil && api.msgSendBool(item, objc.RegisterName("isInformationOnlyUpdate")) {
 						u.recordError("informational update")
 						invokeObjCBlockArg(reply, uintptr(spuUserUpdateChoiceDismiss))
 						return
@@ -602,6 +686,7 @@ func registerSparkleObjCClasses() error {
 				Fn: func(_ objc.ID, _ objc.SEL, nsErr objc.ID, ack objc.Block) {
 					if u := currentSparkleUpdater(); u != nil {
 						u.retireCheckCancellation()
+						u.abortPendingRelaunch()
 						msg := "sparkle_error"
 						if nsErr != 0 {
 							if desc := nsStringToGo(nsErr.Send(objc.RegisterName("localizedDescription"))); desc != "" {
@@ -750,6 +835,7 @@ func registerSparkleObjCClasses() error {
 				Fn: func(_ objc.ID, _ objc.SEL) {
 					if u := currentSparkleUpdater(); u != nil {
 						u.retireCheckCancellation()
+						u.abortPendingRelaunch()
 						u.mu.Lock()
 						u.installWhenRdy = false
 						if u.readyReplyBlock != 0 {
@@ -777,11 +863,32 @@ func registerSparkleObjCClasses() error {
 		[]objc.MethodDef{
 			{
 				Cmd: objc.RegisterName("updater:didFinishUpdateCycleForUpdateCheck:error:"),
-				Fn:  func(_ objc.ID, _ objc.SEL, _ objc.ID, _ int64, _ objc.ID) {},
+				Fn: func(_ objc.ID, _ objc.SEL, _ objc.ID, _ int64, nsErr objc.ID) {
+					if u := currentSparkleUpdater(); u != nil {
+						errMsg := ""
+						if nsErr != 0 {
+							errMsg = nsStringToGo(nsErr.Send(objc.RegisterName("localizedDescription")))
+							if errMsg == "" {
+								errMsg = "sparkle_error"
+							}
+						}
+						u.handleUpdateCycleFinished(errMsg)
+					}
+				},
 			},
 			{
 				Cmd: objc.RegisterName("updater:didAbortWithError:"),
-				Fn:  func(_ objc.ID, _ objc.SEL, _ objc.ID, _ objc.ID) {},
+				Fn: func(_ objc.ID, _ objc.SEL, _ objc.ID, nsErr objc.ID) {
+					if u := currentSparkleUpdater(); u != nil {
+						errMsg := "sparkle_error"
+						if nsErr != 0 {
+							if desc := nsStringToGo(nsErr.Send(objc.RegisterName("localizedDescription"))); desc != "" {
+								errMsg = desc
+							}
+						}
+						u.handleUpdateCycleFinished(errMsg)
+					}
+				},
 			},
 		},
 	)

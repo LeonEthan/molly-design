@@ -4,17 +4,23 @@ package shell
 
 import (
 	"context"
+	"crypto/sha512"
+	"crypto/subtle"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 var (
-	modWintrust = syscall.NewLazyDLL("wintrust.dll")
-	modCrypt32  = syscall.NewLazyDLL("crypt32.dll")
+	modWintrust = windows.NewLazySystemDLL("wintrust.dll")
+	modCrypt32  = windows.NewLazySystemDLL("crypt32.dll")
 
 	procWinVerifyTrust             = modWintrust.NewProc("WinVerifyTrust")
 	procCryptQueryObject           = modCrypt32.NewProc("CryptQueryObject")
@@ -43,7 +49,7 @@ var winTrustActionGenericVerifyV2 = winGUID{
 type winTrustFileInfo struct {
 	cbStruct       uint32
 	pcwszFilePath  *uint16
-	hFile          syscall.Handle
+	hFile          windows.Handle
 	pgKnownSubject *winGUID
 }
 
@@ -105,14 +111,33 @@ const (
 
 type defaultNSISSignatureVerifier struct{}
 
-func (defaultNSISSignatureVerifier) VerifyInstaller(_ context.Context, installerPath string, expectedPublisher string) error {
-	pathPtr, err := syscall.UTF16PtrFromString(installerPath)
+func openReadOnlyDenyWriteDelete(installerPath string) (*os.File, windows.Handle, *uint16, error) {
+	pathPtr, err := windows.UTF16PtrFromString(installerPath)
 	if err != nil {
-		return err
+		return nil, 0, nil, err
 	}
+	// Share read-only so CreateProcess can execute the verified image while
+	// preventing any concurrent writer or renamer from modifying or swapping it.
+	handle, err := windows.CreateFile(
+		pathPtr,
+		windows.GENERIC_READ,
+		windows.FILE_SHARE_READ,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_ATTRIBUTE_NORMAL,
+		0,
+	)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("open_installer_locked:%w", err)
+	}
+	return os.NewFile(uintptr(handle), installerPath), handle, pathPtr, nil
+}
+
+func verifyAuthenticodeHandle(handle windows.Handle, pathPtr *uint16, expectedPublisher string) error {
 	fileInfo := winTrustFileInfo{
 		cbStruct:      uint32(unsafe.Sizeof(winTrustFileInfo{})),
 		pcwszFilePath: pathPtr,
+		hFile:         handle,
 	}
 	trustData := winTrustData{
 		cbStruct:            uint32(unsafe.Sizeof(winTrustData{})),
@@ -145,6 +170,52 @@ func (defaultNSISSignatureVerifier) VerifyInstaller(_ context.Context, installer
 		return fmt.Errorf("publisher_mismatch:got=%q want=%q", signer, expectedPublisher)
 	}
 	return nil
+}
+
+func (defaultNSISSignatureVerifier) VerifyInstaller(_ context.Context, installerPath string, expectedPublisher string) error {
+	f, handle, pathPtr, err := openReadOnlyDenyWriteDelete(installerPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return verifyAuthenticodeHandle(handle, pathPtr, expectedPublisher)
+}
+
+func (defaultNSISSignatureVerifier) LockAndVerifyInstaller(_ context.Context, installerPath, expectedSHA512, expectedPublisher string) (io.Closer, error) {
+	expectedDigest, err := decodeSHA512Base64(expectedSHA512)
+	if err != nil {
+		return nil, err
+	}
+	f, handle, pathPtr, err := openReadOnlyDenyWriteDelete(installerPath)
+	if err != nil {
+		return nil, err
+	}
+	keep := false
+	defer func() {
+		if !keep {
+			_ = f.Close()
+		}
+	}()
+
+	h := sha512.New()
+	n, err := io.Copy(h, io.LimitReader(f, maxNSISInstallerBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if n > maxNSISInstallerBytes {
+		return nil, errors.New("installer_too_large")
+	}
+	if subtle.ConstantTimeCompare(h.Sum(nil), expectedDigest) != 1 {
+		return nil, errors.New("installer_sha512_mismatch")
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	if err := verifyAuthenticodeHandle(handle, pathPtr, expectedPublisher); err != nil {
+		return nil, fmt.Errorf("installer_signature_invalid:%w", err)
+	}
+	keep = true
+	return f, nil
 }
 
 func readAuthenticodeSignerName(pathPtr *uint16) (string, error) {
@@ -209,7 +280,9 @@ func readAuthenticodeSignerName(pathPtr *uint16) (string, error) {
 type defaultNSISInstallerLauncher struct{}
 
 func (defaultNSISInstallerLauncher) LaunchSilentInstaller(installerPath string) error {
-	cmd := exec.Command(installerPath, "/S")
+	// Match electron-updater's NsisUpdater silent relaunch flags so the NSIS
+	// package installs silently and restarts the newly installed Molly build.
+	cmd := exec.Command(installerPath, "--updated", "/S", "--force-run")
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNoWindowFlag}
 	return cmd.Start()
 }

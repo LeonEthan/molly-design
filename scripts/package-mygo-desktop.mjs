@@ -282,7 +282,17 @@ export async function packageMyGoDesktop({
   fs.mkdirSync(resourcesDir, { recursive: true })
 
   const desktopBin = path.join(macosDir, appName)
-  run('go', ['build', '-trimpath', '-ldflags=-s -w', '-o', desktopBin, './cmd/molly-desktop'], {
+  run(
+    'go',
+    [
+      'build',
+      '-trimpath',
+      `-ldflags=-s -w -X main.desktopVersion=${version}`,
+      '-o',
+      desktopBin,
+      './cmd/molly-desktop'
+    ],
+    {
     cwd: repoRoot,
     env: {
       ...process.env,

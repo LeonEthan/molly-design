@@ -185,6 +185,7 @@ export class ModelConnectionStore {
   private pending: Promise<unknown> = Promise.resolve()
   private readonly oauthPending = new Map<string, Promise<unknown>>()
   private oauthDraining = false
+  private oauthRotationPersistFailures = 0
 
   constructor(
     directory: string,
@@ -1043,10 +1044,14 @@ export class ModelConnectionStore {
 
   async drainOAuthForHandoff(): Promise<void> {
     this.oauthDraining = true
+    const failuresBefore = this.oauthRotationPersistFailures
     while (this.oauthPending.size > 0) {
       await Promise.allSettled([...this.oauthPending.values()])
     }
     await this.pending
+    if (this.oauthRotationPersistFailures > failuresBefore) {
+      throw new Error('oauth_refresh_persist_failed')
+    }
   }
 
   resumeOAuthAfterAbortedHandoff(): void {
@@ -1071,27 +1076,33 @@ export class ModelConnectionStore {
         return undefined
       const expectedTokens = JSON.stringify(initial.oauth)
       const next = await fn(initial.oauth)
-      return this.writeTransaction(
-        async () => {
-          const store = await this.read()
-          const current = store.entries.find((item) => item.connection.id === connectionId)
-          if (
-            !current?.oauth ||
-            current.connection.authType !== 'openai_oauth' ||
-            current.connection.credentialRef !== initial.connection.credentialRef ||
-            current.connection.providerPresetId !== initial.connection.providerPresetId ||
-            current.connection.baseUrl !== initial.connection.baseUrl ||
-            JSON.stringify(current.oauth) !== expectedTokens
-          )
-            return undefined
-          if (next !== undefined && next !== initial.oauth) {
-            current.oauth = next
-            await this.write(store)
-          }
-          return current.oauth
-        },
-        next && next !== initial.oauth ? rotatedGrantLeaseWaitMs : undefined
-      )
+      const rotated = next !== undefined && next !== initial.oauth
+      try {
+        return await this.writeTransaction(
+          async () => {
+            const store = await this.read()
+            const current = store.entries.find((item) => item.connection.id === connectionId)
+            if (
+              !current?.oauth ||
+              current.connection.authType !== 'openai_oauth' ||
+              current.connection.credentialRef !== initial.connection.credentialRef ||
+              current.connection.providerPresetId !== initial.connection.providerPresetId ||
+              current.connection.baseUrl !== initial.connection.baseUrl ||
+              JSON.stringify(current.oauth) !== expectedTokens
+            )
+              return undefined
+            if (rotated) {
+              current.oauth = next
+              await this.write(store)
+            }
+            return current.oauth
+          },
+          rotated ? rotatedGrantLeaseWaitMs : undefined
+        )
+      } catch (error) {
+        if (rotated) this.oauthRotationPersistFailures += 1
+        throw error
+      }
     })
   }
 

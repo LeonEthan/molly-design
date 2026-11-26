@@ -183,6 +183,14 @@ void test(
     assert.match(plistText, /<key>CFBundleShortVersionString<\/key>\s*<string>0\.2\.1<\/string>/)
     assert.match(plistText, new RegExp(rawPubKeyBase64.replaceAll('+', '\\+')))
 
+    const versionCheck = spawnSync(
+      path.join(report.appPath, 'Contents', 'MacOS', 'Molly Experimental'),
+      ['--version'],
+      { encoding: 'utf8' }
+    )
+    assert.equal(versionCheck.status, 0, versionCheck.stderr)
+    assert.match(versionCheck.stdout, /molly-desktop 0\.2\.1\b/)
+
     // Create a release zip archive and verify Ed25519 signature acceptance + tamper rejection.
     const archivePath = path.join(outDir, 'Molly-0.2.1.zip')
     const ditto = spawnSync('/usr/bin/ditto', ['-c', '-k', '--keepParent', report.appPath, archivePath], {

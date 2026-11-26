@@ -1118,6 +1118,8 @@ func RunDesktop(opts DesktopOptions) (runErr error) {
 
 	mygo.App.OnReady(func() {
 		bridge.enableDesktopPublicBrowser(opts, runtime.GOOS, openDesktopPublicBrowser)
+		var updateFlushMu sync.Mutex
+		var releaseUpdateFlush func()
 		bridge.setUpdater(NewDesktopUpdater(DesktopUpdaterConfig{
 			CurrentVersion:   bridge.cfg.AppVersion,
 			DataDir:          dataDir,
@@ -1127,15 +1129,29 @@ func RunDesktop(opts DesktopOptions) (runErr error) {
 					_ = bridge.EmitToWorkbench("updater.state", state)
 				},
 				PrepareToRelaunch: func(ctx context.Context) error {
-					gate.SetUpdating(true)
-					if err := bridge.closePrivateCLI(); err != nil {
-						return err
+					if c, ok := designController.(*mygoDesignController); ok {
+						rel, err := c.PrepareUpdateFlush(nil)
+						if err != nil {
+							return err
+						}
+						updateFlushMu.Lock()
+						releaseUpdateFlush = rel
+						updateFlushMu.Unlock()
+					} else {
+						gate.SetUpdating(true)
 					}
-					bridge.closeSettings()
 					return nil
 				},
 				AbortRelaunch: func() {
-					gate.SetUpdating(false)
+					updateFlushMu.Lock()
+					rel := releaseUpdateFlush
+					releaseUpdateFlush = nil
+					updateFlushMu.Unlock()
+					if rel != nil {
+						rel()
+					} else {
+						gate.SetUpdating(false)
+					}
 				},
 				Quit:      mygo.App.Quit,
 				RunOnMain: mygo.RunOnMain,

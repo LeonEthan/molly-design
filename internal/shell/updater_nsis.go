@@ -34,6 +34,7 @@ type NSISLatestManifest struct {
 
 type NSISSignatureVerifier interface {
 	VerifyInstaller(ctx context.Context, installerPath string, expectedPublisher string) error
+	LockAndVerifyInstaller(ctx context.Context, installerPath, expectedSHA512, expectedPublisher string) (io.Closer, error)
 }
 
 type NSISInstallerLauncher interface {
@@ -82,6 +83,7 @@ func NewNSISUpdater(cfg NSISUpdaterConfig) (*NSISUpdater, error) {
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{Timeout: 10 * time.Minute}
 	}
+	cfg.HTTPClient = cloneClientWithRedirectPolicy(cfg.HTTPClient, cfg.AllowLoopbackHTTP)
 	if cfg.Verifier == nil {
 		cfg.Verifier = defaultNSISSignatureVerifier{}
 	}
@@ -394,15 +396,19 @@ func (u *NSISUpdater) QuitAndInstall(ctx context.Context) QuitAndInstallUpdateRe
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := verifyFileSHA512Base64(installerPath, expectedSHA512); err != nil {
+	// Hold a read-only (deny write/delete on Windows) handle across verification,
+	// relaunch preparation, and process launch so the verified installer cannot
+	// be swapped in the cache directory before execution.
+	lockedInstaller, err := u.cfg.Verifier.LockAndVerifyInstaller(ctx, installerPath, expectedSHA512, u.cfg.ExpectedPublisher)
+	if err != nil {
 		u.recordError(err.Error())
 		return QuitAndInstallUpdateResult{OK: false, Error: err.Error()}
 	}
-	if err := u.cfg.Verifier.VerifyInstaller(ctx, installerPath, u.cfg.ExpectedPublisher); err != nil {
-		msg := fmt.Sprintf("installer_signature_invalid:%v", err)
-		u.recordError(msg)
-		return QuitAndInstallUpdateResult{OK: false, Error: msg}
-	}
+	defer func() {
+		if lockedInstaller != nil {
+			_ = lockedInstaller.Close()
+		}
+	}()
 
 	if u.cfg.Hooks.PrepareToRelaunch != nil {
 		if err := u.cfg.Hooks.PrepareToRelaunch(ctx); err != nil {
@@ -639,6 +645,24 @@ func verifyFileSHA512Base64(path, expectedB64 string) error {
 		return errors.New("installer_sha512_mismatch")
 	}
 	return nil
+}
+
+func cloneClientWithRedirectPolicy(base *http.Client, allowLoopbackHTTP bool) *http.Client {
+	cloned := *base
+	prevCheck := base.CheckRedirect
+	cloned.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("update_redirect_limit_exceeded")
+		}
+		if _, err := validateUpdateFeedURL(req.URL.String(), allowLoopbackHTTP); err != nil {
+			return fmt.Errorf("update_redirect_rejected:%w", err)
+		}
+		if prevCheck != nil {
+			return prevCheck(req, via)
+		}
+		return nil
+	}
+	return &cloned
 }
 
 func resolveNSISAssetURL(feedURL *url.URL, filename string, allowLoopbackHTTP bool) (*url.URL, error) {

@@ -5,12 +5,17 @@ package shell
 import (
 	"context"
 	"errors"
+	"io"
 )
 
 type defaultNSISSignatureVerifier struct{}
 
 func (defaultNSISSignatureVerifier) VerifyInstaller(context.Context, string, string) error {
 	return errors.New("windows_authenticode_unavailable_on_host")
+}
+
+func (defaultNSISSignatureVerifier) LockAndVerifyInstaller(context.Context, string, string, string) (io.Closer, error) {
+	return nil, errors.New("windows_authenticode_unavailable_on_host")
 }
 
 type defaultNSISInstallerLauncher struct{}

@@ -195,6 +195,12 @@ export class AppUpdaterService {
         error: 'updater_disabled'
       }
     }
+    if (this.preparationInFlight || this.sparkleInstallPending) {
+      return {
+        started: false,
+        error: 'update_install_in_progress'
+      }
+    }
     if (this.sparkleBridge) {
       try {
         if (!shouldResetPhaseForManualCheck(this.state.phase)) {
@@ -490,17 +496,24 @@ export class AppUpdaterService {
     }
     bridge.setEventHandler((event) => {
       const eventType = typeof event?.type === 'string' ? event.type : undefined
+      if (
+        this.sparkleInstallPending &&
+        (eventType === 'install-cancelled' || eventType === 'dismissed')
+      ) {
+        this.ignoreSparkleUntilChecking = false
+        this.recoverFailedSparkleInstall('update_install_canceled')
+        return
+      }
+      if (
+        this.sparkleInstallPending &&
+        (eventType === 'error' || eventType === 'update-not-available')
+      ) {
+        this.ignoreSparkleUntilChecking = false
+      }
       const gate = nextSparkleEventGate(this.ignoreSparkleUntilChecking, eventType)
       this.ignoreSparkleUntilChecking = gate.ignoreUntilChecking
       if (!gate.deliver) return
       try {
-        if (
-          this.sparkleInstallPending &&
-          (eventType === 'install-cancelled' || eventType === 'dismissed')
-        ) {
-          this.recoverFailedSparkleInstall('update_install_canceled')
-          return
-        }
         const patch = sparkleEventToStatePatch(event, Date.now())
         if (!patch) return
         if (patch.phase) this.sparkleSessionOpen = patch.phase === 'checking'

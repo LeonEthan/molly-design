@@ -368,6 +368,10 @@ void test('a failed async Sparkle install restores relaunch services and release
   aborted = false
   assert.deepEqual(await service.quitAndInstall(), { ok: true })
   onSparkleEvent({ type: 'checking' })
+  assert.deepEqual(await service.checkForUpdates(), {
+    started: false,
+    error: 'update_install_in_progress'
+  })
   onSparkleEvent({ type: 'update-available', version: '0.1.3' })
   assert.equal(appQuitting, true)
   assert.equal(aborted, false)

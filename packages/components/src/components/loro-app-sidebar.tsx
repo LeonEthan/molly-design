@@ -28,6 +28,7 @@ import { getIpcServices } from '@/lib/electron-ipc-client';
 import { formatSessionTabSearch } from '@/lib/session-tab-url';
 import { openExternalUrl } from '@/lib/native-browser';
 import { getChangelogUrl } from '@/lib/molly-urls';
+import { shouldClearInstallingFlag } from '@/lib/updater-check-presentation';
 import { getCachedWorkspaceName } from '@/lib/local-storage-cache';
 import {
   languageAtom,
@@ -1237,6 +1238,18 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
     null
   );
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const installUpdateBaselineRef = useRef(updaterState);
+
+  useEffect(() => {
+    if (!isInstallingUpdate) return;
+    if (shouldClearInstallingFlag(updaterState, installUpdateBaselineRef.current)) {
+      installUpdateBaselineRef.current = null;
+      setIsInstallingUpdate(false);
+      if (updaterState?.error?.trim()) {
+        toast.error(updaterState.error);
+      }
+    }
+  }, [isInstallingUpdate, updaterState]);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 
   const defaultSessionTitle = t('sessions.untitled', 'Untitled session');
@@ -2335,18 +2348,29 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
       return;
     }
 
+    installUpdateBaselineRef.current = updaterState;
     setIsInstallingUpdate(true);
-    const result = await getIpcServices()!.updater.quitAndInstall();
-    if (result.ok) {
-      return;
-    }
+    try {
+      const result = await getIpcServices()!.updater.quitAndInstall();
+      if (result.ok) {
+        return;
+      }
 
-    setIsInstallingUpdate(false);
-    toast.error(
-      result.error ??
-        t('sidebar.updateReady.installFailed', 'Failed to restart and install update.')
-    );
-  }, [t]);
+      const hadPending = installUpdateBaselineRef.current !== null;
+      installUpdateBaselineRef.current = null;
+      setIsInstallingUpdate(false);
+      if (hadPending) {
+        toast.error(
+          result.error ??
+            t('sidebar.updateReady.installFailed', 'Failed to restart and install update.')
+        );
+      }
+    } catch {
+      installUpdateBaselineRef.current = null;
+      setIsInstallingUpdate(false);
+      toast.error(t('sidebar.updateReady.installFailed', 'Failed to restart and install update.'));
+    }
+  }, [t, updaterState]);
 
   const handleWorkspaceSelected = useCallback(
     (nextWorkspaceId: string) => {

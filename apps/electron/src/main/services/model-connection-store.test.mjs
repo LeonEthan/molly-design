@@ -1854,12 +1854,11 @@ void test('OAuth refresh drain rejects new mutations, completes in-flight rotati
 
 void test('OAuth refresh drain rejects handoff when an accepted rotation fails to persist', async (t) => {
   const { directory } = await fixture(t)
-  let failNextEncrypt = false
+  let failEncrypt = false
   const store = new ModelConnectionStore(directory, {
     ...cipher,
     encryptString(value) {
-      if (failNextEncrypt) {
-        failNextEncrypt = false
+      if (failEncrypt) {
         throw new Error('simulated_vault_write_error')
       }
       return cipher.encryptString(value)
@@ -1894,7 +1893,7 @@ void test('OAuth refresh drain rejects handoff when an accepted rotation fails t
     .mutateOAuth(connection.id, async (current) => {
       releaseRotation()
       await gate
-      failNextEncrypt = true
+      failEncrypt = true
       return { ...current, accessToken: 'at-rotated', refreshToken: 'rt-rotated' }
     })
     .catch((err) => err)
@@ -1905,4 +1904,55 @@ void test('OAuth refresh drain rejects handoff when an accepted rotation fails t
   const err = await inFlight
   assert.ok(err instanceof Error)
   await assert.rejects(drainPromise, { message: 'oauth_refresh_persist_failed' })
+})
+
+void test('OAuth refresh drain recovers a previously failed rotation on retry and blocks if it still fails', async (t) => {
+  const { directory } = await fixture(t)
+  let remainingEncryptFailures = 0
+  const store = new ModelConnectionStore(directory, {
+    ...cipher,
+    encryptString(value) {
+      if (remainingEncryptFailures > 0) {
+        remainingEncryptFailures -= 1
+        throw new Error('transient_vault_write_error')
+      }
+      return cipher.encryptString(value)
+    }
+  })
+  const { connection } = await store.saveOAuthConnection(
+    {
+      displayName: 'OpenAI OAuth',
+      providerPresetId: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      enabled: true,
+      authType: 'openai_oauth'
+    },
+    {
+      accessToken: 'at-initial',
+      refreshToken: 'rt-initial',
+      accessTokenExpiresAt: Date.now() + 60_000,
+      clientId: 'client-1'
+    },
+    { email: 'user@example.com' }
+  )
+
+  // Rotation settles with a write failure BEFORE drainOAuthForHandoff() is ever called.
+  remainingEncryptFailures = 2
+  await assert.rejects(
+    store.mutateOAuth(connection.id, async (current) => ({
+      ...current,
+      accessToken: 'at-rotated',
+      refreshToken: 'rt-rotated'
+    })),
+    { message: 'credential_storage_write_failed' }
+  )
+
+  // First drain attempt still hits write failure -> must reject even though rotation settled earlier.
+  await assert.rejects(store.drainOAuthForHandoff(), { message: 'oauth_refresh_persist_failed' })
+
+  // Next drain attempt succeeds -> persists the retained rotated grant under CAS and resolves.
+  await store.drainOAuthForHandoff()
+  const stored = await store.oauthFor(connection.id)
+  assert.equal(stored?.accessToken, 'at-rotated')
+  assert.equal(stored?.refreshToken, 'rt-rotated')
 })

@@ -32,9 +32,14 @@ type NSISLatestManifest struct {
 	Size        int64
 }
 
+type NSISLockedInstaller interface {
+	io.Closer
+	Path() string
+}
+
 type NSISSignatureVerifier interface {
 	VerifyInstaller(ctx context.Context, installerPath string, expectedPublisher string) error
-	LockAndVerifyInstaller(ctx context.Context, installerPath, expectedSHA512, expectedPublisher string) (io.Closer, error)
+	LockAndVerifyInstaller(ctx context.Context, installerPath, expectedSHA512, expectedPublisher string) (NSISLockedInstaller, error)
 }
 
 type NSISInstallerLauncher interface {
@@ -420,7 +425,7 @@ func (u *NSISUpdater) QuitAndInstall(ctx context.Context) QuitAndInstallUpdateRe
 		}
 	}
 
-	if err := u.cfg.Launcher.LaunchSilentInstaller(installerPath); err != nil {
+	if err := u.cfg.Launcher.LaunchSilentInstaller(lockedInstaller.Path()); err != nil {
 		if u.cfg.Hooks.AbortRelaunch != nil {
 			u.cfg.Hooks.AbortRelaunch()
 		}

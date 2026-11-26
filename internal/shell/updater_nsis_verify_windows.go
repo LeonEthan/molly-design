@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -21,15 +22,14 @@ import (
 var (
 	modWintrust = windows.NewLazySystemDLL("wintrust.dll")
 	modCrypt32  = windows.NewLazySystemDLL("crypt32.dll")
+	modKernel32 = windows.NewLazySystemDLL("kernel32.dll")
 
-	procWinVerifyTrust             = modWintrust.NewProc("WinVerifyTrust")
-	procCryptQueryObject           = modCrypt32.NewProc("CryptQueryObject")
-	procCryptMsgGetParam           = modCrypt32.NewProc("CryptMsgGetParam")
-	procCertFindCertificateInStore = modCrypt32.NewProc("CertFindCertificateInStore")
-	procCertGetNameStringW         = modCrypt32.NewProc("CertGetNameStringW")
-	procCertFreeCertificateContext = modCrypt32.NewProc("CertFreeCertificateContext")
-	procCertCloseStore             = modCrypt32.NewProc("CertCloseStore")
-	procCryptMsgClose              = modCrypt32.NewProc("CryptMsgClose")
+	procWinVerifyTrust                 = modWintrust.NewProc("WinVerifyTrust")
+	procWTHelperProvDataFromStateData  = modWintrust.NewProc("WTHelperProvDataFromStateData")
+	procWTHelperGetProvSignerFromChain = modWintrust.NewProc("WTHelperGetProvSignerFromChain")
+	procWTHelperGetProvCertFromChain   = modWintrust.NewProc("WTHelperGetProvCertFromChain")
+	procCertGetNameStringW             = modCrypt32.NewProc("CertGetNameStringW")
+	procRtlMoveMemory                  = modKernel32.NewProc("RtlMoveMemory")
 )
 
 type winGUID struct {
@@ -69,70 +69,204 @@ type winTrustData struct {
 	pSignatureSettings  uintptr
 }
 
-type certInfoPrefix struct {
-	dwVersion    uint32
-	serialNumber cryptoAPIBlob
-	sigAlg       cryptAlgorithmIdentifier
-	issuer       cryptoAPIBlob
-}
-
-type cryptoAPIBlob struct {
-	cbData uint32
-	pbData *byte
-}
-
-type cryptAlgorithmIdentifier struct {
-	pszObjID   *byte
-	parameters cryptoAPIBlob
-}
-
-type cmsgSignerInfoPrefix struct {
-	dwVersion    uint32
-	issuer       cryptoAPIBlob
-	serialNumber cryptoAPIBlob
+// Matches CRYPT_PROVIDER_CERT prefix in Windows SDK wintrust.h (64-bit).
+type cryptProviderCertPrefix struct {
+	cbStruct uint32
+	_        uint32
+	pCert    uintptr
 }
 
 const (
-	wtdUINone                  = 2
-	wtdRevokeWholeChain        = 1
-	wtdChoiceFile              = 1
-	wtdStateActionVerify       = 1
-	wtdStateActionClose        = 2
-	certQueryObjectFile        = 1
-	certQueryContentPKCS7Embed = 10
-	certQueryContentFlagPKCS7  = 1 << certQueryContentPKCS7Embed
-	certQueryFormatFlagBinary  = 1 << 1
-	cmsgSignerInfoParam        = 6
-	x509ASNAndPKCS7Encoding    = 0x00000001 | 0x00010000
-	certFindSubjectCert        = 11 << 16
-	certNameSimpleDisplayType  = 4
-	createNoWindowFlag         = 0x08000000
+	wtdUINone                 = 2
+	wtdRevokeWholeChain       = 1
+	wtdChoiceFile             = 1
+	wtdStateActionVerify      = 1
+	wtdStateActionClose       = 2
+	certNameSimpleDisplayType = 4
+	createNoWindowFlag        = 0x08000000
+	fileNameNormalized        = 0x0
+	volumeNameDOS             = 0x0
 )
 
 type defaultNSISSignatureVerifier struct{}
 
-func openReadOnlyDenyWriteDelete(installerPath string) (*os.File, windows.Handle, *uint16, error) {
-	pathPtr, err := windows.UTF16PtrFromString(installerPath)
+type windowsLockedInstaller struct {
+	path     string
+	file     *os.File
+	dirGuard windows.Handle
+}
+
+func (l *windowsLockedInstaller) Path() string { return l.path }
+
+func (l *windowsLockedInstaller) Close() error {
+	var err1, err2 error
+	if l.file != nil {
+		err1 = l.file.Close()
+		l.file = nil
+	}
+	if l.dirGuard != 0 && l.dirGuard != windows.InvalidHandle {
+		err2 = windows.CloseHandle(l.dirGuard)
+		l.dirGuard = 0
+	}
+	return errors.Join(err1, err2)
+}
+
+// rejectReparsePointsInPath verifies that no component along absPath (including
+// parent directories and the target itself) is an NTFS symlink, mount point, or
+// directory junction.
+func rejectReparsePointsInPath(absPath string) error {
+	cleaned := filepath.Clean(absPath)
+	vol := filepath.VolumeName(cleaned)
+	rest := strings.TrimPrefix(cleaned, vol)
+	rest = strings.TrimLeft(rest, `\/`)
+	if rest == "" {
+		return errors.New("installer_path_empty")
+	}
+	parts := strings.Split(rest, string(filepath.Separator))
+	cur := vol
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		if cur == vol {
+			cur = vol + `\` + part
+		} else {
+			cur = cur + `\` + part
+		}
+		ptr, err := windows.UTF16PtrFromString(cur)
+		if err != nil {
+			return err
+		}
+		attrs, err := windows.GetFileAttributes(ptr)
+		if err != nil {
+			return fmt.Errorf("installer_stat_component:%w", err)
+		}
+		if attrs&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+			return fmt.Errorf("installer_reparse_point_rejected:%s", cur)
+		}
+	}
+	return nil
+}
+
+func finalPathByHandle(h windows.Handle) (string, error) {
+	buf := make([]uint16, 260)
+	for {
+		n, err := windows.GetFinalPathNameByHandle(h, &buf[0], uint32(len(buf)), fileNameNormalized|volumeNameDOS)
+		if err != nil {
+			return "", fmt.Errorf("installer_final_path:%w", err)
+		}
+		if int(n) < len(buf) {
+			resolved := windows.UTF16ToString(buf[:n])
+			resolved = strings.TrimPrefix(resolved, `\\?\`)
+			return resolved, nil
+		}
+		buf = make([]uint16, n+1)
+	}
+}
+
+func openLockedInstallerAndDir(installerPath string) (*windowsLockedInstaller, windows.Handle, *uint16, error) {
+	absPath, err := filepath.Abs(installerPath)
 	if err != nil {
 		return nil, 0, nil, err
 	}
-	// Share read-only so CreateProcess can execute the verified image while
-	// preventing any concurrent writer or renamer from modifying or swapping it.
+	if err := rejectReparsePointsInPath(absPath); err != nil {
+		return nil, 0, nil, err
+	}
+
+	// Lock the parent staging directory against rename/delete and reparse
+	// retargeting while the installer handle is held.
+	dirPtr, err := windows.UTF16PtrFromString(filepath.Dir(absPath))
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	dirHandle, err := windows.CreateFile(
+		dirPtr,
+		windows.GENERIC_READ,
+		windows.FILE_SHARE_READ,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT,
+		0,
+	)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("open_installer_dir_locked:%w", err)
+	}
+	var dirInfo windows.ByHandleFileInformation
+	if err := windows.GetFileInformationByHandle(dirHandle, &dirInfo); err != nil {
+		_ = windows.CloseHandle(dirHandle)
+		return nil, 0, nil, err
+	}
+	if dirInfo.FileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 || dirInfo.FileAttributes&windows.FILE_ATTRIBUTE_DIRECTORY == 0 {
+		_ = windows.CloseHandle(dirHandle)
+		return nil, 0, nil, errors.New("installer_dir_reparse_point_rejected")
+	}
+
+	pathPtr, err := windows.UTF16PtrFromString(absPath)
+	if err != nil {
+		_ = windows.CloseHandle(dirHandle)
+		return nil, 0, nil, err
+	}
+	// Share read-only (deny write/delete) and refuse to follow a reparse point.
 	handle, err := windows.CreateFile(
 		pathPtr,
 		windows.GENERIC_READ,
 		windows.FILE_SHARE_READ,
 		nil,
 		windows.OPEN_EXISTING,
-		windows.FILE_ATTRIBUTE_NORMAL,
+		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_OPEN_REPARSE_POINT,
 		0,
 	)
 	if err != nil {
+		_ = windows.CloseHandle(dirHandle)
 		return nil, 0, nil, fmt.Errorf("open_installer_locked:%w", err)
 	}
-	return os.NewFile(uintptr(handle), installerPath), handle, pathPtr, nil
+	file := os.NewFile(uintptr(handle), absPath)
+
+	var fileInfo windows.ByHandleFileInformation
+	if err := windows.GetFileInformationByHandle(handle, &fileInfo); err != nil {
+		_ = file.Close()
+		_ = windows.CloseHandle(dirHandle)
+		return nil, 0, nil, err
+	}
+	if fileInfo.FileAttributes&(windows.FILE_ATTRIBUTE_REPARSE_POINT|windows.FILE_ATTRIBUTE_DIRECTORY) != 0 {
+		_ = file.Close()
+		_ = windows.CloseHandle(dirHandle)
+		return nil, 0, nil, errors.New("installer_reparse_point_rejected")
+	}
+
+	finalPath, err := finalPathByHandle(handle)
+	if err != nil {
+		_ = file.Close()
+		_ = windows.CloseHandle(dirHandle)
+		return nil, 0, nil, err
+	}
+	if !strings.EqualFold(filepath.Clean(finalPath), filepath.Clean(absPath)) {
+		_ = file.Close()
+		_ = windows.CloseHandle(dirHandle)
+		return nil, 0, nil, errors.New("installer_canonical_path_mismatch")
+	}
+	if err := rejectReparsePointsInPath(finalPath); err != nil {
+		_ = file.Close()
+		_ = windows.CloseHandle(dirHandle)
+		return nil, 0, nil, err
+	}
+
+	finalPtr, err := windows.UTF16PtrFromString(finalPath)
+	if err != nil {
+		_ = file.Close()
+		_ = windows.CloseHandle(dirHandle)
+		return nil, 0, nil, err
+	}
+	return &windowsLockedInstaller{
+		path:     finalPath,
+		file:     file,
+		dirGuard: dirHandle,
+	}, handle, finalPtr, nil
 }
 
+// verifyAuthenticodeHandle runs WinVerifyTrust directly on the open file handle
+// and extracts the verified signer's display name from WinVerifyTrust's own
+// state data (hWVTStateData) without re-opening the file by pathname.
 func verifyAuthenticodeHandle(handle windows.Handle, pathPtr *uint16, expectedPublisher string) error {
 	fileInfo := winTrustFileInfo{
 		cbStruct:      uint32(unsafe.Sizeof(winTrustFileInfo{})),
@@ -152,17 +286,19 @@ func verifyAuthenticodeHandle(handle windows.Handle, pathPtr *uint16, expectedPu
 		uintptr(unsafe.Pointer(&winTrustActionGenericVerifyV2)),
 		uintptr(unsafe.Pointer(&trustData)),
 	)
-	trustData.dwStateAction = wtdStateActionClose
-	_, _, _ = procWinVerifyTrust.Call(
-		^uintptr(0),
-		uintptr(unsafe.Pointer(&winTrustActionGenericVerifyV2)),
-		uintptr(unsafe.Pointer(&trustData)),
-	)
+	defer func() {
+		trustData.dwStateAction = wtdStateActionClose
+		_, _, _ = procWinVerifyTrust.Call(
+			^uintptr(0),
+			uintptr(unsafe.Pointer(&winTrustActionGenericVerifyV2)),
+			uintptr(unsafe.Pointer(&trustData)),
+		)
+	}()
 	if status != 0 {
 		return fmt.Errorf("winverifytrust_failed:0x%x", status)
 	}
 
-	signer, err := readAuthenticodeSignerName(pathPtr)
+	signer, err := readSignerNameFromWVTState(trustData.hWVTStateData)
 	if err != nil {
 		return err
 	}
@@ -172,33 +308,67 @@ func verifyAuthenticodeHandle(handle windows.Handle, pathPtr *uint16, expectedPu
 	return nil
 }
 
+func readSignerNameFromWVTState(stateData uintptr) (string, error) {
+	if stateData == 0 {
+		return "", errors.New("wvt_state_data_empty")
+	}
+	provData, _, _ := procWTHelperProvDataFromStateData.Call(stateData)
+	if provData == 0 {
+		return "", errors.New("wvt_prov_data_missing")
+	}
+	provSigner, _, _ := procWTHelperGetProvSignerFromChain.Call(provData, 0, 0, 0)
+	if provSigner == 0 {
+		return "", errors.New("wvt_prov_signer_missing")
+	}
+	provCertPtr, _, _ := procWTHelperGetProvCertFromChain.Call(provSigner, 0)
+	if provCertPtr == 0 {
+		return "", errors.New("wvt_prov_cert_missing")
+	}
+	var provCert cryptProviderCertPrefix
+	_, _, _ = procRtlMoveMemory.Call(
+		uintptr(unsafe.Pointer(&provCert)),
+		provCertPtr,
+		unsafe.Sizeof(provCert),
+	)
+	if provCert.pCert == 0 {
+		return "", errors.New("wvt_cert_context_missing")
+	}
+	nameLen, _, _ := procCertGetNameStringW.Call(provCert.pCert, certNameSimpleDisplayType, 0, 0, 0, 0)
+	if nameLen <= 1 {
+		return "", errors.New("cert_signer_name_empty")
+	}
+	nameBuf := make([]uint16, nameLen)
+	_, _, _ = procCertGetNameStringW.Call(provCert.pCert, certNameSimpleDisplayType, 0, 0, uintptr(unsafe.Pointer(&nameBuf[0])), nameLen)
+	return syscall.UTF16ToString(nameBuf), nil
+}
+
 func (defaultNSISSignatureVerifier) VerifyInstaller(_ context.Context, installerPath string, expectedPublisher string) error {
-	f, handle, pathPtr, err := openReadOnlyDenyWriteDelete(installerPath)
+	locked, handle, pathPtr, err := openLockedInstallerAndDir(installerPath)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer locked.Close()
 	return verifyAuthenticodeHandle(handle, pathPtr, expectedPublisher)
 }
 
-func (defaultNSISSignatureVerifier) LockAndVerifyInstaller(_ context.Context, installerPath, expectedSHA512, expectedPublisher string) (io.Closer, error) {
+func (defaultNSISSignatureVerifier) LockAndVerifyInstaller(_ context.Context, installerPath, expectedSHA512, expectedPublisher string) (NSISLockedInstaller, error) {
 	expectedDigest, err := decodeSHA512Base64(expectedSHA512)
 	if err != nil {
 		return nil, err
 	}
-	f, handle, pathPtr, err := openReadOnlyDenyWriteDelete(installerPath)
+	locked, handle, pathPtr, err := openLockedInstallerAndDir(installerPath)
 	if err != nil {
 		return nil, err
 	}
 	keep := false
 	defer func() {
 		if !keep {
-			_ = f.Close()
+			_ = locked.Close()
 		}
 	}()
 
 	h := sha512.New()
-	n, err := io.Copy(h, io.LimitReader(f, maxNSISInstallerBytes+1))
+	n, err := io.Copy(h, io.LimitReader(locked.file, maxNSISInstallerBytes+1))
 	if err != nil {
 		return nil, err
 	}
@@ -208,73 +378,14 @@ func (defaultNSISSignatureVerifier) LockAndVerifyInstaller(_ context.Context, in
 	if subtle.ConstantTimeCompare(h.Sum(nil), expectedDigest) != 1 {
 		return nil, errors.New("installer_sha512_mismatch")
 	}
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
+	if _, err := locked.file.Seek(0, io.SeekStart); err != nil {
 		return nil, err
 	}
 	if err := verifyAuthenticodeHandle(handle, pathPtr, expectedPublisher); err != nil {
 		return nil, fmt.Errorf("installer_signature_invalid:%w", err)
 	}
 	keep = true
-	return f, nil
-}
-
-func readAuthenticodeSignerName(pathPtr *uint16) (string, error) {
-	var encoding, contentType, formatType uint32
-	var store, msg uintptr
-	ok, _, err := procCryptQueryObject.Call(
-		certQueryObjectFile,
-		uintptr(unsafe.Pointer(pathPtr)),
-		certQueryContentFlagPKCS7,
-		certQueryFormatFlagBinary,
-		0,
-		uintptr(unsafe.Pointer(&encoding)),
-		uintptr(unsafe.Pointer(&contentType)),
-		uintptr(unsafe.Pointer(&formatType)),
-		uintptr(unsafe.Pointer(&store)),
-		uintptr(unsafe.Pointer(&msg)),
-		0,
-	)
-	if ok == 0 {
-		return "", fmt.Errorf("crypt_query_object:%w", err)
-	}
-	defer procCertCloseStore.Call(store, 0)
-	defer procCryptMsgClose.Call(msg)
-
-	var signerInfoSize uint32
-	ok, _, err = procCryptMsgGetParam.Call(msg, cmsgSignerInfoParam, 0, 0, uintptr(unsafe.Pointer(&signerInfoSize)))
-	if ok == 0 || signerInfoSize == 0 {
-		return "", fmt.Errorf("crypt_msg_signer_size:%w", err)
-	}
-	buf := make([]byte, signerInfoSize)
-	ok, _, err = procCryptMsgGetParam.Call(msg, cmsgSignerInfoParam, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&signerInfoSize)))
-	if ok == 0 {
-		return "", fmt.Errorf("crypt_msg_signer:%w", err)
-	}
-	signerInfo := (*cmsgSignerInfoPrefix)(unsafe.Pointer(&buf[0]))
-	certCriteria := certInfoPrefix{
-		issuer:       signerInfo.issuer,
-		serialNumber: signerInfo.serialNumber,
-	}
-	certCtx, _, err := procCertFindCertificateInStore.Call(
-		store,
-		x509ASNAndPKCS7Encoding,
-		0,
-		certFindSubjectCert,
-		uintptr(unsafe.Pointer(&certCriteria)),
-		0,
-	)
-	if certCtx == 0 {
-		return "", fmt.Errorf("cert_find_signer:%w", err)
-	}
-	defer procCertFreeCertificateContext.Call(certCtx)
-
-	nameLen, _, _ := procCertGetNameStringW.Call(certCtx, certNameSimpleDisplayType, 0, 0, 0, 0)
-	if nameLen <= 1 {
-		return "", errors.New("cert_signer_name_empty")
-	}
-	nameBuf := make([]uint16, nameLen)
-	_, _, _ = procCertGetNameStringW.Call(certCtx, certNameSimpleDisplayType, 0, 0, uintptr(unsafe.Pointer(&nameBuf[0])), nameLen)
-	return syscall.UTF16ToString(nameBuf), nil
+	return locked, nil
 }
 
 type defaultNSISInstallerLauncher struct{}

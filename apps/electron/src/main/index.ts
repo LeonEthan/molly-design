@@ -228,8 +228,8 @@ if (hasSingleInstanceLock) {
         const ready = await flushOpenDesigns()
         if (!ready) throw new Error('Could not save your designs before updating')
         await cliService.shutdownForQuit()
-        await getModelConnectionStore().drainOAuthForHandoff()
         cliStoppedForRelaunch = true
+        await getModelConnectionStore().drainOAuthForHandoff()
       },
       abortRelaunch: () => {
         getModelConnectionStore().resumeOAuthAfterAbortedHandoff()
@@ -318,6 +318,8 @@ if (hasSingleInstanceLock) {
     })
 
     let designQuitPending = false
+    let oauthDrainComplete = false
+    let oauthDrainPending = false
     app.on('before-quit', (event) => {
       if (!designShutdownComplete) {
         event.preventDefault()
@@ -333,6 +335,27 @@ if (hasSingleInstanceLock) {
             .catch((error) => console.error('Design save failed', error))
             .finally(() => {
               designQuitPending = false
+            })
+        }
+        return
+      }
+      if (!oauthDrainComplete) {
+        event.preventDefault()
+        if (!oauthDrainPending) {
+          oauthDrainPending = true
+          void getModelConnectionStore()
+            .drainOAuthForHandoff()
+            .then(() => {
+              oauthDrainComplete = true
+              app.quit()
+            })
+            .catch((error) => {
+              console.error('OAuth refresh drain failed before quit', error)
+              getModelConnectionStore().resumeOAuthAfterAbortedHandoff()
+              designShutdownComplete = false
+            })
+            .finally(() => {
+              oauthDrainPending = false
             })
         }
         return
@@ -356,8 +379,7 @@ if (hasSingleInstanceLock) {
       event.preventDefault()
       void Promise.allSettled([
         cliService.shutdownForQuit(),
-        publicBrowserService.shutdownForQuit(),
-        getModelConnectionStore().drainOAuthForHandoff()
+        publicBrowserService.shutdownForQuit()
       ]).finally(() => {
         publicBrowserService.destroyAll()
         cliShutdownComplete = true

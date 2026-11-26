@@ -14,6 +14,15 @@ export function shouldApplyUpdaterSnapshot(pushesSinceRequest: number): boolean 
   return pushesSinceRequest === 0;
 }
 
+export function shouldClearInstallingFlag(
+  currentState: { phase: ElectronUpdaterPhase; error?: string } | null,
+  baselineState: { phase: ElectronUpdaterPhase; error?: string } | null
+): boolean {
+  if (!currentState) return true;
+  if (currentState.phase !== 'downloaded') return true;
+  return currentState !== baselineState && Boolean(currentState.error?.trim());
+}
+
 function readPercent(percent: number | undefined): number | null {
   if (typeof percent !== 'number' || !Number.isFinite(percent)) return null;
   return Math.round(Math.min(100, Math.max(0, percent)));

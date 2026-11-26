@@ -323,8 +323,17 @@ void test('a failed async Sparkle install restores relaunch services and release
 
   let released = false
   let aborted = false
+  let installTimeout
   const service = new module.exports.AppUpdaterService({
     enabled: true,
+    scheduleTimeout(callback) {
+      installTimeout = callback
+      return {
+        cancel() {
+          installTimeout = undefined
+        }
+      }
+    },
     prepareInstall: async () => async () => {
       released = true
     },
@@ -346,6 +355,19 @@ void test('a failed async Sparkle install restores relaunch services and release
   assert.equal(appQuitting, false)
   assert.equal(aborted, true)
   assert.equal(released, true)
+  assert.equal(service.getState().phase, 'downloaded')
   assert.equal(service.getState().error, 'sparkle_install_failed')
+
+  // Retry install, then simulate silent Sparkle cancellation (no native event emitted).
+  released = false
+  aborted = false
+  assert.deepEqual(await service.quitAndInstall(), { ok: true })
+  assert.equal(typeof installTimeout, 'function')
+  installTimeout()
+  assert.equal(appQuitting, false)
+  assert.equal(aborted, true)
+  assert.equal(released, true)
+  assert.equal(service.getState().phase, 'downloaded')
+  assert.equal(service.getState().error, 'update_install_canceled')
   service.stop()
 })

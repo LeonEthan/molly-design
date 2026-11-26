@@ -484,7 +484,7 @@ func cStringToGo(ptr uintptr) string {
 	return string(buf)
 }
 
-func (u *SparkleUpdater) abortPendingRelaunch() {
+func (u *SparkleUpdater) abortPendingRelaunch() bool {
 	u.mu.Lock()
 	pending := u.relaunchPending
 	u.relaunchPending = false
@@ -492,17 +492,22 @@ func (u *SparkleUpdater) abortPendingRelaunch() {
 	if pending && u.hooks.AbortRelaunch != nil {
 		u.hooks.AbortRelaunch()
 	}
+	return pending
 }
 
 func (u *SparkleUpdater) handleUpdateCycleFinished(errMsg string) {
 	u.retireCheckCancellation()
-	u.abortPendingRelaunch()
+	abortedRelaunch := u.abortPendingRelaunch()
 	nowMs := u.now().UnixMilli()
 	u.mu.Lock()
 	if u.state.Phase != UpdaterPhaseChecking {
-		if errMsg != "" {
+		if errMsg != "" || abortedRelaunch {
 			next := cloneUpdaterState(u.state)
-			next.Error = errMsg
+			if errMsg != "" {
+				next.Error = errMsg
+			} else {
+				next.Error = "update_install_canceled"
+			}
 			next.CheckedAtMs = &nowMs
 			u.state = next
 			snap := cloneUpdaterState(u.state)
@@ -835,7 +840,7 @@ func registerSparkleObjCClasses() error {
 				Fn: func(_ objc.ID, _ objc.SEL) {
 					if u := currentSparkleUpdater(); u != nil {
 						u.retireCheckCancellation()
-						u.abortPendingRelaunch()
+						abortedRelaunch := u.abortPendingRelaunch()
 						u.mu.Lock()
 						u.installWhenRdy = false
 						if u.readyReplyBlock != 0 {
@@ -843,6 +848,9 @@ func registerSparkleObjCClasses() error {
 							u.readyReplyBlock = 0
 						}
 						u.mu.Unlock()
+						if abortedRelaunch {
+							u.recordError("update_install_canceled")
+						}
 					}
 				},
 			},

@@ -104,6 +104,7 @@ export class AppUpdaterService {
   private preparationInFlight = false
   private sparkleInstallPending = false
   private sparkleInstallRelease?: () => Promise<void>
+  private sparkleInstallTimer: TimeoutHandle | null = null
   private configurationUnavailable = false
   private checkingWatchdog: ReturnType<typeof createCheckingWatchdog> | null = null
 
@@ -115,6 +116,7 @@ export class AppUpdaterService {
       prepareToRelaunch?: () => Promise<void>
       abortRelaunch?: () => void
       checkTimeoutMs?: number
+      installTimeoutMs?: number
       scheduleTimeout?: (callback: () => void, delayMs: number) => TimeoutHandle
     } = {}
   ) {}
@@ -186,6 +188,8 @@ export class AppUpdaterService {
       this.intervalRef = null
     }
     this.checkingWatchdog?.stop()
+    this.sparkleInstallTimer?.cancel()
+    this.sparkleInstallTimer = null
   }
 
   async checkForUpdates(): Promise<CheckForElectronUpdateResult> {
@@ -323,10 +327,13 @@ export class AppUpdaterService {
       try {
         this.sparkleInstallPending = true
         this.sparkleInstallRelease = release
+        this.armSparkleInstallWatchdog()
         setAppQuitting(true)
         this.sparkleBridge.installUpdateNow()
         return { ok: true }
       } catch (error) {
+        this.sparkleInstallTimer?.cancel()
+        this.sparkleInstallTimer = null
         this.sparkleInstallPending = false
         this.sparkleInstallRelease = undefined
         setAppQuitting(false)
@@ -473,6 +480,35 @@ export class AppUpdaterService {
     return bridge
   }
 
+  private armSparkleInstallWatchdog(): void {
+    this.sparkleInstallTimer?.cancel()
+    const delayMs = this.options.installTimeoutMs ?? 30_000
+    const schedule =
+      this.options.scheduleTimeout ??
+      ((callback: () => void, ms: number): TimeoutHandle => {
+        const timer = setTimeout(callback, ms)
+        timer.unref?.()
+        return { cancel: () => clearTimeout(timer) }
+      })
+    this.sparkleInstallTimer = schedule(() => {
+      this.sparkleInstallTimer = null
+      if (!this.sparkleInstallPending) return
+      this.recoverFailedSparkleInstall('update_install_canceled')
+    }, delayMs)
+  }
+
+  private recoverFailedSparkleInstall(message: string): void {
+    this.sparkleInstallTimer?.cancel()
+    this.sparkleInstallTimer = null
+    const release = this.sparkleInstallRelease
+    this.sparkleInstallPending = false
+    this.sparkleInstallRelease = undefined
+    setAppQuitting(false)
+    this.options.abortRelaunch?.()
+    void release?.()
+    this.recordError(message)
+  }
+
   private attachSparkleEventHandler(bridge: SparkleBridge): void {
     if (typeof bridge.setEventHandler !== 'function') {
       console.log('[sparkle] native bridge has no event handler; renderer progress will not update')
@@ -484,19 +520,27 @@ export class AppUpdaterService {
       this.ignoreSparkleUntilChecking = gate.ignoreUntilChecking
       if (!gate.deliver) return
       try {
+        if (
+          this.sparkleInstallPending &&
+          (eventType === 'install-cancelled' || eventType === 'dismissed')
+        ) {
+          this.recoverFailedSparkleInstall('update_install_canceled')
+          return
+        }
         const patch = sparkleEventToStatePatch(event, Date.now())
         if (!patch) return
         if (patch.phase) this.sparkleSessionOpen = patch.phase === 'checking'
         if (
           this.sparkleInstallPending &&
-          (patch.phase === 'error' || patch.phase === 'up_to_date')
+          (patch.phase === 'error' ||
+            patch.phase === 'up_to_date' ||
+            patch.phase === 'checking' ||
+            patch.phase === 'downloading')
         ) {
-          const release = this.sparkleInstallRelease
-          this.sparkleInstallPending = false
-          this.sparkleInstallRelease = undefined
-          setAppQuitting(false)
-          this.options.abortRelaunch?.()
-          void release?.()
+          const message = patch.error ?? 'update_install_canceled'
+          this.recoverFailedSparkleInstall(message)
+          if (patch.phase !== 'error') this.setState(patch)
+          return
         }
         this.setState(patch)
       } catch (error) {

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,8 +18,11 @@ import (
 )
 
 type stubLockHandle struct {
+	path   string
 	closed bool
 }
+
+func (h *stubLockHandle) Path() string { return h.path }
 
 func (h *stubLockHandle) Close() error {
 	h.closed = true
@@ -40,7 +42,7 @@ func (v *stubNSISVerifier) VerifyInstaller(_ context.Context, installerPath, exp
 	return v.err
 }
 
-func (v *stubNSISVerifier) LockAndVerifyInstaller(_ context.Context, installerPath, expectedSHA512, expectedPublisher string) (io.Closer, error) {
+func (v *stubNSISVerifier) LockAndVerifyInstaller(_ context.Context, installerPath, expectedSHA512, expectedPublisher string) (NSISLockedInstaller, error) {
 	v.path = installerPath
 	v.publisher = expectedPublisher
 	if err := verifyFileSHA512Base64(installerPath, expectedSHA512); err != nil {
@@ -49,7 +51,7 @@ func (v *stubNSISVerifier) LockAndVerifyInstaller(_ context.Context, installerPa
 	if v.err != nil {
 		return nil, fmt.Errorf("installer_signature_invalid:%w", v.err)
 	}
-	h := &stubLockHandle{}
+	h := &stubLockHandle{path: installerPath}
 	v.lastHandle = h
 	return h, nil
 }

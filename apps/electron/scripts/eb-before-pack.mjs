@@ -1,5 +1,6 @@
 import { buildBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { buildAgentBrowser } from './agent-browser-resources.mjs'
+import { buildMollyCore } from './molly-core-resources.mjs'
 import { stageLegalResources } from './legal-resources.mjs'
 import { installEmbeddedSqliteBinding, installEmbeddedSharpBinding } from './cli-native-deps.mjs'
 
@@ -25,6 +26,7 @@ export default async function beforePack(context) {
     )
   }
   stageLegalResources()
+  await buildMollyCore({ platform, arch: archName })
   await buildAgentBrowser({ platform, arch: archName })
   await buildBrowserCookieReader({ platform, arch: archName })
   installEmbeddedSqliteBinding({ platform, arch: archName })

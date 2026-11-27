@@ -19,6 +19,8 @@ Translation: current
 
 这是对[设计工作台 Spec](graphic-design-platform.zh.md)中多 Agent 选择和 CLI 引导目标的后续修订提案，不是对现有实现的描述。待实施时同步调整该 Spec、[上游采用范围](lody-upstream-adoption.zh.md)、相关作用域规则及黄金用例：保留已有验收历史，新内置 Pi 结果独立记录，不能把 Kimi CLI 的通过结果转记为 Pi 通过。本草案不改变 Bento 编辑范围、设计格式、历史后端或自主创作原则。
 
+2026-11-24 Stage 2 演进修订：Electron 安装包在 `beforePack`/`afterPack`/签名重封链中新增 `resources/molly-core`（纯 Go `CGO_ENABLED=0`）并由 CLI daemon 托管拉起，向共享 `molly-mcp-http-host` 子进程私有环境注入受鉴权端点且不污染 daemon 全局环境；同时新增实验性 `cmd/molly-desktop/` MyGo `.app` 打包脚本，继续打包经过清单密封校验的 Pi harness 闭包与独立 Node >=22.19 运行时（当前未替代 Electron 生产包，待 G1–G5 门禁闭环）。本修订保持 `draft`。
+
 ## User Stories
 
 1. As a desktop user, I want to install Molly without installing Pi or global Node/npm, so that I can start designing without managing an agent runtime.

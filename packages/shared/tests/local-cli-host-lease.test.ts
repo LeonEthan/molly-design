@@ -107,7 +107,8 @@ describe('local CLI host lease', () => {
 
   it('authenticates daemon shutdown control without exposing the token', async () => {
     const endpoint = await createEndpoint();
-    const onRequest = vi.fn();
+    const onRequest = vi.fn<() => void>();
+    const shutdownRequested = new Promise<void>((resolve) => onRequest.mockImplementation(resolve));
     const result = await acquireLocalCliHostLease({
       endpoint,
       instanceId: 'daemon-a',
@@ -129,7 +130,6 @@ describe('local CLI host lease', () => {
       token: 'secret-token',
     });
     expect(accepted).toMatchObject({ ok: true, record: { instanceId: 'daemon-a' } });
-    await Promise.resolve();
-    expect(onRequest).toHaveBeenCalledOnce();
+    await shutdownRequested;
   });
 });

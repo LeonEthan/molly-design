@@ -16,6 +16,8 @@ Translation: pending
 
 2026-09-21 起退役 Linux 桌面支持。正式发布范围仍为 macOS arm64；Intel macOS 与 Windows 保留本地实验构建。下文 Linux 构建证据保留为历史事实；Ubuntu CI 与跨平台 Bento 资源检查不表示桌面支持。
 
+2026-11-24 Stage 2 演进修订：在保持 Bento 唯一权威编辑与 `design/canvas-host` 串行只读回合门禁不变的前提下，Electron 生产链启用由 CLI daemon 托管的纯 Go `molly-core`（承载 `molly_view_image`、`molly_image` 与 `PersonalMemoryService` SQLite），同时新增并存的实验性 MyGo 桌面壳（`cmd/molly-desktop/` + `internal/shell/`），复用 64 MiB `molly-design://` 能力令牌门禁、按元素阴影动态出血的离屏分块导出以及受 `CallerPage` 与文档代际保护的 IPC 桥。本修订保持 `draft`。
+
 产品只保留桌面交互，包括窄 Electron 窗口；移动端导航、触摸手势和键盘适配退出。新回合不采集代码 diff、派生 All Changes 或运行 PR/commit/push 后台工作。既有代码历史的 diff 可兼容读取，Files、附件预览、文本保存和冲突保护继续使用原有能力；设计版本仍由 Molly 管理的独立 Git 仓库保存。
 
 2026-09-15 已批准修订：用户已确认先清理旧转换语义并将画稿投影合并为单个 `design.yaml`，类型区块重组以完整往返及 Agent 可操作性为条件；增加指定参考图与固定提示词的真实 Kimi Code CLI 黄金复刻验收。本修订的第一阶段方案已于 2026-09-15 获用户明确批准。已确认方向、第一阶段实施及验收见单画布重构记录。
@@ -55,6 +57,8 @@ Translation: pending
 2026-10-20 会话标题修订：新作品创建时仍为“未命名作品”。当该草稿来源会话的第一条用户消息派发时，由用户当前选择的模型生成一个简短标题；草稿标题绝不为原始提示词或其第一句。首个回合文本中附加的自定义尺寸等内部脚手架不进入标题生成提示词。在生成的标题到达之前——以及失败、空结果或超时时——名称保持“未命名作品”原样，生成失败不使回合失败。生成写入经 `setTitleIfSourceIn(..., 'generated', ['draft'])` 把关，仅覆盖草稿名称，用户手动设置的名称永不被覆盖。已提交的 `design.yaml` `title` 仍按原规则重命名来源为草稿或已生成的会话名。这取代第三批“草稿标题不再使用提示词”的规则（[issue #198](https://github.com/LeonEthan/molly-design/issues/198)），并取代同日在[自动命名记录](../.agents/notes/implemented/bug-fix/2026-10-20-design-auto-naming.md)中记载的第一句方案。本规则经正亮 2026-10-20 17:30（北京）最终裁定批准，记录于 [PR #208](https://github.com/LeonEthan/molly-design/pull/208#issuecomment-6288140215)；批准仅覆盖本规则，Spec 其余部分仍为 draft。标题生成复用会话内嵌 harness，而非独立标题 worker；该实现取舍不属于获批规则。
 
 2026-10-24 侧栏跟随修订：owner 在会话中批准右侧栏随当前查看的 Agent 执行在浏览器与画布之间切换，并批准运行中隐藏画布保留实时构建订阅的有限例外。规则见「唯一画布与实时构建」及「侧栏跟随」；本修订保持 draft，待链接批准记录。
+
+2026-11-23 Stage 1 技术演进修订：owner 确认停止复用 Lody 上游代码并启动 Go/MyGo 分阶段演进（见[Stage 1 设计提案](../.agents/notes/proposed/architecture/2026-11-23-mygo-stack-stage1-design.zh.md)）。其一，离屏渲染与导出不依赖隐藏窗口的 `requestAnimationFrame` 栅栏，支持按渲染引擎维护视觉基线及大尺寸有界瓦片拼接导出；其二，macOS 内置浏览器的受控 `WKWebView` 降级方向见[浏览器独立 Spec](agent-browser-webmcp.zh.md)；其三，本阶段不改动既有 Loro/Flock 会话数据面与单写者约束，Loro 替换另行立项评审。本修订保持 draft。
 
 ## 使用场景
 

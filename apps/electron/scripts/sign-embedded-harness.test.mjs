@@ -10,6 +10,7 @@ import test from 'node:test'
 import signEmbeddedHarness, { prepareEmbeddedHarnessSigning } from './sign-embedded-harness.mjs'
 import { verifyBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { verifyAgentBrowser } from './agent-browser-resources.mjs'
+import { verifyMollyCore } from './molly-core-resources.mjs'
 import { verifyEmbeddedHarness } from '../../cli/scripts/verify-embedded-harness.mjs'
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
@@ -154,6 +155,38 @@ function cookieReaderFixture(app, executable) {
   return { directory, manifest }
 }
 
+function mollyCoreFixture(app, executable) {
+  const directory = path.join(
+    app,
+    'Contents',
+    'Resources',
+    'app.asar.unpacked',
+    'resources',
+    'molly-core'
+  )
+  fs.mkdirSync(directory, { recursive: true })
+  fs.copyFileSync(executable, path.join(directory, 'molly-core'))
+  const files = [
+    {
+      path: 'molly-core',
+      sha256: sha256(fs.readFileSync(path.join(directory, 'molly-core')))
+    }
+  ]
+  const manifest = {
+    schemaVersion: 1,
+    name: 'molly-core',
+    platform: process.platform,
+    arch: process.arch,
+    goos: 'darwin',
+    goarch: process.arch === 'arm64' ? 'arm64' : 'amd64',
+    sourceDigest: 'fixture-digest',
+    files,
+    buildId: sha256(JSON.stringify(files))
+  }
+  fs.writeFileSync(path.join(directory, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+  return { directory, manifest }
+}
+
 void test('requires a valid full baseline seal before signing', (t) => {
   const { directory, manifest } = fixture(t)
   fs.writeFileSync(
@@ -222,6 +255,7 @@ void test(
     command('/usr/bin/clang', ['-x', 'c', '-', '-o', executable], 'int main(void) { return 0; }')
     const browser = browserFixture(app, executable)
     const reader = cookieReaderFixture(app, executable)
+    const mollyCore = mollyCoreFixture(app, executable)
     fs.writeFileSync(
       path.join(app, 'Contents', 'Info.plist'),
       `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>dev.molly-design.seal-test</string><key>CFBundleExecutable</key><string>Fixture</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>`
@@ -258,6 +292,11 @@ void test(
       arch: process.arch
     })
     assert.notEqual(signedReader.buildId, reader.manifest.buildId)
+    const signedMollyCore = verifyMollyCore(mollyCore.directory, {
+      platform: 'darwin',
+      arch: process.arch
+    })
+    assert.notEqual(signedMollyCore.buildId, mollyCore.manifest.buildId)
     command('/usr/bin/codesign', ['--verify', '--deep', '--strict', app])
     assert.match(
       command('/usr/bin/codesign', ['--display', '--entitlements', '-', app]),

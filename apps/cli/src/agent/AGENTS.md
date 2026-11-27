@@ -101,6 +101,8 @@ context/acp-agent-edit-evidence.md; adapter repos: [apps/cli/AGENTS.md](../../AG
 
 ## Personal preferences
 
-One daemon owns the mem0 store. Private memory callbacks require the live design
-run/epoch and cancellation signal; workers never open that store. Human mutations
-invalidate pending extraction revisions. Recall is bounded context, never authority.
+One local store owns `memory/preferences.sqlite` (Go `internal/memory` via IPC or
+direct SQLite fallback, with one-time legacy `mem0` `vectors` migration). Private
+memory callbacks require the live design run/epoch and cancellation signal; workers
+never open that store. Human mutations invalidate pending extraction revisions.
+Recall is bounded context, never authority.

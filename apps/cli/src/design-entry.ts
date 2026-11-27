@@ -8,6 +8,9 @@ import {
   acknowledgeDesign,
   designOperation,
   pendingDesigns,
+  pendingDesignAssociations,
+  pendingOptions,
+  repairDesignProjection,
   readDesignCandidate,
 } from './design/store';
 
@@ -22,7 +25,7 @@ const candidateRequest = z
 // ponytail: one writer queue for all canvases; use per-artwork queues if save throughput matters.
 for await (const line of createInterface({ input: process.stdin, crlfDelay: Infinity })) {
   try {
-    if (line.length > 64 * 1024 * 1024) throw Error('Request exceeds 64 MiB');
+    if (Buffer.byteLength(line, 'utf8') > 68 * 1024 * 1024) throw Error('Request exceeds 68 MiB');
     const request = JSON.parse(line);
     const dataRoot = getMollyDataDir('local');
     let value: unknown;
@@ -57,12 +60,28 @@ for await (const line of createInterface({ input: process.stdin, crlfDelay: Infi
         .strict()
         .parse(request);
       value = await pendingDesigns(dataRoot);
-    } else if (request?.operation === 'acknowledge') {
-      const input = z
-        .object({ operation: z.literal('acknowledge'), sessionId: z.string().uuid() })
+    } else if (request?.operation === 'pending-associations') {
+      const input = pendingOptions
+        .extend({ operation: z.literal('pending-associations') })
         .strict()
         .parse(request);
-      await acknowledgeDesign(dataRoot, input.sessionId);
+      value = await pendingDesignAssociations(dataRoot, input);
+    } else if (request?.operation === 'repair-projection') {
+      const input = z
+        .object({ operation: z.literal('repair-projection'), sessionId: z.string().uuid() })
+        .strict()
+        .parse(request);
+      value = await repairDesignProjection(dataRoot, input.sessionId);
+    } else if (request?.operation === 'acknowledge') {
+      const input = z
+        .object({
+          operation: z.literal('acknowledge'),
+          verifyProjection: z.boolean().optional(),
+          sessionId: z.string().uuid(),
+        })
+        .strict()
+        .parse(request);
+      await acknowledgeDesign(dataRoot, input.sessionId, input);
       value = null;
     } else if (request?.operation === 'candidate-file') {
       const input = candidateRequest
@@ -78,8 +97,16 @@ for await (const line of createInterface({ input: process.stdin, crlfDelay: Infi
     process.stdout.write(JSON.stringify({ ok: true, value }) + '\n');
   } catch (error) {
     process.stdout.write(
-      JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }) +
-        '\n'
+      JSON.stringify({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+        ...(error instanceof Error && 'code' in error && typeof error.code === 'string'
+          ? { code: error.code }
+          : {}),
+        ...(error instanceof Error && 'revisionId' in error && typeof error.revisionId === 'string'
+          ? { revisionId: error.revisionId }
+          : {}),
+      }) + '\n'
     );
   }
 }

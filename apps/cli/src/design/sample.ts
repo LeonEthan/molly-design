@@ -1,3 +1,4 @@
+import { resolveIsolatedDataPath } from '@molly/shared/node/installation-profile';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, link, unlink, readFile } from 'node:fs/promises';
@@ -9,10 +10,10 @@ export async function openDesignSample(dataRoot: string, resources: string) {
   const manifest = JSON.parse(await readFile(path.join(resources, 'build.json'), 'utf8'));
   const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
   if (digest(fixture) !== manifest.sampleSha256) throw new Error('Design sample integrity failure');
-  const directory = path.join(dataRoot, 'chats', 'molly-p0');
+  const directory = resolveIsolatedDataPath(dataRoot, 'chats', 'molly-p0');
   await mkdir(directory, { recursive: true });
-  const current = path.join(directory, 'design.json');
-  const temporary = path.join(directory, `.${randomUUID()}.tmp`);
+  const current = resolveIsolatedDataPath(directory, 'design.json');
+  const temporary = resolveIsolatedDataPath(directory, `.${randomUUID()}.tmp`);
   try {
     const file = await open(temporary, 'wx', 0o600);
     try {

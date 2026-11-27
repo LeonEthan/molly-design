@@ -1,5 +1,8 @@
+import { DatabaseSync } from 'node:sqlite'
+import { hostname } from 'node:os'
+import { setTimeout as delay } from 'node:timers/promises'
 import { constants } from 'node:fs'
-import { mkdir, open, rename, unlink } from 'node:fs/promises'
+import { mkdir, open, rename, unlink, lstat } from 'node:fs/promises'
 import { createHash, randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -113,12 +116,85 @@ function publicConnection(entry: StoreEntry): ModelConnection {
 }
 
 /** Main-only: never register this class with renderer IPC or include entries in diagnostics. */
+function pidDead(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return false
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'ESRCH'
+  }
+}
+
+async function releaseVaultLease(file: string, leaseId: string): Promise<void> {
+  if ((await readVaultLease(file))?.leaseId !== leaseId)
+    throw new Error('vault_writer_ownership_changed')
+  await unlink(file)
+}
+
+async function readVaultLease(
+  file: string
+): Promise<{ host: string; pid: number; expiresAtMs: number; leaseId: string } | undefined> {
+  let handle
+  try {
+    handle = await open(
+      file,
+      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0)
+    )
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw err
+  }
+  try {
+    const info = await handle.stat()
+    if (!info.isFile() || info.size > 4096) throw new Error('invalid_vault_writer_lease')
+    const raw = await handle.readFile('utf8')
+    let lease
+    try {
+      lease = JSON.parse(raw)
+    } catch (err) {
+      if (Date.now() - info.mtimeMs >= 60000)
+        return { host: '', pid: 0, expiresAtMs: 0, leaseId: '' }
+      throw err
+    }
+    if (
+      lease.version !== 1 ||
+      !['mygo', 'electron'].includes(lease.owner) ||
+      !Number.isSafeInteger(lease.pid) ||
+      lease.pid <= 0 ||
+      typeof lease.host !== 'string' ||
+      !lease.host ||
+      typeof lease.leaseId !== 'string' ||
+      !lease.leaseId ||
+      !Number.isSafeInteger(lease.acquiredAtMs) ||
+      !Number.isSafeInteger(lease.expiresAtMs) ||
+      lease.expiresAtMs <= lease.acquiredAtMs
+    )
+      throw new Error('invalid_vault_writer_lease')
+    return lease
+  } finally {
+    await handle.close()
+  }
+}
+
+const rotatedGrantLeaseWaitMs = 120_000
+
 export class ModelConnectionStore {
   private readonly directory: string
   private readonly cipher: CredentialCipher
   private readonly platform: NodeJS.Platform
   private pending: Promise<unknown> = Promise.resolve()
   private readonly oauthPending = new Map<string, Promise<unknown>>()
+  private oauthDraining = false
+  private readonly unresolvedOAuthRotations = new Map<
+    string,
+    {
+      credentialRef: string
+      providerPresetId: string
+      baseUrl: string
+      expectedTokens: string
+      next: OAuthTokenSet
+    }
+  >()
 
   constructor(
     directory: string,
@@ -144,6 +220,78 @@ export class ModelConnectionStore {
     const next = this.pending.then(operation, operation)
     this.pending = next.catch(() => undefined)
     return next
+  }
+
+  private writeTransaction<T>(operation: () => Promise<T>, waitMs = 2000): Promise<T> {
+    return this.serial(async () => {
+      await mkdir(this.directory, { recursive: true, mode: 0o700 })
+      const file = join(this.directory, 'model-connections.writer.lease')
+      const guard = file + '.guard'
+      try {
+        await (await open(guard, 'wx', 0o600)).close()
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+      }
+      if (!(await lstat(guard)).isFile()) throw new Error('invalid_vault_writer_guard')
+      const db = new DatabaseSync(guard)
+      const deadline = performance.now() + waitMs
+      try {
+        for (;;) {
+          try {
+            db.exec('BEGIN IMMEDIATE')
+          } catch (err) {
+            if ((err as { errcode?: number }).errcode !== 5 || performance.now() >= deadline)
+              throw err
+            await delay(20)
+            continue
+          }
+          const previous = await readVaultLease(file)
+          if (
+            !previous ||
+            previous.expiresAtMs <= Date.now() ||
+            (previous.host === hostname() && pidDead(previous.pid))
+          ) {
+            if (previous) {
+              const retired = file + '.' + randomUUID()
+              await rename(file, retired)
+              await unlink(retired)
+            }
+            break
+          }
+          db.exec('ROLLBACK')
+          if (performance.now() >= deadline) throw new Error('vault_writer_busy')
+          await delay(20)
+        }
+        const leaseId = randomUUID()
+        const acquiredAtMs = Date.now()
+        const handle = await open(file, 'wx', 0o600)
+        try {
+          await handle.writeFile(
+            JSON.stringify({
+              version: 1,
+              owner: 'electron',
+              pid: process.pid,
+              host: hostname(),
+              leaseId,
+              acquiredAtMs,
+              expiresAtMs: acquiredAtMs + 60000
+            })
+          )
+        } catch (err) {
+          await handle.close()
+          await unlink(file)
+          throw err
+        }
+        await handle.close()
+        try {
+          return await operation()
+        } finally {
+          await releaseVaultLease(file, leaseId)
+        }
+      } finally {
+        db.close()
+      }
+    })
   }
 
   private serialConnection<T>(connectionId: string | undefined, fn: () => Promise<T>): Promise<T> {
@@ -174,14 +322,14 @@ export class ModelConnectionStore {
         return change.result
       }
       if (!beforeChange)
-        return this.serial(async () => {
+        return this.writeTransaction(async () => {
           const store = await this.read()
           return apply(store, prepare(store))
         })
       const prepared = await this.serial(async () => prepare(await this.read()))
       const revocationAttempted = await beforeChange(prepared.previous)
       try {
-        return await this.serial(async () => {
+        return await this.writeTransaction(async () => {
           const store = await this.read()
           const current = prepare(store)
           if (JSON.stringify(current.previous) !== JSON.stringify(prepared.previous))
@@ -191,7 +339,7 @@ export class ModelConnectionStore {
       } catch (error) {
         const previous = prepared.previous
         if (revocationAttempted && previous?.oauth)
-          await this.serial(async () => {
+          await this.writeTransaction(async () => {
             const store = await this.read()
             const current = store.entries.find(
               (entry) => entry.connection.id === previous.connection.id
@@ -312,7 +460,7 @@ export class ModelConnectionStore {
   }
 
   recoverUnreadableStorage(input: { digest: string }): Promise<{ backupFileName: string }> {
-    return this.serial(async () => {
+    return this.writeTransaction(async () => {
       const { bytes, digest } = await this.recoveryCandidate()
       if (digest !== input.digest) throw new Error('credential_storage_recovery_conflict')
       this.assertUnreadable(bytes)
@@ -390,7 +538,7 @@ export class ModelConnectionStore {
   saveMcp(input: SaveMcpCredential): Promise<McpCredentialBinding> {
     const parsed = SaveMcpCredentialSchema.safeParse(input)
     if (!parsed.success) return Promise.reject(new Error('invalid_mcp_credential'))
-    return this.serial(async () => {
+    return this.writeTransaction(async () => {
       const data = parsed.data
       const store = await this.read()
       const entries = store.mcp ?? []
@@ -426,7 +574,7 @@ export class ModelConnectionStore {
   deleteMcp(input: z.infer<typeof DeleteMcpCredentialSchema>): Promise<void> {
     const parsed = DeleteMcpCredentialSchema.safeParse(input)
     if (!parsed.success) return Promise.reject(new Error('invalid_mcp_credential'))
-    return this.serial(async () => {
+    return this.writeTransaction(async () => {
       const store = await this.read()
       const entries = store.mcp ?? []
       const previous = entries.find(
@@ -482,7 +630,7 @@ export class ModelConnectionStore {
   saveImage(input: SaveProtectedImageConnection): Promise<ProtectedImageConnection> {
     const parsed = SaveProtectedImageConnectionSchema.safeParse(input)
     if (!parsed.success) return Promise.reject(new Error('invalid_image_connection'))
-    return this.serial(async () => {
+    return this.writeTransaction(async () => {
       const data = parsed.data
       const store = await this.read()
       const previous = store.image
@@ -517,7 +665,7 @@ export class ModelConnectionStore {
   deleteImage(input: DeleteImageConnection): Promise<void> {
     const parsed = DeleteImageConnectionSchema.safeParse(input)
     if (!parsed.success) return Promise.reject(new Error('invalid_image_connection'))
-    return this.serial(async () => {
+    return this.writeTransaction(async () => {
       const store = await this.read()
       const previous = store.image
       if (!previous || previous.connection.revision !== parsed.data.expectedRevision)
@@ -531,7 +679,7 @@ export class ModelConnectionStore {
   importLegacyImage(input: LegacyImageCredential): Promise<void> {
     const parsed = LegacyImageCredentialSchema.safeParse(input)
     if (!parsed.success) return Promise.reject(new Error('invalid_legacy_image_connection'))
-    return this.serial(async () => {
+    return this.writeTransaction(async () => {
       const legacy = parsed.data
       const store = await this.read()
       const backups = store.legacyImages ?? []
@@ -903,12 +1051,56 @@ export class ModelConnectionStore {
     )
   }
 
+  private async flushUnresolvedOAuthRotation(connectionId: string): Promise<void> {
+    const unresolved = this.unresolvedOAuthRotations.get(connectionId)
+    if (!unresolved) return
+    try {
+      await this.writeTransaction(async () => {
+        const store = await this.read()
+        const current = store.entries.find((item) => item.connection.id === connectionId)
+        if (
+          current?.oauth &&
+          current.connection.authType === 'openai_oauth' &&
+          current.connection.credentialRef === unresolved.credentialRef &&
+          current.connection.providerPresetId === unresolved.providerPresetId &&
+          current.connection.baseUrl === unresolved.baseUrl &&
+          JSON.stringify(current.oauth) === unresolved.expectedTokens
+        ) {
+          current.oauth = unresolved.next
+          await this.write(store)
+        }
+        this.unresolvedOAuthRotations.delete(connectionId)
+      }, rotatedGrantLeaseWaitMs)
+    } catch {
+      throw new Error('oauth_refresh_persist_failed')
+    }
+  }
+
+  async drainOAuthForHandoff(): Promise<void> {
+    this.oauthDraining = true
+    while (this.oauthPending.size > 0) {
+      await Promise.allSettled([...this.oauthPending.values()])
+    }
+    await this.pending
+    for (const connectionId of [...this.unresolvedOAuthRotations.keys()]) {
+      await this.flushUnresolvedOAuthRotation(connectionId)
+    }
+  }
+
+  resumeOAuthAfterAbortedHandoff(): void {
+    this.oauthDraining = false
+  }
+
   mutateOAuth(
     connectionId: string,
     fn: (current: OAuthTokenSet | undefined) => Promise<OAuthTokenSet | undefined>,
     expectedRevision?: number
   ): Promise<OAuthTokenSet | undefined> {
+    if (this.oauthDraining) return Promise.reject(new Error('oauth_refresh_draining'))
     return this.serialConnection(connectionId, async () => {
+      // Replay any retained accepted rotation before reading or mutating this row,
+      // so a subsequent refresh/denial cannot overwrite a valid replacement grant.
+      await this.flushUnresolvedOAuthRotation(connectionId)
       const initial = await this.serial(async () =>
         (await this.read()).entries.find((item) => item.connection.id === connectionId)
       )
@@ -920,30 +1112,49 @@ export class ModelConnectionStore {
         return undefined
       const expectedTokens = JSON.stringify(initial.oauth)
       const next = await fn(initial.oauth)
-      return this.serial(async () => {
-        const store = await this.read()
-        const current = store.entries.find((item) => item.connection.id === connectionId)
-        if (
-          !current?.oauth ||
-          current.connection.authType !== 'openai_oauth' ||
-          current.connection.credentialRef !== initial.connection.credentialRef ||
-          current.connection.providerPresetId !== initial.connection.providerPresetId ||
-          current.connection.baseUrl !== initial.connection.baseUrl ||
-          JSON.stringify(current.oauth) !== expectedTokens
+      const rotated = next !== undefined && next !== initial.oauth
+      try {
+        const result = await this.writeTransaction(
+          async () => {
+            const store = await this.read()
+            const current = store.entries.find((item) => item.connection.id === connectionId)
+            if (
+              !current?.oauth ||
+              current.connection.authType !== 'openai_oauth' ||
+              current.connection.credentialRef !== initial.connection.credentialRef ||
+              current.connection.providerPresetId !== initial.connection.providerPresetId ||
+              current.connection.baseUrl !== initial.connection.baseUrl ||
+              JSON.stringify(current.oauth) !== expectedTokens
+            )
+              return undefined
+            if (rotated) {
+              current.oauth = next
+              await this.write(store)
+            }
+            return current.oauth
+          },
+          rotated ? rotatedGrantLeaseWaitMs : undefined
         )
-          return undefined
-        if (next !== undefined && next !== initial.oauth) {
-          current.oauth = next
-          await this.write(store)
+        if (rotated) this.unresolvedOAuthRotations.delete(connectionId)
+        return result
+      } catch (error) {
+        if (rotated) {
+          this.unresolvedOAuthRotations.set(connectionId, {
+            credentialRef: initial.connection.credentialRef,
+            providerPresetId: initial.connection.providerPresetId,
+            baseUrl: initial.connection.baseUrl,
+            expectedTokens,
+            next
+          })
         }
-        return current.oauth
-      })
+        throw error
+      }
     })
   }
 
   /** Stable installation id sent to OpenAI as the agent host id on first login. */
   deviceId(): Promise<string> {
-    return this.serial(async () => {
+    return this.writeTransaction(async () => {
       const store = await this.read()
       if (!store.installationId) {
         store.installationId = randomUUID()

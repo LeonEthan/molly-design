@@ -317,6 +317,12 @@ class NoopSessionSandbox implements SessionSandbox {
     // signal the whole subtree even without cgroup support.
     const detached = this.deps.platform !== 'win32';
     const { captureOutput, ...spawnOptions } = options;
+    if (process.env.MOLLY_SUPERVISOR_RUN_ID && spawnOptions.env) {
+      spawnOptions.env = {
+        ...spawnOptions.env,
+        MOLLY_SUPERVISOR_RUN_ID: process.env.MOLLY_SUPERVISOR_RUN_ID,
+      };
+    }
     const child = this.deps.spawnProcess(command, args, {
       // The daemon runs without a console on Windows; without CREATE_NO_WINDOW
       // every console-subsystem child (git, node, agent CLIs) pops a visible
@@ -494,6 +500,12 @@ class LinuxCgroupSessionSandbox implements SessionSandbox {
     const baseline = await this.captureLimitEvents();
     const limitsAtSpawn = { ...this.limits };
     const { captureOutput, ...spawnOptions } = options;
+    if (process.env.MOLLY_SUPERVISOR_RUN_ID && spawnOptions.env) {
+      spawnOptions.env = {
+        ...spawnOptions.env,
+        MOLLY_SUPERVISOR_RUN_ID: process.env.MOLLY_SUPERVISOR_RUN_ID,
+      };
+    }
     const child = this.deps.spawnProcess(command, args, spawnOptions);
     const processHandle = createBufferedSessionProcessHandle(
       child,

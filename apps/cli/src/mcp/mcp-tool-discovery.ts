@@ -56,7 +56,13 @@ export function buildDiscoveryTransport(request: McpToolDiscoveryRequest): Trans
     return new StdioClientTransport({
       command: destination.command,
       args: destination.args,
-      env: { ...createToolEnvironment(process.env), ...values },
+      env: {
+        ...createToolEnvironment(process.env),
+        ...values,
+        ...(process.env.MOLLY_SUPERVISOR_RUN_ID && {
+          MOLLY_SUPERVISOR_RUN_ID: process.env.MOLLY_SUPERVISOR_RUN_ID,
+        }),
+      },
       cwd: homedir(),
       stderr: 'ignore',
     });

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { z } from 'zod';
-import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+import { getMollyDataDir, resolveIsolatedDataPath } from '@molly/shared/node/installation-profile';
 import { AgentConfigCliTypeSchema, ProjectRefSchema, type SessionId } from '@molly/shared';
 
 /**
@@ -104,12 +104,12 @@ export type SessionForkOperationStore = {
 };
 
 function getStoreRoot(): string {
-  return path.join(getMollyDataDir('local'), 'session-fork-operations');
+  return resolveIsolatedDataPath(getMollyDataDir('local'), 'session-fork-operations');
 }
 
 function getMarkerPath(targetSessionId: SessionId): string {
   const key = createHash('sha256').update(targetSessionId).digest('hex');
-  return path.join(getStoreRoot(), `${key}.json`);
+  return resolveIsolatedDataPath(getStoreRoot(), `${key}.json`);
 }
 
 function readMarkerFile(markerPath: string): Promise<SessionForkOperationMarker | null> {
@@ -130,6 +130,7 @@ export function createFileSessionForkOperationStore(): SessionForkOperationStore
       await writeFile(temporaryPath, `${JSON.stringify(marker)}\n`, {
         encoding: 'utf8',
         mode: 0o600,
+        flag: 'wx',
       });
       await rename(temporaryPath, markerPath);
     },
@@ -154,7 +155,7 @@ export function createFileSessionForkOperationStore(): SessionForkOperationStore
         if (!entry.endsWith('.json')) {
           continue;
         }
-        const marker = await readMarkerFile(path.join(getStoreRoot(), entry));
+        const marker = await readMarkerFile(resolveIsolatedDataPath(getStoreRoot(), entry));
         if (marker) {
           markers.push(marker);
         }

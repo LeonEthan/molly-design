@@ -139,6 +139,7 @@ export function createLocalSessionControlRequestHandler(
         );
         const streamResponses = wantsSessionControlStream(req, requestPath);
         const response = await handler.handle({
+          headers: req.headers,
           path: requestPath,
           rawBody: raw,
           requestId,

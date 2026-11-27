@@ -1,15 +1,18 @@
-import fs from 'fs/promises';
-import path from 'path';
+import { mkdirSync } from 'node:fs';
 import type { JsonObject, RemoteCursor, RemoteCursorStore } from '@loro-dev/streams-crdt';
 import { getLoroStreamsRemoteCursorUrlAliases, type WorkspaceId } from '@molly/shared';
 import { SqliteRepoStore } from 'loro-repo/storage/sqlite';
-import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+import {
+  getMollyDataDir,
+  resolveIsolatedDataPath,
+  resolveIsolatedSqlitePath,
+} from '@molly/shared/node/installation-profile';
 
 export const getLoroRepoStorageBaseDir = (workspaceId: WorkspaceId): string =>
-  path.join(getMollyDataDir(), 'loro-repo', workspaceId);
+  resolveIsolatedDataPath(getMollyDataDir(), 'loro-repo', workspaceId);
 
 export const getLoroRepoSqliteDbPath = (workspaceId: WorkspaceId): string =>
-  path.join(getLoroRepoStorageBaseDir(workspaceId), 'repo.sqlite3');
+  resolveIsolatedSqlitePath(getMollyDataDir(), 'loro-repo', workspaceId, 'repo.sqlite3');
 
 // sqliteStore.cursorStore keys cursors by exact stream URL. Keep this wrapper
 // because direct/proxy Loro Streams gateway URLs address the same stream but
@@ -65,12 +68,12 @@ export const createCliSqliteRepoStore = async (
   workspaceId: WorkspaceId
 ): Promise<CliSqliteRepoStore> => {
   const baseDir = getLoroRepoStorageBaseDir(workspaceId);
-  await fs.mkdir(baseDir, { recursive: true });
 
   // Do not import the pre-SQLite remote-cursors.json file. Those cursors were
   // only durable together with FileSystemStorageAdaptor snapshots; migrating
   // cursors without doc/meta state could skip required stream replay.
   const dbPath = getLoroRepoSqliteDbPath(workspaceId);
+  mkdirSync(baseDir, { recursive: true });
   const sqliteStore = new SqliteRepoStore({ path: dbPath });
 
   return {

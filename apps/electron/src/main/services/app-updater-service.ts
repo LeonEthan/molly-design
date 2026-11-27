@@ -102,6 +102,8 @@ export class AppUpdaterService {
   private downloadedFile: string | undefined
   private errorCount = 0
   private preparationInFlight = false
+  private sparkleInstallPending = false
+  private sparkleInstallRelease?: () => Promise<void>
   private configurationUnavailable = false
   private checkingWatchdog: ReturnType<typeof createCheckingWatchdog> | null = null
 
@@ -191,6 +193,12 @@ export class AppUpdaterService {
       return {
         started: false,
         error: 'updater_disabled'
+      }
+    }
+    if (this.preparationInFlight || this.sparkleInstallPending) {
+      return {
+        started: false,
+        error: 'update_install_in_progress'
       }
     }
     if (this.sparkleBridge) {
@@ -286,12 +294,13 @@ export class AppUpdaterService {
   async quitAndInstall(): Promise<QuitAndInstallElectronUpdateResult> {
     if (!this.isUpdaterEnabled()) return { ok: false, error: 'updater_disabled' }
     if (this.state.phase !== 'downloaded') return { ok: false, error: 'update_not_downloaded' }
-    if (this.preparationInFlight) return { ok: false, error: 'update_install_in_progress' }
+    if (this.preparationInFlight || this.sparkleInstallPending)
+      return { ok: false, error: 'update_install_in_progress' }
     this.preparationInFlight = true
     let release: (() => Promise<void>) | undefined
     try {
       release = await this.options.prepareInstall?.()
-      const result = await this.installDownloadedUpdate()
+      const result = await this.installDownloadedUpdate(release)
       if (!result.ok) await release?.()
       return result
     } catch (error) {
@@ -304,7 +313,9 @@ export class AppUpdaterService {
     }
   }
 
-  private async installDownloadedUpdate(): Promise<QuitAndInstallElectronUpdateResult> {
+  private async installDownloadedUpdate(
+    release?: () => Promise<void>
+  ): Promise<QuitAndInstallElectronUpdateResult> {
     try {
       await this.options.prepareToRelaunch?.()
     } catch (error) {
@@ -316,10 +327,14 @@ export class AppUpdaterService {
 
     if (this.sparkleBridge) {
       try {
+        this.sparkleInstallPending = true
+        this.sparkleInstallRelease = release
         setAppQuitting(true)
         this.sparkleBridge.installUpdateNow()
         return { ok: true }
       } catch (error) {
+        this.sparkleInstallPending = false
+        this.sparkleInstallRelease = undefined
         setAppQuitting(false)
         this.options.abortRelaunch?.()
         const message = formatUnknownError(error)
@@ -464,6 +479,16 @@ export class AppUpdaterService {
     return bridge
   }
 
+  private recoverFailedSparkleInstall(message: string): void {
+    const release = this.sparkleInstallRelease
+    this.sparkleInstallPending = false
+    this.sparkleInstallRelease = undefined
+    setAppQuitting(false)
+    this.options.abortRelaunch?.()
+    void release?.()
+    this.recordError(message)
+  }
+
   private attachSparkleEventHandler(bridge: SparkleBridge): void {
     if (typeof bridge.setEventHandler !== 'function') {
       console.log('[sparkle] native bridge has no event handler; renderer progress will not update')
@@ -471,6 +496,20 @@ export class AppUpdaterService {
     }
     bridge.setEventHandler((event) => {
       const eventType = typeof event?.type === 'string' ? event.type : undefined
+      if (
+        this.sparkleInstallPending &&
+        (eventType === 'install-cancelled' || eventType === 'dismissed')
+      ) {
+        this.ignoreSparkleUntilChecking = false
+        this.recoverFailedSparkleInstall('update_install_canceled')
+        return
+      }
+      if (
+        this.sparkleInstallPending &&
+        (eventType === 'error' || eventType === 'update-not-available')
+      ) {
+        this.ignoreSparkleUntilChecking = false
+      }
       const gate = nextSparkleEventGate(this.ignoreSparkleUntilChecking, eventType)
       this.ignoreSparkleUntilChecking = gate.ignoreUntilChecking
       if (!gate.deliver) return
@@ -478,6 +517,20 @@ export class AppUpdaterService {
         const patch = sparkleEventToStatePatch(event, Date.now())
         if (!patch) return
         if (patch.phase) this.sparkleSessionOpen = patch.phase === 'checking'
+        if (this.sparkleInstallPending) {
+          if (patch.phase === 'checking' || patch.phase === 'downloading') {
+            // Sparkle resume flow emits checking/downloading progress before
+            // installing; keep the relaunch guard active until a terminal outcome.
+            this.setState(patch)
+            return
+          }
+          if (patch.phase === 'error' || patch.phase === 'up_to_date') {
+            const message = patch.error ?? 'update_install_canceled'
+            this.recoverFailedSparkleInstall(message)
+            if (patch.phase !== 'error') this.setState(patch)
+            return
+          }
+        }
         this.setState(patch)
       } catch (error) {
         console.log(`[sparkle] event handler failed: ${formatUnknownError(error)}`)
@@ -633,7 +686,7 @@ export class AppUpdaterService {
         }
       })
     }
-    this.checkingWatchdog.sync(this.state.phase)
+    this.checkingWatchdog.sync(this.sparkleInstallPending ? 'idle' : this.state.phase)
   }
 
   private emitState(): void {

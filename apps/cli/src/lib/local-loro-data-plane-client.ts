@@ -14,7 +14,9 @@ export async function connectLocalLoroDataPlane(): Promise<{
   connection: LocalLoroDataPlaneConnection;
   close: () => void;
 }> {
-  const socket = net.createConnection(getLocalLoroDataPlaneSocketPath('local'));
+  const socket = net.createConnection(
+    process.env.MOLLY_MCP_LORO_SOCKET_PATH ?? getLocalLoroDataPlaneSocketPath('local')
+  );
   try {
     await once(socket, 'connect');
   } catch (error) {

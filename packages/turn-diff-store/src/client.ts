@@ -1,3 +1,4 @@
+import { inspectIsolatedRoot } from './isolated-root';
 import { Worker } from 'node:worker_threads';
 
 import type {
@@ -57,7 +58,13 @@ export class TurnDiffStore implements TurnDiffStoreApi {
   private readonly idleWaiters: (() => void)[] = [];
 
   constructor(options: TurnDiffStoreClientOptions) {
+    const isolatedDataRoot =
+      options.isolatedDataRoot ??
+      (process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT === '1'
+        ? (process.env.MOLLY_DATA_DIR ?? '')
+        : undefined);
     this.storeOptions = {
+      ...(isolatedDataRoot === undefined ? {} : inspectIsolatedRoot(isolatedDataRoot)),
       dbPath: options.dbPath,
       ...(options.retentionDays === undefined ? {} : { retentionDays: options.retentionDays }),
       ...(options.maxStorageBytes === undefined

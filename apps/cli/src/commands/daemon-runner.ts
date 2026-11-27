@@ -1,3 +1,4 @@
+import { validateStartupDataDirectory } from '@molly/shared/node/installation-profile';
 import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -140,6 +141,7 @@ export const daemonRunnerCommand = new Command('daemon-runner')
   .allowUnknownOption(true)
   .helpOption(false)
   .action(async (_options: unknown, cmd: Command) => {
+    validateStartupDataDirectory();
     createHybridLogger({ level: 'info' });
     const logger = getLogger('daemon-runner');
     const supervisorIdentity = {

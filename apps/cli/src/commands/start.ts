@@ -1,3 +1,4 @@
+import { validateStartupDataDirectory } from '@molly/shared/node/installation-profile';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import os from 'os';
@@ -30,6 +31,7 @@ import {
   type LocalSupervisorIdentity,
   registerLocalSupervisorControl,
   resolveLocalSupervisorIdentity,
+  receiveSupervisorIdentity,
   scrubLocalSupervisorCapabilityEnv,
   toRuntimeSupervisorIdentity,
 } from '@/lib/local-supervisor-control';
@@ -57,13 +59,17 @@ export const startCommand = new Command('start')
   .option('--debug', 'enable debug output')
   .option('--heartbeat-log', 'output current timestamp every 5 seconds')
   .action(async (options: StartOptions) => {
+    validateStartupDataDirectory();
     createHybridLogger({ level: options.debug ? 'debug' : 'info' });
     const logger = getLogger('start');
     const commandActionStartedAt = Date.now();
     logger.debug(
       `[startup] Start action entered processUptimeMs=${Math.round(process.uptime() * 1_000)}`
     );
-    const identityResolution = resolveLocalSupervisorIdentity();
+    const identityResolution =
+      process.env.MOLLY_SUPERVISOR_TRANSPORT === 'stdin'
+        ? await receiveSupervisorIdentity()
+        : resolveLocalSupervisorIdentity();
     if (identityResolution.status === 'invalid') {
       logger.error(
         `Refusing supervised start: ${identityResolution.reason}. Restart the supervising host with a matching lody release.`
@@ -202,7 +208,7 @@ async function startAgentService(
 ): Promise<void> {
   // The startup listener protects authentication/bootstrap. From this point to
   // the graceful controller registration below there is no async yield.
-  unregisterStartupSupervisorControl();
+  if (process.env.MOLLY_SUPERVISOR_TRANSPORT !== 'stdin') unregisterStartupSupervisorControl();
   logger.info(`Starting agent service...`);
 
   const startupStartMs = Date.now();

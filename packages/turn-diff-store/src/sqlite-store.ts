@@ -1,5 +1,6 @@
+import { inspectIsolatedRoot } from './isolated-root';
 import { createHash } from 'node:crypto';
-import { mkdirSync, statSync } from 'node:fs';
+import { lstatSync, mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 
@@ -354,15 +355,55 @@ export interface TurnDiffGcCursor {
   deletedChunks: number;
 }
 
+function resolveSqlitePath(options: TurnDiffStoreOptions): string {
+  const { dbPath, isolatedDataRoot: root } = options;
+  if (root === undefined) return dbPath;
+  const identity = inspectIsolatedRoot(root);
+  if (
+    identity.isolatedRootCanonicalPath !== options.isolatedRootCanonicalPath ||
+    ((process.platform !== 'win32' || options.isolatedRootIno !== '0') &&
+      (identity.isolatedRootDev !== options.isolatedRootDev ||
+        identity.isolatedRootIno !== options.isolatedRootIno))
+  )
+    throw Error('invalid_isolated_data_root');
+  const relative = path.relative(root, dbPath);
+  if (
+    !relative ||
+    path.isAbsolute(relative) ||
+    relative.split(path.sep)[0] === '..' ||
+    dbPath.split(process.platform === 'win32' ? /[\\/]/ : '/').includes('..')
+  )
+    throw Error('isolated_data_path_escape');
+  let current = identity.isolatedRootCanonicalPath;
+  for (const component of relative.split(path.sep)) {
+    current = path.join(current, component);
+    if (lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink())
+      throw Error('isolated_data_path_symlink');
+  }
+  for (const suffix of ['', '-wal', '-shm', '-journal']) {
+    const stat = lstatSync(current + suffix, { throwIfNoEntry: false });
+    if (stat?.isSymbolicLink()) throw Error('isolated_data_path_symlink');
+    if (stat && (!stat.isFile() || stat.nlink !== 1)) throw Error('invalid_isolated_sqlite_file');
+  }
+  return current;
+}
+
 export class SqliteTurnDiffStore {
   private readonly db: Database.Database;
   private readonly options: NormalizedOptions;
   private closed = false;
 
   constructor(options: TurnDiffStoreOptions) {
+    const root =
+      options.isolatedDataRoot ??
+      (process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT === '1'
+        ? (process.env.MOLLY_DATA_DIR ?? '')
+        : undefined);
+    if (root !== undefined && options.isolatedRootCanonicalPath === undefined)
+      options = { ...options, ...inspectIsolatedRoot(root) };
     this.options = normalizeOptions(options);
-    mkdirSync(path.dirname(this.options.dbPath), { recursive: true });
-    this.db = new Database(this.options.dbPath, { timeout: 5_000 });
+    mkdirSync(path.dirname(resolveSqlitePath(options)), { recursive: true });
+    this.db = new Database(resolveSqlitePath(options), { timeout: 5_000 });
     try {
       this.initializeSchema();
     } catch (error) {

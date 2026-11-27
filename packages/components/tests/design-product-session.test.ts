@@ -776,3 +776,39 @@ it('paints the status pill in the UI sans with theme variables and no fixed hues
   expect(pill).toContain('var(--destructive)');
   window.dispatchEvent(new Event('pagehide'));
 });
+
+it.each(['new-permit', 'original'])(
+  'retries an overlapping failed flush using %s',
+  async (permit) => {
+    vi.useFakeTimers();
+    const permits: string[] = [];
+    let rejectFirst!: (error: Error) => void;
+    const firstReply = new Promise<never>((_, reject) => {
+      rejectFirst = reject;
+    });
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      permits.push(JSON.parse(String(init.body)).writePermit);
+      if (permits.length === 1) return firstReply;
+      return { ok: true, json: async () => ({ ok: true, revisionId: 'next' }) };
+    });
+    const session = createProductSession({
+      sessionId: 'art',
+      revisionId: 'old',
+      snapshot: () => ({}),
+      assets: () => ({}),
+      setDirty: () => {},
+      setReadonly: () => {},
+      commitPending: () => {},
+    });
+    session.changed();
+    const api = (
+      window as unknown as { molly: { flush(permit: string): Promise<{ ok: boolean }> } }
+    ).molly;
+    const first = api.flush('original');
+    const retry = api.flush(permit);
+    rejectFirst(new Error('refused'));
+    expect(await first).toMatchObject({ ok: false });
+    expect(await retry).toEqual({ ok: true });
+    expect(permits).toEqual(['original', permit]);
+  }
+);

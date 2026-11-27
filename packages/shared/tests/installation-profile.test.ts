@@ -5,6 +5,10 @@ import { createRequire } from 'node:module';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ensureMollyDataDir,
+  canonicalDataDirectory,
+  dataDirectoryScope,
+  resolveIsolatedDataPath,
+  validateStartupDataDirectory,
   MollyDataDirUnavailableError,
   getInstallationProfile,
   getMollyDataDir,
@@ -32,7 +36,7 @@ describe('installation profile', () => {
     const stable = getInstallationProfile('local', 'stable');
     expect(preview.desktopAppId).not.toBe(stable.desktopAppId);
     expect(preview.desktopProtocol).not.toBe(stable.desktopProtocol);
-    expect(getMollyDataDir('local', '/home/alice')).toBe('/home/alice/.molly-preview');
+    expect(getMollyDataDir('local', '/home/alice')).toBe(path.join('/home/alice', '.molly-preview'));
     expect(getLocalWorkspaceCatalogPath('local')).toContain('.molly-preview');
     expect(getLocalControlSocketPath('local')).toContain('molly-preview-control');
     expect(getLocalLoroDataPlaneSocketPath('local')).toContain('molly-preview-loro-data-plane');
@@ -224,4 +228,62 @@ it('reads legacy environment overrides, gives new names priority and rejects an 
   const commonJs = require('../src/node/installation-profile.cjs');
   expect(() => commonJs.getInstallationProfile()).toThrow('MOLLY_PLATFORM');
   expect(commonJs.getMollyDataDir('local')).toBe(getMollyDataDir('local'));
+});
+
+it('uses identical TS and CJS scope bytes for a cleaned path with a missing tail', () => {
+  const windows = process.platform === 'win32';
+  const directory = windows
+    ? 'C:\\molly-stage3a\\gone\\..\\vector #1'
+    : '/molly-stage3a/gone/../vector #1';
+  const scope = windows ? '45bd25dfa25526a2' : 'd77a13c037b91153';
+  const common = require('../src/node/installation-profile.cjs');
+  expect(dataDirectoryScope(directory)).toBe(scope);
+  expect(common.dataDirectoryScope(directory)).toBe(scope);
+  expect(20000 + (parseInt(scope.slice(0, 8), 16) % 40000)).toBe(windows ? 43903 : 41888);
+  for (const name of ['.molly', '.molly-preview', '.lody'])
+    expect(dataDirectoryScope(path.join(os.homedir(), name))).toBeNull();
+});
+
+it('requires ownership before selecting experimental endpoints and rejects redirected managed components', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'molly-profile-'));
+  try {
+    vi.stubEnv('MOLLY_DATA_DIR', root);
+    vi.stubEnv('MOLLY_ISOLATED_DATA_ROOT_STRICT', '1');
+    vi.stubEnv('MOLLY_SUPERVISOR_TRANSPORT', 'stdin');
+    vi.stubEnv('MOLLY_MYGO_ISOLATED_PIPES', '1');
+    vi.stubEnv('MOLLY_LOCAL_CLI_HOST_PORT', '40201');
+    const baseline = getLocalCliHostEndpoint();
+    expect(() => validateStartupDataDirectory()).toThrow('invalid_isolated_data_root');
+    fs.writeFileSync(path.join(root, '.molly-mygo-experimental'), '');
+    validateStartupDataDirectory();
+    const endpoint = getLocalCliHostEndpoint();
+    expect(endpoint).toEqual(
+      require('../src/node/local-cli-host-lease.cjs').getLocalCliHostEndpoint()
+    );
+    expect(endpoint).toMatchObject(
+      process.platform === 'win32'
+        ? { path: expect.stringContaining(dataDirectoryScope(root)!) }
+        : { port: 40201 }
+    );
+    vi.stubEnv('MOLLY_E2E', '1');
+    expect(getLocalCliHostEndpoint()).toEqual(baseline);
+    vi.stubEnv('MOLLY_E2E', '0');
+    vi.stubEnv('MOLLY_SUPERVISOR_TRANSPORT', undefined);
+    expect(() => validateStartupDataDirectory()).toThrow('experimental_dir_owned_by_mygo_shell');
+    expect(getLocalCliHostEndpoint()).toEqual(baseline);
+    vi.stubEnv('MOLLY_SUPERVISOR_TRANSPORT', 'stdin');
+    fs.symlinkSync(os.tmpdir(), path.join(root, 'redirect'), 'junction');
+    expect(() => validateStartupDataDirectory()).toThrow('isolated_data_path_symlink');
+    expect(() => resolveIsolatedDataPath(root, 'redirect', 'nested')).toThrow(
+      'isolated_data_path_symlink'
+    );
+    expect(() => resolveIsolatedDataPath(root, '..', 'outside')).toThrow(
+      'isolated_data_path_escape'
+    );
+    expect(canonicalDataDirectory(path.join(root, 'redirect', 'missing', 'child'))).toBe(
+      path.join(fs.realpathSync.native(os.tmpdir()), 'missing', 'child')
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

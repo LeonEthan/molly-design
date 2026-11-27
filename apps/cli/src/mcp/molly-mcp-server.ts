@@ -1,3 +1,4 @@
+import { stdioProfileEnvironment } from './stdio-profile';
 import { readSessionHistory } from '@molly/shared/session-data';
 import { formatDesignAssetFailure } from '@molly/shared/local-machine-rpc';
 import {
@@ -4045,6 +4046,7 @@ export function buildMollyMcpServer(
 }
 
 export async function runMollyMcpServer(): Promise<void> {
+  stdioProfileEnvironment();
   const context = getMcpSessionContext();
   // The stdio server lives for the whole agent session, so its tool list is
   // fixed at startup from this session's own gates.

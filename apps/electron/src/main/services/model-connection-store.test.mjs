@@ -304,6 +304,37 @@ void test('OAuth refresh keeps public reads and unrelated saves available, prese
   assert.equal((await store.acquireForRun(unrelated.id, unrelated.revision)).apiKey, input.apiKey)
 })
 
+void test('rotated OAuth grant survives writer contention beyond the ordinary write deadline', async (t) => {
+  const { directory, store } = await fixture(t)
+  const { connection } = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
+  const lease = join(directory, 'model-connections.writer.lease')
+  const rotated = { ...oauthTokens, refreshToken: 'rotated-once' }
+  await store.mutateOAuth(connection.id, async () => {
+    await writeFile(
+      lease,
+      JSON.stringify({
+        version: 1,
+        owner: 'mygo',
+        pid: 1,
+        host: 'fixture',
+        leaseId: 'migrating',
+        acquiredAtMs: 1,
+        expiresAtMs: 60001
+      })
+    )
+    let elapsed = 0
+    t.mock.method(performance, 'now', () => elapsed)
+    t.mock.method(Date, 'now', () => {
+      const current = 58000 + elapsed
+      elapsed += 3000
+      return current
+    })
+    return rotated
+  })
+  const reopened = new ModelConnectionStore(directory, cipher, 'darwin')
+  assert.equal((await reopened.oauthFor(connection.id)).refreshToken, rotated.refreshToken)
+})
+
 void test('reauthentication waits for rotation and preserves the selection identity', async (t) => {
   const { store } = await fixture(t)
   const first = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
@@ -1726,3 +1757,255 @@ for (const compatibleApi of ['openai-responses', 'google-generative-ai']) {
     assert.equal((await store.snapshot()).connections[0].compatibleApi, 'openai-completions')
   })
 }
+
+void test('Electron reclaims an expired MyGo lease before publishing its vault', async (t) => {
+  const { store, directory } = await fixture(t)
+  const file = join(directory, 'model-connections.writer.lease')
+  await writeFile(
+    file,
+    JSON.stringify({
+      version: 1,
+      owner: 'mygo',
+      pid: 1,
+      host: 'fixture',
+      leaseId: 'retired',
+      acquiredAtMs: 1,
+      expiresAtMs: 2
+    }),
+    { mode: 0o600 }
+  )
+  const id = await store.deviceId()
+  assert.equal(
+    JSON.parse(cipher.decryptString(await readFile(join(directory, 'model-connections.enc'))))
+      .installationId,
+    id
+  )
+  await assert.rejects(stat(file), { code: 'ENOENT' })
+})
+
+void test('OAuth refresh drain rejects new mutations, completes in-flight rotation, and resumes on abort', async (t) => {
+  const { store } = await fixture(t)
+  const { connection } = await store.saveOAuthConnection(
+    {
+      displayName: 'OpenAI OAuth',
+      providerPresetId: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      enabled: true,
+      authType: 'openai_oauth'
+    },
+    {
+      accessToken: 'at-initial',
+      refreshToken: 'rt-initial',
+      accessTokenExpiresAt: Date.now() + 60_000,
+      clientId: 'client-1'
+    },
+    { email: 'user@example.com' }
+  )
+
+  let releaseRotation
+  const rotationEntered = new Promise((resolve) => {
+    releaseRotation = resolve
+  })
+  let finishRotation
+  const rotationGate = new Promise((resolve) => {
+    finishRotation = resolve
+  })
+
+  const inFlight = store.mutateOAuth(connection.id, async (current) => {
+    releaseRotation()
+    await rotationGate
+    return {
+      ...current,
+      accessToken: 'at-rotated',
+      refreshToken: 'rt-rotated',
+      accessTokenExpiresAt: current.accessTokenExpiresAt + 60_000
+    }
+  })
+
+  await rotationEntered
+
+  let drained = false
+  const drainPromise = store.drainOAuthForHandoff().then(() => {
+    drained = true
+  })
+
+  await assert.rejects(
+    store.mutateOAuth(connection.id, async () => assert.fail('must not start while draining')),
+    { message: 'oauth_refresh_draining' }
+  )
+  assert.equal(drained, false)
+
+  finishRotation()
+  await inFlight
+  await drainPromise
+  assert.equal(drained, true)
+
+  const stored = await store.oauthFor(connection.id)
+  assert.equal(stored?.accessToken, 'at-rotated')
+  assert.equal(stored?.refreshToken, 'rt-rotated')
+
+  store.resumeOAuthAfterAbortedHandoff()
+  const resumed = await store.mutateOAuth(connection.id, async (current) => ({
+    ...current,
+    accessToken: 'at-resumed'
+  }))
+  assert.equal(resumed?.accessToken, 'at-resumed')
+})
+
+void test('OAuth refresh drain rejects handoff when an accepted rotation fails to persist', async (t) => {
+  const { directory } = await fixture(t)
+  let failEncrypt = false
+  const store = new ModelConnectionStore(directory, {
+    ...cipher,
+    encryptString(value) {
+      if (failEncrypt) {
+        throw new Error('simulated_vault_write_error')
+      }
+      return cipher.encryptString(value)
+    }
+  })
+  const { connection } = await store.saveOAuthConnection(
+    {
+      displayName: 'OpenAI OAuth',
+      providerPresetId: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      enabled: true,
+      authType: 'openai_oauth'
+    },
+    {
+      accessToken: 'at-initial',
+      refreshToken: 'rt-initial',
+      accessTokenExpiresAt: Date.now() + 60_000,
+      clientId: 'client-1'
+    },
+    { email: 'user@example.com' }
+  )
+
+  let releaseRotation
+  const entered = new Promise((resolve) => {
+    releaseRotation = resolve
+  })
+  let finishRotation
+  const gate = new Promise((resolve) => {
+    finishRotation = resolve
+  })
+  const inFlight = store
+    .mutateOAuth(connection.id, async (current) => {
+      releaseRotation()
+      await gate
+      failEncrypt = true
+      return { ...current, accessToken: 'at-rotated', refreshToken: 'rt-rotated' }
+    })
+    .catch((err) => err)
+
+  await entered
+  const drainPromise = store.drainOAuthForHandoff()
+  finishRotation()
+  const err = await inFlight
+  assert.ok(err instanceof Error)
+  await assert.rejects(drainPromise, { message: 'oauth_refresh_persist_failed' })
+})
+
+void test('OAuth refresh drain recovers a previously failed rotation on retry and blocks if it still fails', async (t) => {
+  const { directory } = await fixture(t)
+  let remainingEncryptFailures = 0
+  const store = new ModelConnectionStore(directory, {
+    ...cipher,
+    encryptString(value) {
+      if (remainingEncryptFailures > 0) {
+        remainingEncryptFailures -= 1
+        throw new Error('transient_vault_write_error')
+      }
+      return cipher.encryptString(value)
+    }
+  })
+  const { connection } = await store.saveOAuthConnection(
+    {
+      displayName: 'OpenAI OAuth',
+      providerPresetId: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      enabled: true,
+      authType: 'openai_oauth'
+    },
+    {
+      accessToken: 'at-initial',
+      refreshToken: 'rt-initial',
+      accessTokenExpiresAt: Date.now() + 60_000,
+      clientId: 'client-1'
+    },
+    { email: 'user@example.com' }
+  )
+
+  // Rotation settles with a write failure BEFORE drainOAuthForHandoff() is ever called.
+  remainingEncryptFailures = 2
+  await assert.rejects(
+    store.mutateOAuth(connection.id, async (current) => ({
+      ...current,
+      accessToken: 'at-rotated',
+      refreshToken: 'rt-rotated'
+    })),
+    { message: 'credential_storage_write_failed' }
+  )
+
+  // First drain attempt still hits write failure -> must reject even though rotation settled earlier.
+  await assert.rejects(store.drainOAuthForHandoff(), { message: 'oauth_refresh_persist_failed' })
+
+  // Next drain attempt succeeds -> persists the retained rotated grant under CAS and resolves.
+  await store.drainOAuthForHandoff()
+  const stored = await store.oauthFor(connection.id)
+  assert.equal(stored?.accessToken, 'at-rotated')
+  assert.equal(stored?.refreshToken, 'rt-rotated')
+})
+
+void test('normal mutateOAuth replays a retained rotation before running another refresh or denial', async (t) => {
+  const { directory } = await fixture(t)
+  let remainingEncryptFailures = 0
+  const store = new ModelConnectionStore(directory, {
+    ...cipher,
+    encryptString(value) {
+      if (remainingEncryptFailures > 0) {
+        remainingEncryptFailures -= 1
+        throw new Error('transient_vault_write_error')
+      }
+      return cipher.encryptString(value)
+    }
+  })
+  const { connection } = await store.saveOAuthConnection(
+    {
+      displayName: 'OpenAI OAuth',
+      providerPresetId: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      enabled: true,
+      authType: 'openai_oauth'
+    },
+    {
+      accessToken: 'at-old',
+      refreshToken: 'rt-old',
+      accessTokenExpiresAt: Date.now() + 60_000,
+      clientId: 'client-1'
+    },
+    { email: 'user@example.com' }
+  )
+
+  // First rotation succeeds with provider, fails to write to disk -> retained.
+  remainingEncryptFailures = 1
+  await assert.rejects(
+    store.mutateOAuth(connection.id, async (current) => ({
+      ...current,
+      accessToken: 'at-rotated',
+      refreshToken: 'rt-rotated'
+    })),
+    { message: 'credential_storage_write_failed' }
+  )
+
+  // Next mutateOAuth must flush the retained replacement first so the callback sees rt-rotated, not stale rt-old.
+  let observedRefreshToken
+  await store.mutateOAuth(connection.id, async (current) => {
+    observedRefreshToken = current?.refreshToken
+    return undefined
+  })
+  assert.equal(observedRefreshToken, 'rt-rotated')
+  const stored = await store.oauthFor(connection.id)
+  assert.equal(stored?.refreshToken, 'rt-rotated')
+  assert.equal(stored?.denied, undefined)
+})

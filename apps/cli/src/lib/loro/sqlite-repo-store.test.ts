@@ -1,7 +1,8 @@
+import { linkSync } from 'node:fs';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JsonObject, RemoteCursor } from '@loro-dev/streams-crdt';
 import {
   DEFAULT_LORO_STREAMS_BASE_URL,
@@ -53,6 +54,7 @@ const createTempSqliteCursorStore = async (): Promise<{
 };
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   for (const store of openStores) {
     store.close();
   }
@@ -119,26 +121,64 @@ describe('SQLite Loro repo store', () => {
   });
 
   it('creates a workspace-scoped SQLite repo store under the Molly storage directory', async () => {
-    const previousHome = process.env.HOME;
     const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'lody-sqlite-repo-home-'));
     createdPaths.add(tempHome);
-    process.env.HOME = tempHome;
+    vi.stubEnv(process.platform === 'win32' ? 'USERPROFILE' : 'HOME', tempHome);
 
-    try {
-      const workspaceId = 'workspace-1' as WorkspaceId;
-      const cliStore = await createCliSqliteRepoStore(workspaceId);
-      openStores.add(cliStore.sqliteStore);
+    const workspaceId = 'workspace-1' as WorkspaceId;
+    const cliStore = await createCliSqliteRepoStore(workspaceId);
+    openStores.add(cliStore.sqliteStore);
 
-      expect(cliStore.baseDir).toBe(path.join(tempHome, '.molly', 'loro-repo', 'workspace-1'));
-      expect(cliStore.dbPath).toBe(path.join(cliStore.baseDir, 'repo.sqlite3'));
-      expect(getLoroRepoStorageBaseDir(workspaceId)).toBe(cliStore.baseDir);
-      expect(getLoroRepoSqliteDbPath(workspaceId)).toBe(cliStore.dbPath);
-    } finally {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-    }
+    expect(cliStore.baseDir).toBe(path.join(tempHome, '.molly', 'loro-repo', 'workspace-1'));
+    expect(cliStore.dbPath).toBe(path.join(cliStore.baseDir, 'repo.sqlite3'));
+    expect(getLoroRepoStorageBaseDir(workspaceId)).toBe(cliStore.baseDir);
+    expect(getLoroRepoSqliteDbPath(workspaceId)).toBe(cliStore.dbPath);
   });
+});
+
+it.each([
+  { kind: 'symlink', suffix: 'directory' },
+  ...['', '-wal', '-shm', '-journal'].flatMap((suffix) =>
+    ['hardlink', 'symlink'].map((kind) => ({ kind, suffix }))
+  ),
+])(
+  'rejects a $kind on SQLite path ($suffix) before touching external bytes',
+  async ({ kind, suffix }) => {
+    const fixture = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlite-isolation-'));
+    createdPaths.add(fixture);
+    const root = path.join(fixture, 'root');
+    const dir = path.join(root, 'loro-repo', 'workspace-1');
+    const outside = path.join(fixture, 'outside');
+    await fs.mkdir(path.dirname(dir), { recursive: true });
+    await fs.mkdir(outside);
+    const target = path.join(outside, 'repo.sqlite3' + (suffix === 'directory' ? '' : suffix));
+    const bytes = Buffer.from([0, 255, 42]);
+    await fs.writeFile(target, bytes);
+    if (suffix === 'directory') {
+      await fs.symlink(outside, dir, 'dir');
+    } else {
+      await fs.mkdir(dir);
+      const leaf = path.join(dir, 'repo.sqlite3' + suffix);
+      if (kind === 'hardlink') linkSync(target, leaf);
+      else await fs.symlink(target, leaf, 'file');
+    }
+    vi.stubEnv('MOLLY_DATA_DIR', root);
+    vi.stubEnv('MOLLY_ISOLATED_DATA_ROOT_STRICT', '1');
+    await expect(createCliSqliteRepoStore('workspace-1' as WorkspaceId)).rejects.toThrow(
+      kind === 'hardlink' ? 'invalid_isolated_sqlite_file' : 'isolated_data_path_symlink'
+    );
+    expect(await fs.readFile(target)).toEqual(bytes);
+    expect(await fs.readdir(outside)).toEqual([path.basename(target)]);
+  }
+);
+
+it('rejects an escaping workspace before creating directories', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlite-isolation-'));
+  createdPaths.add(root);
+  vi.stubEnv('MOLLY_DATA_DIR', root);
+  vi.stubEnv('MOLLY_ISOLATED_DATA_ROOT_STRICT', '1');
+  await expect(createCliSqliteRepoStore('../../outside' as WorkspaceId)).rejects.toThrow(
+    'isolated_data_path_escape'
+  );
+  expect(await fs.readdir(root)).toEqual([]);
 });

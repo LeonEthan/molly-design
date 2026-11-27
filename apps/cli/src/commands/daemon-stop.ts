@@ -4,7 +4,11 @@ import {
   requestLocalCliHostShutdown,
   type LocalCliHostRecord,
 } from '@molly/shared/node/local-cli-host-lease';
-import { getInstallationProfile } from '@molly/shared/node/installation-profile';
+import {
+  resolveIsolatedDataPath,
+  getMollyDataDir,
+  getInstallationProfile,
+} from '@molly/shared/node/installation-profile';
 import { readPidFileRecord } from './daemon-shared';
 
 type StopResult =
@@ -16,7 +20,7 @@ type StopResult =
   | { status: 'control_error'; pid: number; errorMessage: string };
 
 export async function stopDaemonProcess(): Promise<StopResult> {
-  const pidRecord = readPidFileRecord();
+  const pidRecord = readPidFileRecord(resolveIsolatedDataPath(getMollyDataDir(), 'daemon.pid'));
   if (!pidRecord) return { status: 'not_running' };
   const pid = pidRecord.pid;
 
@@ -24,19 +28,33 @@ export async function stopDaemonProcess(): Promise<StopResult> {
   let host = await inspectLocalCliHost(endpoint, 500);
   const matchesDaemon = (record: LocalCliHostRecord | null) =>
     record?.mode === 'daemon' && record.pid === pid && record.instanceId === pidRecord.instanceId;
+  const profile = getInstallationProfile();
   if (
     !matchesDaemon(host) &&
-    getInstallationProfile().platform === 'local' &&
-    endpoint.kind === 'tcp' &&
-    endpoint.host === '127.0.0.1' &&
-    endpoint.port === 17_792 &&
+    profile.platform === 'local' &&
     (process.env.MOLLY_E2E ?? process.env.LODY_E2E) !== '1'
   ) {
-    const legacyEndpoint = { kind: 'tcp', host: '127.0.0.1', port: 17_790 } as const;
-    const legacyHost = await inspectLocalCliHost(legacyEndpoint, 500);
-    if (matchesDaemon(legacyHost)) {
-      endpoint = legacyEndpoint;
-      host = legacyHost;
+    const baseline = getLocalCliHostEndpoint(undefined, false);
+    const candidates = [];
+    if (endpoint.kind === 'tcp') {
+      if (endpoint.port !== profile.localCliHostPort)
+        candidates.push({
+          kind: 'tcp',
+          host: '127.0.0.1',
+          port: profile.localCliHostPort,
+        } as const);
+      if (profile.channel === 'stable' && endpoint.port !== 17790)
+        candidates.push({ kind: 'tcp', host: '127.0.0.1', port: 17790 } as const);
+    } else if (baseline.kind === 'pipe' && baseline.path !== endpoint.path) {
+      candidates.push(baseline);
+    }
+    for (const candidate of candidates) {
+      const observed = await inspectLocalCliHost(candidate, 500);
+      if (matchesDaemon(observed)) {
+        endpoint = candidate;
+        host = observed;
+        break;
+      }
     }
   }
   if (!host) {

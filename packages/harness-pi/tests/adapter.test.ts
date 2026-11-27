@@ -518,6 +518,7 @@ describe('owned native Pi ACP adapter', () => {
   it('preserves real HOME and strips inherited credentials without changing the caller', () => {
     const inherited: NodeJS.ProcessEnv = {
       HOME: '/real-home',
+      MOLLY_SUPERVISOR_RUN_ID: 'synthetic-run',
       PATH: '/bin',
       OPENAI_API_KEY: 'do-not-inherit',
       PI_CODING_AGENT_DIR: '/cli-profile',
@@ -527,6 +528,7 @@ describe('owned native Pi ACP adapter', () => {
     const environment = createWorkerEnvironment(inherited, config);
     expect(environment).toMatchObject({
       HOME: '/real-home',
+      MOLLY_SUPERVISOR_RUN_ID: 'synthetic-run',
       CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY: '1',
     });
     expect(dirname(environment.PI_CODING_AGENT_DIR!)).toBe(

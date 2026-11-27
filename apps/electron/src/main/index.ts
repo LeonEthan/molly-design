@@ -13,6 +13,7 @@ import {
   startPublicBrowserAgentHost
 } from './services/public-browser-agent-host-service'
 import { startHarnessCredentialHost } from './services/harness-credential-host'
+import { getModelConnectionStore } from './services/model-connections'
 import { verifyDesignSample } from './services/design-sample-verification'
 import { registerDesignSampleScheme } from './services/design-sample-service'
 import {
@@ -228,8 +229,10 @@ if (hasSingleInstanceLock) {
         if (!ready) throw new Error('Could not save your designs before updating')
         await cliService.shutdownForQuit()
         cliStoppedForRelaunch = true
+        await getModelConnectionStore().drainOAuthForHandoff()
       },
       abortRelaunch: () => {
+        getModelConnectionStore().resumeOAuthAfterAbortedHandoff()
         if (!cliStoppedForRelaunch) return
         cliStoppedForRelaunch = false
         cliService.autoStart(getMainWindow()?.webContents)
@@ -315,7 +318,31 @@ if (hasSingleInstanceLock) {
     })
 
     let designQuitPending = false
+    let oauthDrainComplete = false
+    let oauthDrainPending = false
     app.on('before-quit', (event) => {
+      // Drain OAuth rotations before prepareDesignQuit() disposes design views
+      // and seals the design worker, so a failed drain leaves the app usable.
+      if (!oauthDrainComplete) {
+        event.preventDefault()
+        if (!oauthDrainPending) {
+          oauthDrainPending = true
+          void getModelConnectionStore()
+            .drainOAuthForHandoff()
+            .then(() => {
+              oauthDrainComplete = true
+              app.quit()
+            })
+            .catch((error) => {
+              console.error('OAuth refresh drain failed before quit', error)
+              getModelConnectionStore().resumeOAuthAfterAbortedHandoff()
+            })
+            .finally(() => {
+              oauthDrainPending = false
+            })
+        }
+        return
+      }
       if (!designShutdownComplete) {
         event.preventDefault()
         if (!designQuitPending) {
@@ -325,9 +352,16 @@ if (hasSingleInstanceLock) {
               if (ready) {
                 designShutdownComplete = true
                 app.quit()
+              } else {
+                oauthDrainComplete = false
+                getModelConnectionStore().resumeOAuthAfterAbortedHandoff()
               }
             })
-            .catch((error) => console.error('Design save failed', error))
+            .catch((error) => {
+              console.error('Design save failed', error)
+              oauthDrainComplete = false
+              getModelConnectionStore().resumeOAuthAfterAbortedHandoff()
+            })
             .finally(() => {
               designQuitPending = false
             })

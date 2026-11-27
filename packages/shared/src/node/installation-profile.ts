@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -72,6 +73,107 @@ export function getMollyDataDir(platform?: PlatformKind, homeDir: string = os.ho
   const override = (process.env.MOLLY_DATA_DIR ?? process.env.LODY_DATA_DIR)?.trim();
   if (override) return path.resolve(override);
   return path.join(homeDir, getInstallationProfile(platform).dataDirectoryName);
+}
+
+const experimentalMarker = '.molly-mygo-experimental';
+
+export function canonicalDataDirectory(directory: string): string {
+  const absolute = path.resolve(directory);
+  const tail: string[] = [];
+  let ancestor = absolute;
+  while (!fs.lstatSync(ancestor, { throwIfNoEntry: false })) {
+    if (ancestor === path.dirname(ancestor)) throw Error('missing_data_directory_volume');
+    tail.unshift(path.basename(ancestor));
+    ancestor = path.dirname(ancestor);
+  }
+  return path.join(fs.realpathSync.native(ancestor), ...tail);
+}
+
+function defaultRoots(homeDir: string): string[] {
+  return ['.molly', '.molly-preview', '.lody'].map((name) =>
+    canonicalDataDirectory(path.join(homeDir, name))
+  );
+}
+
+export function dataDirectoryScope(directory: string, homeDir = os.homedir()): string | null {
+  const canonical = canonicalDataDirectory(directory);
+  if (defaultRoots(homeDir).includes(canonical)) return null;
+  return createHash('sha256').update(canonical).digest('hex').slice(0, 16);
+}
+
+function markerStat(root: string) {
+  return fs.lstatSync(path.join(root, experimentalMarker), { throwIfNoEntry: false });
+}
+
+export function experimentalScope(directory: string): string | null {
+  if (
+    process.env.MOLLY_SUPERVISOR_TRANSPORT !== 'stdin' ||
+    (process.env.MOLLY_E2E ?? process.env.LODY_E2E) === '1' ||
+    !markerStat(directory)?.isFile()
+  )
+    return null;
+  return dataDirectoryScope(directory);
+}
+
+function containsDirectory(parent: string, child: string): boolean {
+  const info = fs.statSync(parent, { throwIfNoEntry: false, bigint: true });
+  let current = child;
+  for (;;) {
+    if (current === parent) return true;
+    const stat = fs.statSync(current, { throwIfNoEntry: false, bigint: true });
+    if (info && stat && info.ino !== 0n && stat.ino === info.ino && stat.dev === info.dev)
+      return true;
+    const next = path.dirname(current);
+    if (next === current) return false;
+    current = next;
+  }
+}
+
+export function validateStartupDataDirectory(directory = getMollyDataDir()): void {
+  const marker = markerStat(directory);
+  if (marker && process.env.MOLLY_SUPERVISOR_TRANSPORT !== 'stdin')
+    throw Error('experimental_dir_owned_by_mygo_shell');
+  if (
+    process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT !== '1' &&
+    process.env.MOLLY_SUPERVISOR_TRANSPORT !== 'stdin'
+  )
+    return;
+  const canonical = canonicalDataDirectory(directory);
+  const overlaps = defaultRoots(os.homedir()).some(
+    (root) => containsDirectory(root, canonical) || containsDirectory(canonical, root)
+  );
+  if (overlaps || !marker?.isFile() || fs.lstatSync(directory).isSymbolicLink())
+    throw Error('invalid_isolated_data_root');
+  for (const name of fs.readdirSync(directory)) resolveIsolatedDataPath(directory, name);
+}
+
+export function resolveIsolatedDataPath(root: string, ...segments: string[]): string {
+  if (process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT !== '1') return path.join(root, ...segments);
+  let current = path.resolve(root);
+  if (fs.lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink())
+    throw Error('isolated_data_path_symlink');
+  for (const segment of segments) {
+    if (path.isAbsolute(segment)) throw Error('isolated_data_path_escape');
+    for (const component of segment.split(process.platform === 'win32' ? /[\\/]/ : '/')) {
+      if (component === '..') throw Error('isolated_data_path_escape');
+      current = path.join(current, component);
+      if (fs.lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink())
+        throw Error('isolated_data_path_symlink');
+    }
+  }
+  return current;
+}
+
+export function resolveIsolatedSqlitePath(root: string, ...segments: string[]): string {
+  const database = resolveIsolatedDataPath(root, ...segments);
+  if (process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT === '1') {
+    for (const suffix of ['', '-wal', '-shm', '-journal']) {
+      const stat = fs.lstatSync(database + suffix, { throwIfNoEntry: false });
+      if (stat?.isSymbolicLink()) throw Error('isolated_data_path_symlink');
+      if (stat && (!stat.isFile() || stat.nlink !== 1)) throw Error('invalid_isolated_sqlite_file');
+    }
+  }
+  return database;
 }
 
 export const MOLLY_DATA_DIR_UNAVAILABLE_CODE = 'molly_data_dir_unavailable' as const;

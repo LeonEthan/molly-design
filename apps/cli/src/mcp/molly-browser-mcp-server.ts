@@ -1,3 +1,4 @@
+import { stdioProfileEnvironment } from './stdio-profile';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
@@ -287,6 +288,7 @@ export function buildMollyBrowserMcpServer(config: MollyBrowserMcpServerConfig =
 }
 
 export async function runMollyBrowserMcpServer(): Promise<void> {
+  stdioProfileEnvironment();
   const context = getMcpSessionContext();
   await buildMollyBrowserMcpServer({
     browserHost: await resolveBrowserHost(context),

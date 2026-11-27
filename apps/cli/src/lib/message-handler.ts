@@ -195,9 +195,9 @@ import { formatErrorMessage } from '@/utils/format-error';
 import { startTraceSpan, traceAsync } from '@/utils/trace-span';
 import { readTimeoutEnv, withTimeout } from './loro/timeout-utils';
 import {
-  copyIntoSessionFileBlobStore,
+  copyIntoSessionFileBlobStore as copySessionBlob,
   findLegacyBackfilledSessionFileBlob,
-  getSessionFileBlobPath,
+  getSessionFileBlobPath as sessionBlobPath,
   getSessionFilesRoot,
 } from '@/lib/session-file-blob-store';
 import {
@@ -210,7 +210,7 @@ import {
 } from '@/lib/session-file-attachments';
 import { deriveRepoIdFromGitHubRepo } from '@/utils/github';
 import { deriveRepoIdFromLocalProjectPath } from '@molly/shared/node/worktree-paths';
-import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+import { getMollyDataDir, resolveIsolatedDataPath } from '@molly/shared/node/installation-profile';
 import {
   type LiveActivitySummarySyncResult,
   type PermissionRequestNotificationInput,
@@ -725,6 +725,21 @@ const IMAGE_GENERATION_TERMINAL_STATUSES = new Set(['completed', 'failed']);
 
 function isImageGenerationTerminalStatus(status: string): boolean {
   return IMAGE_GENERATION_TERMINAL_STATUSES.has(status.trim().toLowerCase());
+}
+
+function assertManagedPath(file: string): string {
+  if (process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT !== '1') return file;
+  const root = getMollyDataDir();
+  return resolveIsolatedDataPath(root, path.relative(root, file));
+}
+
+function getSessionFileBlobPath(args: Parameters<typeof sessionBlobPath>[0]) {
+  return assertManagedPath(sessionBlobPath(args));
+}
+
+function copyIntoSessionFileBlobStore(args: Parameters<typeof copySessionBlob>[0]) {
+  if (process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT === '1') getSessionFileBlobPath(args);
+  return copySessionBlob(args);
 }
 
 /**
@@ -6449,7 +6464,7 @@ export class MessageHandler {
           }
           const hash = crypto.createHash('sha256');
           let size = 0;
-          for await (const chunk of fs.createReadStream(absolutePath)) {
+          for await (const chunk of fs.createReadStream(assertManagedPath(absolutePath))) {
             size += (chunk as Buffer).length;
             hash.update(chunk as Buffer);
           }

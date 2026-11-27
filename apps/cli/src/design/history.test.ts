@@ -401,3 +401,19 @@ test('a background-only baseline is not treated as a blank canvas', async () => 
     kind: 'before-agent',
   });
 });
+
+test.each(['.git', 'commondir', 'objects/info/alternates', 'objects/info/http-alternates'])(
+  'history-list rejects %s before Git access',
+  async (forbidden) => {
+    const { root, sessionId, initial } = await fixture();
+    await designHistoryOperation(root, {
+      operation: 'history-create',
+      sessionId,
+      baseRevisionId: initial.revisionId,
+    });
+    await writeFile(path.join(root, 'chats', sessionId, 'history.git', forbidden), 'synthetic');
+    await expect(
+      designHistoryOperation(root, { operation: 'history-list', sessionId })
+    ).rejects.toThrow('redirected');
+  }
+);

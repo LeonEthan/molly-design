@@ -99,18 +99,11 @@ describe('machine ID', () => {
     const dataDir = useTemporaryDataDir();
     const machineIdPath = path.join(dataDir, 'machine-id');
     const concurrentMachineId = 'concurrent-machine-id';
-    const writeFileSync = fs.writeFileSync.bind(fs);
-    const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => {
-      writeFileSync(machineIdPath, concurrentMachineId, 'utf-8');
-      throw new Error('already exists');
+    vi.spyOn(fs, 'linkSync').mockImplementationOnce(() => {
+      fs.writeFileSync(machineIdPath, concurrentMachineId);
+      throw Object.assign(Error('already exists'), { code: 'EEXIST' });
     });
-
     expect(getSystemMachineId()).toBe(concurrentMachineId);
-    expect(writeSpy).toHaveBeenCalledWith(
-      machineIdPath,
-      expect.any(String),
-      expect.objectContaining({ flag: 'wx' })
-    );
     expect(fs.readFileSync(machineIdPath, 'utf-8')).toBe(concurrentMachineId);
   });
 
@@ -147,4 +140,48 @@ describe('machine ID', () => {
     await expect(getSystemMachineIdAsync()).resolves.toBe(first);
     await expect(getOrCreateStableMachineIdAsync()).resolves.toBe(first);
   });
+});
+
+it.each(['legacy-prefix', 'legacy-complete'])(
+  'recovers pending publication of %s under the init lock',
+  (raw) => {
+    const root = useTemporaryDataDir();
+    const target = path.join(root, 'machine-id');
+    fs.writeFileSync(target, raw);
+    fs.writeFileSync(target + '.wx-pending', JSON.stringify({ expectedValue: 'legacy-complete' }));
+    expect(getSystemMachineId()).toBe('legacy-complete');
+    expect(fs.readFileSync(target, 'utf8')).toBe('legacy-complete');
+    expect(fs.readdirSync(root)).toEqual(['machine-id']);
+  }
+);
+
+it('rolls back an exclusive-create short write followed by ENOSPC', () => {
+  const root = useTemporaryDataDir();
+  const target = path.join(root, 'machine-id');
+  vi.spyOn(fs, 'linkSync').mockImplementation(() => {
+    throw Object.assign(Error(), { code: 'EXDEV' });
+  });
+  const open = fs.openSync.bind(fs);
+  let targetFd: number | undefined;
+  vi.spyOn(fs, 'openSync').mockImplementation((file, flags, mode) => {
+    const fd = open(file, flags, mode);
+    if (file === target && flags === 'wx') targetFd = fd;
+    return fd;
+  });
+  const write = fs.writeSync.bind(fs);
+  let shortened = false;
+  vi.spyOn(fs, 'writeSync').mockImplementation(((
+    fd: number,
+    bytes: Buffer,
+    offset: number,
+    length: number
+  ) => {
+    if (fd !== targetFd) return write(fd, bytes, offset, length);
+    if (shortened) throw Object.assign(Error(), { code: 'ENOSPC' });
+    shortened = true;
+    return write(fd, bytes, offset, 1);
+  }) as typeof fs.writeSync);
+  expect(getSystemMachineId()).toBeNull();
+  expect(shortened).toBe(true);
+  expect(fs.readdirSync(root)).toEqual([]);
 });

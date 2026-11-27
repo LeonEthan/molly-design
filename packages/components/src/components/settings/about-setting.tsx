@@ -1,10 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAtom } from 'jotai';
 import { Loader2, AlertCircle, Download, ExternalLink } from 'lucide-react';
 import type { UpdaterCheckPresentation } from '@/lib/updater-check-presentation';
 import {
   readUpdaterCheckPresentation,
+  shouldClearInstallingFlag,
   UPDATE_CHECK_UNANSWERED,
 } from '@/lib/updater-check-presentation';
 import { Button } from '@/ui/button';
@@ -77,8 +78,17 @@ export function AboutSettingsComponent() {
   const { t, i18n } = useTranslation();
   const updaterState = useElectronUpdaterState();
   const [isInstalling, setIsInstalling] = useState(false);
+  const installBaselineRef = useRef(updaterState);
   const [developerModeEnabled, setDeveloperModeEnabled] = useAtom(developerModeEnabledAtom);
   const [developerModeRevealed, setDeveloperModeRevealed] = useState(false);
+
+  useEffect(() => {
+    if (!isInstalling) return;
+    if (shouldClearInstallingFlag(updaterState, installBaselineRef.current)) {
+      installBaselineRef.current = null;
+      setIsInstalling(false);
+    }
+  }, [isInstalling, updaterState]);
 
   const handleOpenDownloadPage = useCallback(() => {
     const url = getMollyDocumentationUrl(i18n.resolvedLanguage);
@@ -97,12 +107,19 @@ export function AboutSettingsComponent() {
 
   const handleQuitAndInstall = useCallback(async () => {
     if (!getIpcServices()) return;
+    installBaselineRef.current = updaterState;
     setIsInstalling(true);
-    const result = await getIpcServices()!.updater.quitAndInstall();
-    if (!result.ok) {
+    try {
+      const result = await getIpcServices()!.updater.quitAndInstall();
+      if (!result.ok) {
+        installBaselineRef.current = null;
+        setIsInstalling(false);
+      }
+    } catch {
+      installBaselineRef.current = null;
       setIsInstalling(false);
     }
-  }, []);
+  }, [updaterState]);
 
   const presentation = readUpdaterCheckPresentation(updaterState);
   const showDeveloperModeSwitch = developerModeEnabled || developerModeRevealed;

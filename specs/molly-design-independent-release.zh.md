@@ -20,6 +20,10 @@ Preview 的身份写入应用包，启动不依赖终端配置；后台子进程
 未公证的本地应用不替代最终 DMG、Gatekeeper 和正式升级验收；缺少稳定签名时明确保留浏览器账号导入限制。
 此补充不改变正式版的数据身份、分发支持范围或本规格的 draft 状态。
 
+## 实验性 MyGo 桌面壳并行期（2026-11-24）
+
+Stage 2 新增与 Electron 并存的实验性纯 Go/MyGo 桌面壳（`cmd/molly-desktop/`，独立 Bundle ID `dev.molly-design.mygo-experimental`，打包脚本 `scripts/package-mygo-desktop.mjs`），挂载既有构建产出的 React 渲染层与 Bento 资源；正式发布仍以 Electron macOS arm64 为唯一生产分发路径，直到 G1（正式 Developer ID 签名及 Keychain ACL 实测）、G2–G5 门禁全部闭合。凭证迁移遵循 `MV2\x01` 隔离重封且保留 `.enc.bak`，检测到 `.enc` 变更时拒绝读取过期 v2。本节保持 `draft`。
+
 ## 2026-09-17 命名统一修订提案（待审核）
 
 目标拼写已确认为 `Molly` / `molly`。已实施的命名统一决定建议将当前产品展示名收敛为 Molly，并将自有包、代码标识、环境变量及新写入格式/路径统一为 molly 命名。若采用本修订，下文“内部名称逐项裁定”按该提案细化，“不全面重命名内部包”的排除项调整为：自有内部包纳入，外部协议和来源不纳入。

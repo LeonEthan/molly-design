@@ -1,7 +1,10 @@
+import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import {
   registerLocalSupervisorControl,
+  receiveSupervisorIdentity,
+  readPrivateHello,
   resolveLocalSupervisorIdentity,
   scrubLocalSupervisorCapabilityEnv,
   toRuntimeSupervisorIdentity,
@@ -163,4 +166,60 @@ describe('local supervisor control', () => {
 
     expect(shutdown).toHaveBeenCalledOnce();
   });
+});
+
+it('hands framed stdin shutdown over to the active callback without another hello', async () => {
+  const input = new PassThrough();
+  vi.stubEnv('MOLLY_SUPERVISOR_TRANSPORT', 'stdin');
+  try {
+    const hello = {
+      type: 'lody/supervisor-hello',
+      supervisorInstanceId: 'instance',
+      supervisorPid: process.pid,
+      token: 'a'.repeat(64),
+      coordinatorToken: 'b'.repeat(64),
+    };
+    const pending = receiveSupervisorIdentity(input);
+    const encoded = JSON.stringify(hello);
+    input.write(encoded.slice(0, 14));
+    input.write(encoded.slice(14) + '\n');
+    const resolved = await pending;
+    if (resolved.status !== 'supervised') throw Error('missing identity');
+    const events: string[] = [];
+    const options = { identity: resolved.identity, logger: { info: vi.fn() } as never };
+    const release = registerLocalSupervisorControl({
+      ...options,
+      shutdown: () => events.push('startup'),
+    });
+    const dispose = registerLocalSupervisorControl({
+      ...options,
+      shutdown: () => events.push('active'),
+    });
+    release();
+    input.write(
+      JSON.stringify({
+        type: 'lody/supervisor-shutdown',
+        instanceId: 'instance',
+        token: hello.token,
+      }) + '\n'
+    );
+    expect(events).toEqual(['active']);
+    dispose();
+  } finally {
+    input.destroy();
+    vi.unstubAllEnvs();
+  }
+});
+
+it('rejects an incomplete hello at five seconds', async () => {
+  vi.useFakeTimers();
+  const input = new PassThrough();
+  try {
+    const result = expect(readPrivateHello(input)).rejects.toThrow('private_handshake_failed');
+    await vi.advanceTimersByTimeAsync(5000);
+    await result;
+  } finally {
+    input.destroy();
+    vi.useRealTimers();
+  }
 });

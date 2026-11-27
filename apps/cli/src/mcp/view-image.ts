@@ -3,6 +3,12 @@ import path from 'node:path';
 import os from 'node:os';
 import sharp from 'sharp';
 import { z } from 'zod';
+import {
+  CoreIpcRpcError,
+  callMollyCoreIpc,
+  getMollyCoreIpcSocketPath,
+  isMollyCorePreConnectError,
+} from '@/mcp/molly-core-ipc';
 
 const RegionSchema = z
   .object({
@@ -352,10 +358,49 @@ async function fontRows(input: z.infer<typeof ViewImageInputSchema>, scope: Desi
   };
 }
 
+type CoreViewImageResult = {
+  mimeType: 'image/jpeg';
+  data: string;
+  metadata: Record<string, unknown>;
+};
+
+function isSvgPath(target: string | undefined): boolean {
+  return typeof target === 'string' && /\.svg$/iu.test(target.trim());
+}
+
+function isUnsupportedCoreImageFormatError(error: unknown): boolean {
+  return error instanceof CoreIpcRpcError && error.code === 'unsupported_image_format';
+}
+
 export async function viewImage(
   input: z.infer<typeof ViewImageInputSchema>,
   scope: DesignImageViewScope
 ) {
+  const coreSocket = getMollyCoreIpcSocketPath();
+  const requestsSvg =
+    isSvgPath(input.path) || (input.paths?.some((item) => isSvgPath(item)) ?? false);
+  if (coreSocket && !requestsSvg) {
+    try {
+      const result = await callMollyCoreIpc<CoreViewImageResult>(coreSocket, 'view_image.inspect', {
+        scope,
+        ...(input.path === undefined ? {} : { path: input.path }),
+        ...(input.paths === undefined ? {} : { paths: input.paths }),
+        ...(input.region === undefined ? {} : { region: input.region }),
+        ...(input.fonts === undefined ? {} : { fonts: input.fonts }),
+        ...(input.text === undefined ? {} : { text: input.text }),
+      });
+      return {
+        content: [
+          { type: 'text' as const, text: JSON.stringify(result.metadata) },
+          { type: 'image' as const, data: result.data, mimeType: result.mimeType },
+        ],
+      };
+    } catch (error) {
+      if (!isMollyCorePreConnectError(error) && !isUnsupportedCoreImageFormatError(error)) {
+        throw error;
+      }
+    }
+  }
   if (input.fonts !== undefined) return fontRows(input, scope);
   if (input.path !== undefined) {
     const image = await readImage(input.path, scope);

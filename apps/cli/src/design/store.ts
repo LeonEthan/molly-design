@@ -32,80 +32,23 @@
  * including embedded assets. There are no candidate approval or deletion APIs.
  */
 
-import { staticV1UnregisteredFontFamilies } from '../../../../packages/design-bento/vendor/packages/contracts/src/static-v1';
-import { createVisualDocumentKernel } from '../../../../packages/design-bento/vendor/packages/kernel/src/kernel';
-import type {
-  BentoDocV4,
-  VisualCommandV4,
-} from '../../../../packages/design-bento/vendor/packages/contracts/src/index';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, rename, unlink, lstat, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { resolveIsolatedDataPath } from '@molly/shared/node/installation-profile';
 import { z } from 'zod';
-import {
-  assertRenderableLines,
-  describeAssetAdmissionFailure,
-  inspectAssetAdmission,
-} from '@molly/design-authoring';
-import { withDesignLock, type DesignLockTiming } from './lock';
+import { designAssociation, designId, designInput, designSize, validateAssets } from './content';
+export {
+  acceptsDesignContent,
+  designAssociation,
+  designId,
+  designInput,
+  designSize,
+} from './content';
+import { DESIGN_LOCK_FILENAME, withDesignLock, type DesignLockTiming } from './lock';
 import { ensureCurrentProjection } from './current-projection';
 
-export const designId = z.string().uuid();
-export const designSize = z.number().int().min(1).max(4096);
-const bounds = z.tuple([
-  z.number().finite(),
-  z.number().finite(),
-  z.number().positive(),
-  z.number().positive(),
-]);
-const documentSchema = z
-  .object({
-    schemaVersion: z.literal(4),
-    canvas: z.object({ width: designSize, height: designSize }).strict(),
-    diagnostics: z.array(z.unknown()).max(1000).default([]),
-    background: z.record(z.string(), z.unknown()),
-    fonts: z
-      .array(
-        z
-          .object({ family: z.string().min(1), src: z.string().regex(/^asset:[a-f0-9]{64}$/) })
-          .passthrough()
-      )
-      .max(100)
-      .optional(),
-    elements: z
-      .array(
-        z
-          .object({
-            id: z.string().min(1).max(200),
-            kind: z.enum(['text', 'shape', 'line', 'image', 'icon', 'table', 'chart']),
-            bounds,
-            zIndex: z.number().int().nonnegative(),
-          })
-          .passthrough()
-      )
-      .max(2000),
-  })
-  .strict();
-export const designInput = z
-  .object({
-    doc: z
-      .union([z.string().max(32 * 1024 * 1024), documentSchema])
-      .transform((value) =>
-        documentSchema.parse(typeof value === 'string' ? JSON.parse(value) : value)
-      ),
-    assets: z.record(z.string().regex(/^[a-f0-9]{64}$/), z.string().max(32 * 1024 * 1024)),
-  })
-  .strict();
-export const designAssociation = z
-  .object({
-    sessionId: designId,
-    name: z.string().trim().min(1).max(200),
-    userId: z.string().min(1).max(200),
-    machineId: z.string().min(1).max(200),
-    createdAt: z.string().datetime(),
-  })
-  .strict();
 const editingContext = z
   .object({
     baseVersionId: z.string().regex(/^[a-f0-9]{40}$/),
@@ -126,7 +69,9 @@ export const designRequest = z.discriminatedUnion('operation', [
       copy: designInput.optional(),
     })
     .strict(),
-  z.object({ operation: z.literal('read'), sessionId: designId }).strict(),
+  z
+    .object({ operation: z.literal('read'), sessionId: designId, readOnly: z.boolean().optional() })
+    .strict(),
   z
     .object({
       operation: z.literal('save'),
@@ -220,7 +165,7 @@ async function readCandidateFile(file: string): Promise<DesignCandidate | null> 
 }
 
 async function designChatDirectory(dataRoot: string, artworkId: string): Promise<string> {
-  const directory = path.join(dataRoot, 'chats', artworkId);
+  const directory = resolveIsolatedDataPath(dataRoot, 'chats', artworkId);
   await mkdir(directory, { recursive: true });
   if ((await lstat(directory)).isSymbolicLink())
     throw Error('Design workspace cannot be a symlink');
@@ -228,7 +173,7 @@ async function designChatDirectory(dataRoot: string, artworkId: string): Promise
 }
 
 async function candidatesDirectory(dataRoot: string, artworkId: string): Promise<string> {
-  const directory = path.join(
+  const directory = resolveIsolatedDataPath(
     await designChatDirectory(dataRoot, artworkId),
     DESIGN_CANDIDATES_DIRNAME
   );
@@ -249,7 +194,10 @@ export async function readDesignCandidate(
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .parse(candidateId);
-  const file = path.join(await candidatesDirectory(dataRoot, id), `${candidate}.json`);
+  const file = resolveIsolatedDataPath(
+    await candidatesDirectory(dataRoot, id),
+    `${candidate}.json`
+  );
   const parsed = await readCandidateFile(file);
   if (!parsed) throw Error('Design candidate not found');
   if (parsed.artworkId !== id || parsed.candidateId !== candidate)
@@ -257,94 +205,53 @@ export async function readDesignCandidate(
   return { candidate: parsed, file };
 }
 
-/**
- * Whether the store could write this document and its assets.
- *
- * The rules are the ones a write applies (`designInput` plus `validateAssets`:
- * schema, kernel replay, asset integrity), so the answer is exactly "a save of
- * this content would be accepted". The intake is the fail-closed gate for a
- * *project* and the two do not cover the same vocabulary — the store bounds an
- * element id the intake leaves free — which is why a caller deciding whether a
- * document is usable has to ask this one too.
- */
-export function acceptsDesignContent(raw: unknown): boolean {
-  try {
-    validateAssets(designInput.parse(raw));
-    return true;
-  } catch {
-    return false;
+export class DesignProjectionPendingError extends Error {
+  readonly code = 'DESIGN_PROJECTION_PENDING';
+  constructor(
+    readonly revisionId: string,
+    cause: unknown
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
   }
 }
 
-function validateAssets(content: z.output<typeof designInput>) {
-  if (new Set(content.doc.elements.map((e) => e.id)).size !== content.doc.elements.length)
-    throw Error('Duplicate element IDs');
-  const kernel = createVisualDocumentKernel({
-    schemaVersion: 4,
-    canvas: content.doc.canvas,
-    background: { type: 'solid', color: '#ffffff' },
-    diagnostics: [],
-    elements: [],
-  });
-  const commands: VisualCommandV4[] = [
-    {
-      type: 'setBackground',
-      background: content.doc.background as unknown as BentoDocV4['background'],
-    },
-    ...(content.doc.fonts ?? []).map((font) => ({
-      type: 'addFontRegistration' as const,
-      font: font as unknown as NonNullable<BentoDocV4['fonts']>[number],
-    })),
-    ...content.doc.elements.map((element) => ({
-      type: 'createElement' as const,
-      element: element as unknown as BentoDocV4['elements'][number],
-    })),
-  ];
-  const checked = kernel.apply({
-    batchId: 'validate',
-    actor: 'design-service',
-    baseRevision: 0,
-    commands,
-  });
-  if (!checked.ok) throw Error(checked.error.message);
-  assertRenderableLines(content.doc.elements);
-  const missingFonts = staticV1UnregisteredFontFamilies(
-    content.doc.elements,
-    (content.doc.fonts ?? []).map((font) => font.family)
-  );
-  if (missingFonts.length) throw Error('Register required fonts: ' + missingFonts.join(', '));
-  const required = new Set<string>();
-  const walk = (value: unknown, depth = 0): void => {
-    if (depth > 40) throw Error('Document nesting exceeds limit');
-    if (typeof value === 'string' && value.startsWith('asset:')) required.add(value.slice(6));
-    if (Array.isArray(value)) value.forEach((v) => walk(v, depth + 1));
-    else if (value && typeof value === 'object')
-      for (const [key, v] of Object.entries(value)) {
-        if (
-          ['src', 'href', 'url'].includes(key) &&
-          typeof v === 'string' &&
-          !/^asset:[a-f0-9]{64}$/.test(v)
-        )
-          throw Error('External document resources are unsupported');
-        walk(v, depth + 1);
-      }
-  };
-  walk(content.doc);
-  const assets: Record<string, string> = {};
-  for (const key of required) {
-    const uri = content.assets[key];
-    const match = uri?.match(
-      /^data:(image\/(?:png|jpeg|gif)|font\/(?:ttf|otf|woff|woff2));base64,([A-Za-z0-9+/]+={0,2})$/
-    );
-    if (!match?.[2]) throw Error('Missing or unsupported asset: ' + key);
-    const bytes = Buffer.from(match[2], 'base64');
-    const admission = inspectAssetAdmission(bytes, `asset:${key}`);
-    if (!admission.ok) throw Error(describeAssetAdmissionFailure(admission.failure));
-    if (admission.mime !== match[1]) throw Error('Asset MIME does not match its bytes');
-    if (digest(bytes) !== key) throw Error('Asset checksum mismatch: ' + key);
-    assets[key] = uri as string;
+async function publishSavedProjection(
+  directory: string,
+  payload: DesignPayload,
+  assertHeld: () => Promise<void>
+) {
+  try {
+    await ensureCurrentProjection(directory, payload, assertHeld);
+  } catch (cause) {
+    throw new DesignProjectionPendingError(payload.revisionId, cause);
   }
-  return assets;
+}
+
+function withArtworkLock<T>(
+  directory: string,
+  timing: DesignLockTiming,
+  work: (assertHeld: () => Promise<void>) => Promise<T>
+) {
+  resolveIsolatedDataPath(directory, DESIGN_LOCK_FILENAME);
+  return withDesignLock(directory, timing, work);
+}
+
+async function readCanonical(directory: string, id: string): Promise<DesignPayload> {
+  const current = resolveIsolatedDataPath(directory, 'design.json');
+
+  const file = await open(current, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile() || stat.size > 64 * 1024 * 1024) throw Error('Invalid design file');
+    const bytes = await file.readFile();
+    if (Buffer.byteLength(bytes, 'utf8') > 64 * 1024 * 1024) throw Error('Invalid design file');
+    const saved = savedSchema.parse(JSON.parse(bytes.toString('utf8')));
+    if (saved.association.sessionId !== id) throw Error('Design association mismatch');
+    validateAssets(saved);
+    return { ...saved, revisionId: digest(bytes) };
+  } finally {
+    await file.close();
+  }
 }
 
 export interface DesignOperationOptions {
@@ -370,35 +277,21 @@ export async function designOperation(
 ): Promise<DesignPayload> {
   const request = designRequest.parse(raw);
   const id = request.operation === 'create' ? request.association.sessionId : request.sessionId;
-  const directory = path.join(dataRoot, 'chats', id);
+  const directory = resolveIsolatedDataPath(dataRoot, 'chats', id);
   if (request.operation !== 'read') await mkdir(directory, { recursive: true });
   if ((await lstat(directory)).isSymbolicLink())
     throw Error('Design workspace cannot be a symlink');
-  const current = path.join(directory, 'design.json');
-  const read = async (): Promise<DesignPayload> => {
-    const file = await open(current, constants.O_RDONLY | constants.O_NOFOLLOW);
-    try {
-      const stat = await file.stat();
-      if (!stat.isFile() || stat.size > 64 * 1024 * 1024) throw Error('Invalid design file');
-      const bytes = await file.readFile();
-      const saved = savedSchema.parse(JSON.parse(bytes.toString('utf8')));
-      if (saved.association.sessionId !== id) throw Error('Design association mismatch');
-      validateAssets(saved);
-      return { ...saved, revisionId: digest(bytes) };
-    } finally {
-      await file.close();
-    }
-  };
+  const current = resolveIsolatedDataPath(directory, 'design.json');
   if (request.operation === 'read') {
-    const payload = await read();
+    const payload = await readCanonical(directory, id);
     try {
       await ensureCurrentProjection(directory, payload, async () => {}, true);
       return payload;
     } catch (error) {
-      if (options?.projection === 'verify') throw error;
+      if (request.readOnly || options?.projection === 'verify') throw error;
     }
-    return withDesignLock(directory, options?.lock ?? {}, async (assertHeld) => {
-      const latest = await read();
+    return withArtworkLock(directory, options?.lock ?? {}, async (assertHeld) => {
+      const latest = await readCanonical(directory, id);
       await ensureCurrentProjection(directory, latest, assertHeld);
       return latest;
     });
@@ -407,17 +300,17 @@ export async function designOperation(
   // Everything from here writes, and the baseline this write is checked against
   // is read inside the lock: a caller cannot compare a revision it read before
   // another writer landed.
-  return await withDesignLock(directory, options?.lock ?? {}, async (assertHeld) => {
+  return await withArtworkLock(directory, options?.lock ?? {}, async (assertHeld) => {
     let previous: DesignPayload | undefined;
     try {
-      previous = await read();
+      previous = await readCanonical(directory, id);
     } catch (error) {
       if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
     }
     if (request.operation === 'create' && previous) {
       if (JSON.stringify(previous.association) !== JSON.stringify(request.association))
         throw Error('Design already exists');
-      await ensureCurrentProjection(directory, previous, assertHeld);
+      await publishSavedProjection(directory, previous, assertHeld);
       return previous;
     }
     const content =
@@ -445,19 +338,19 @@ export async function designOperation(
           : { ...previous?.association, ...(request.name ? { name: request.name } : {}) },
     });
     const bytes = JSON.stringify(saved);
-    if (bytes.length > 64 * 1024 * 1024) throw Error('Design exceeds 64 MiB');
+    if (Buffer.byteLength(bytes, 'utf8') > 64 * 1024 * 1024) throw Error('Design exceeds 64 MiB');
     if (request.operation === 'save' && previous?.revisionId !== request.baseRevisionId) {
       // Lost acknowledgement is safely retryable when the requested bytes already landed.
       if (previous?.revisionId === digest(bytes)) {
-        await ensureCurrentProjection(directory, previous, assertHeld);
+        await publishSavedProjection(directory, previous, assertHeld);
         return previous;
       }
       throw Error('DESIGN_CONFLICT');
     }
     if (request.operation === 'create') {
-      const pending = path.join(dataRoot, 'design-pending');
+      const pending = resolveIsolatedDataPath(dataRoot, 'design-pending');
       await mkdir(pending, { recursive: true });
-      const marker = await open(path.join(pending, id), 'a', 0o600);
+      const marker = await open(resolveIsolatedDataPath(pending, id), 'a', 0o600);
       try {
         await marker.sync();
       } finally {
@@ -479,14 +372,14 @@ export async function designOperation(
     await assertHeld();
     await publishBytesAtomic(directory, current, bytes);
     const payload = { ...saved, revisionId: digest(bytes) };
-    await ensureCurrentProjection(directory, payload, assertHeld);
+    await publishSavedProjection(directory, payload, assertHeld);
     return payload;
   });
 }
 
 /** Only unfinished associations are repaired; acknowledged/deleted sessions are never rediscovered. */
 export async function pendingDesigns(dataRoot: string): Promise<DesignPayload[]> {
-  const directory = path.join(dataRoot, 'design-pending');
+  const directory = resolveIsolatedDataPath(dataRoot, 'design-pending');
   await mkdir(directory, { recursive: true });
   const results: DesignPayload[] = [];
   for (const id of await readdir(directory)) {
@@ -499,8 +392,105 @@ export async function pendingDesigns(dataRoot: string): Promise<DesignPayload[]>
   }
   return results;
 }
-export async function acknowledgeDesign(dataRoot: string, raw: unknown): Promise<void> {
-  await unlink(path.join(dataRoot, 'design-pending', designId.parse(raw))).catch((error) => {
-    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+function isMissing(error: unknown) {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+export const pendingOptions = z.object({
+  readOnly: z.boolean().optional(),
+  cursor: designId.optional(),
+  limit: z.number().int().positive().default(100),
+});
+
+export async function pendingDesignAssociations(
+  dataRoot: string,
+  options: z.input<typeof pendingOptions> = {}
+) {
+  const { cursor, limit, readOnly } = pendingOptions.parse(options);
+  const pending = resolveIsolatedDataPath(dataRoot, 'design-pending');
+  if (!readOnly) await mkdir(pending, { recursive: true });
+  const names = await readdir(pending).catch((error) => {
+    if (isMissing(error)) return [];
+    throw error;
+  });
+  const ids = names
+    .filter((id) => designId.safeParse(id).success && (!cursor || id > cursor))
+    .sort();
+  const items: (Pick<DesignPayload, 'association' | 'revisionId'> & {
+    sessionId: string;
+    projectionStale: boolean;
+  })[] = [];
+  for (const sessionId of ids.slice(0, limit)) {
+    const directory = resolveIsolatedDataPath(dataRoot, 'chats', sessionId);
+    const payload = await readExistingCanonical(directory, sessionId);
+    if (!payload) continue;
+    let projectionStale = false;
+    try {
+      await ensureCurrentProjection(directory, payload, async () => {}, true);
+    } catch {
+      projectionStale = true;
+    }
+    items.push({
+      sessionId,
+      association: payload.association,
+      revisionId: payload.revisionId,
+      projectionStale,
+    });
+  }
+  return { items, nextCursor: ids.length > limit ? ids[limit - 1] : null };
+}
+
+async function hasCanonical(directory: string) {
+  try {
+    if ((await lstat(directory)).isSymbolicLink())
+      throw Error('Design workspace cannot be a symlink');
+    await lstat(resolveIsolatedDataPath(directory, 'design.json'));
+    return true;
+  } catch (error) {
+    if (isMissing(error)) return false;
+    throw error;
+  }
+}
+
+async function readExistingCanonical(directory: string, id: string) {
+  if (!(await hasCanonical(directory))) return undefined;
+  try {
+    return await readCanonical(directory, id);
+  } catch (error) {
+    if (!isMissing(error)) throw error;
+    return undefined;
+  }
+}
+
+export async function repairDesignProjection(dataRoot: string, raw: unknown) {
+  const sessionId = designId.parse(raw);
+  const directory = resolveIsolatedDataPath(dataRoot, 'chats', sessionId);
+  if (!(await hasCanonical(directory))) return { sessionId, missing: true };
+  return withArtworkLock(directory, {}, async (assertHeld) => {
+    const latest = await readExistingCanonical(directory, sessionId);
+    if (!latest) return { sessionId, missing: true };
+    await ensureCurrentProjection(directory, latest, assertHeld);
+    return { sessionId, revisionId: latest.revisionId };
+  });
+}
+
+export async function acknowledgeDesign(
+  dataRoot: string,
+  raw: unknown,
+  options: { verifyProjection?: boolean } = {}
+): Promise<void> {
+  const id = designId.parse(raw);
+  const clear = () =>
+    unlink(resolveIsolatedDataPath(dataRoot, 'design-pending', id)).catch((error) => {
+      if (!isMissing(error)) throw error;
+    });
+  if (!options.verifyProjection) return clear();
+  const directory = resolveIsolatedDataPath(dataRoot, 'chats', id);
+  if (!(await hasCanonical(directory))) return clear();
+  await withArtworkLock(directory, {}, async (assertHeld) => {
+    const latest = await readExistingCanonical(directory, id);
+    if (latest) await ensureCurrentProjection(directory, latest, assertHeld);
+    await assertHeld();
+    await clear();
   });
 }

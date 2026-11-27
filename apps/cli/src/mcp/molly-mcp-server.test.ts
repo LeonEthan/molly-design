@@ -1,3 +1,5 @@
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -18,6 +20,7 @@ import {
 import {
   __mollyMcpServerInternals,
   buildMollyMcpServer,
+  runMollyMcpServer,
   runWithMcpSessionContext,
 } from './molly-mcp-server';
 
@@ -931,3 +934,35 @@ describe('session MCP input schemas', () => {
     );
   });
 });
+
+it.each([
+  [undefined, undefined, undefined, 'owned-run'],
+  [undefined, undefined, undefined, undefined, 'flag'],
+  [undefined, '0', undefined],
+  ['experimental', undefined, undefined],
+  ['experimental', '1', undefined],
+  [undefined, '1', 'relative'],
+  [undefined, '1', 'production'],
+])(
+  'rejects invalid stdio binding before touching HOME (%s %s %s)',
+  async (profile, strict, dir, supervisor, argument) => {
+    const home = mkdtempSync(path.join(tmpdir(), 'mcp-home-'));
+    try {
+      if (argument)
+        vi.spyOn(process, 'execArgv', 'get').mockReturnValue([
+          '--conditions=molly-strict-isolated-profile',
+        ]);
+      vi.stubEnv('MOLLY_SUPERVISOR_RUN_ID', supervisor);
+      vi.stubEnv('HOME', home);
+      vi.stubEnv('MOLLY_PROFILE', profile);
+      vi.stubEnv('MOLLY_ISOLATED_DATA_ROOT_STRICT', strict);
+      vi.stubEnv('MOLLY_DATA_DIR', dir === 'production' ? path.join(home, '.molly') : dir);
+      await expect(runMollyMcpServer()).rejects.toThrow('invalid_isolated_data_root');
+      expect(readdirSync(home)).toEqual([]);
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllEnvs();
+      rmSync(home, { recursive: true, force: true });
+    }
+  }
+);

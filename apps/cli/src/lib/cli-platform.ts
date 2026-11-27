@@ -10,8 +10,8 @@ import {
   type PlatformKind,
 } from '@molly/platform';
 import { getServerNow } from '@molly/shared';
-import { getMollyDataDir } from '@molly/shared/node/installation-profile';
-import { loadEnv } from '@/utils/const';
+import { getMollyDataDir, resolveIsolatedDataPath } from '@molly/shared/node/installation-profile';
+import { loadEnv, publishIdentity } from '@/utils/const';
 import type { Logger } from '@/utils/logger';
 import type { LocalWorkspaceCatalogService } from '@/lib/local-workspace-catalog';
 
@@ -61,7 +61,7 @@ export type LocalCliIdentity = {
 };
 
 export function getLocalIdentityPath(): string {
-  return path.join(getMollyDataDir('local'), LOCAL_IDENTITY_FILE);
+  return resolveIsolatedDataPath(getMollyDataDir('local'), LOCAL_IDENTITY_FILE);
 }
 
 /**
@@ -75,28 +75,31 @@ export async function loadOrCreateLocalIdentity(
   options: { filePath?: string } = {}
 ): Promise<LocalCliIdentity> {
   const identityPath = options.filePath ?? getLocalIdentityPath();
-  try {
-    const raw = await fs.readFile(identityPath, 'utf-8');
-    const parsed = JSON.parse(raw) as Partial<LocalCliIdentity>;
-    if (
-      typeof parsed.userId === 'string' &&
-      parsed.userId.startsWith(LOCAL_USER_ID_PREFIX) &&
-      typeof parsed.createdAt === 'string'
-    ) {
-      return { userId: parsed.userId, createdAt: parsed.createdAt };
+  const raw = publishIdentity(
+    identityPath,
+    (text) => {
+      try {
+        const parsed = JSON.parse(text);
+        return (
+          typeof parsed?.userId === 'string' &&
+          parsed.userId.startsWith(LOCAL_USER_ID_PREFIX) &&
+          typeof parsed.createdAt === 'string'
+        );
+      } catch {
+        return false;
+      }
+    },
+    () => {
+      const userId = LOCAL_USER_ID_PREFIX + crypto.randomUUID().replaceAll('-', '');
+      logger.info(`[platform] Initializing local identity ${userId}`);
+      return (
+        JSON.stringify({ userId, createdAt: new Date(getServerNow()).toISOString() }, null, 2) +
+        '\n'
+      );
     }
-    logger.warn('[platform] Local identity file is malformed; regenerating');
-  } catch {
-    // Missing file: first run.
-  }
-  const identity: LocalCliIdentity = {
-    userId: `${LOCAL_USER_ID_PREFIX}${crypto.randomUUID().replaceAll('-', '')}`,
-    createdAt: new Date(getServerNow()).toISOString(),
-  };
-  await fs.mkdir(path.dirname(identityPath), { recursive: true, mode: 0o700 });
-  await fs.writeFile(identityPath, `${JSON.stringify(identity, null, 2)}\n`, { mode: 0o600 });
-  logger.info(`[platform] Created local identity ${identity.userId}`);
-  return identity;
+  );
+  const { userId, createdAt } = JSON.parse(raw) as LocalCliIdentity;
+  return { userId, createdAt };
 }
 
 export const LOCAL_WORKSPACE_NAME = 'Molly';

@@ -1,3 +1,5 @@
+import { getSupervisorHello } from './local-supervisor-control';
+import { experimentalScope, getMollyDataDir } from '@molly/shared/node/installation-profile';
 import fs from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
@@ -65,6 +67,26 @@ function isProcessAlive(pid: number): boolean {
     const code = (error as NodeJS.ErrnoException).code;
     return code !== 'ESRCH';
   }
+}
+
+export function verifySupervisorOwnedStartupLock(
+  file: string,
+  pid: number,
+  instanceId: string
+): void {
+  try {
+    if (
+      Number.isSafeInteger(pid) &&
+      pid > 0 &&
+      fs.lstatSync(file).isFile() &&
+      fs.readFileSync(file, 'utf8') === `${pid}\n${instanceId}\n` &&
+      isProcessAlive(pid)
+    )
+      return;
+  } catch (cause) {
+    throw Error('local_ipc_lock_owner_mismatch', { cause });
+  }
+  throw Error('local_ipc_lock_owner_mismatch');
 }
 
 function readLockOwnerPid(lockFilePath: string): number | null {
@@ -188,7 +210,7 @@ async function startLocalIpcSocketServersInner(
   const runFilePath = config.paths?.runFilePath ?? getLocalDaemonRunFilePath();
   const lockFilePath = config.paths?.lockFilePath ?? getLocalDaemonLockFilePath();
 
-  return await withStartupLock(lockFilePath, async () => {
+  const listen = async () => {
     await removeStaleUnixSocket(probeSocketPath, 'local_ipc_socket_in_use');
     await removeStaleUnixSocket(controlSocketPath, 'local_ipc_socket_in_use');
 
@@ -254,7 +276,18 @@ async function startLocalIpcSocketServersInner(
       }
       throw error;
     }
-  });
+  };
+  if (
+    process.platform === 'win32' &&
+    process.env.MOLLY_MYGO_ISOLATED_PIPES === '1' &&
+    experimentalScope(getMollyDataDir())
+  ) {
+    const hello = getSupervisorHello();
+    if (!hello) throw Error('local_ipc_lock_owner_mismatch');
+    verifySupervisorOwnedStartupLock(lockFilePath, hello.supervisorPid, hello.supervisorInstanceId);
+    return listen();
+  }
+  return withStartupLock(lockFilePath, listen);
 }
 
 export async function startLocalIpcSocketServers(

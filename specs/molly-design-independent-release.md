@@ -2,7 +2,7 @@
 
 Status: draft
 Previous approval: [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
-Translation: current
+Translation: stale
 
 [中文](molly-design-independent-release.zh.md)
 

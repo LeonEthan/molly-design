@@ -23,7 +23,10 @@ import {
   type StoredMollyOperation,
   type WorkspaceId,
 } from '@molly/shared';
-import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+import {
+  getMollyDataDir,
+  resolveIsolatedSqlitePath,
+} from '@molly/shared/node/installation-profile';
 import { ModelSelectionSchema } from '@molly/shared/embedded-harness';
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -402,7 +405,7 @@ export const fingerprintMollyCommand = (kind: MollyOperationKind, canonical: str
 // the machine id they authenticated (session context, coordinator options).
 export const getMollyOperationStorePath = (machineId: string, homeDir = os.homedir()): string => {
   const machineKey = createHash('sha256').update(machineId).digest('hex').slice(0, 24);
-  return path.join(
+  return resolveIsolatedSqlitePath(
     getMollyDataDir(undefined, homeDir),
     'orchestration',
     machineKey,
@@ -443,6 +446,10 @@ export class MollyOperationStore {
     private readonly now: () => number = Date.now,
     options: { maintenance?: boolean } = {}
   ) {
+    if (process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT === '1') {
+      const root = getMollyDataDir();
+      dbPath = resolveIsolatedSqlitePath(root, path.relative(root, dbPath));
+    }
     const storeDirectory = path.dirname(dbPath);
     mkdirSync(storeDirectory, { recursive: true, mode: 0o700 });
     chmodSync(storeDirectory, 0o700);

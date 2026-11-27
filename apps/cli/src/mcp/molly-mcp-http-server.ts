@@ -1,9 +1,14 @@
+import { mcpToolAuthToken } from '../lib/local-supervisor-control';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import type { Readable } from 'node:stream';
 import { Logger } from '@/utils/logger';
 import { formatErrorMessage } from '@/utils/format-error';
+import {
+  getMollyCoreConfiguredEndpoint,
+  onMollyCorePermanentFailure,
+} from './molly-core-supervisor';
 import {
   MCP_HTTP_PREFERRED_PORT_ENV,
   MCP_HTTP_TOKEN_ENV,
@@ -26,9 +31,6 @@ import {
  * token into their MCP config at ACP session creation and cannot be updated
  * afterwards. While the host is down (or gave up), `getLodyMcpHttpEndpoint()`
  * returns null and new sessions fall back to the per-session stdio MCP entry.
- *
- * Startup is deliberately not awaited into the daemon's local-ready path:
- * sessions racing the first ~1s of host boot simply get stdio.
  */
 
 const HANDSHAKE_TIMEOUT_MS = 15_000;
@@ -48,10 +50,26 @@ class McpHttpHostSupervisor {
   private endpoint: MollyMcpHttpEndpoint | null = null;
   private lastPort = 0;
   private attempts = 0;
+  private resolveInitial!: () => void;
+  readonly initialAttempt = new Promise<void>((resolve) => {
+    this.resolveInitial = resolve;
+  });
   private stopping = false;
   private wakeBackoffSleep: (() => void) | null = null;
+  private detachCoreListener: (() => void) | null = null;
 
-  constructor(private readonly logger: Logger) {}
+  constructor(private readonly logger: Logger) {
+    this.detachCoreListener = onMollyCorePermanentFailure(() => {
+      if (this.stopping) return;
+      const child = this.child;
+      if (child && child.exitCode === null && child.signalCode === null) {
+        this.logger.info(
+          '[mcp-http] recycling host after permanent molly-core failure to clear stale IPC env'
+        );
+        child.kill('SIGTERM');
+      }
+    });
+  }
 
   getEndpoint(): MollyMcpHttpEndpoint | null {
     return this.endpoint;
@@ -74,6 +92,7 @@ class McpHttpHostSupervisor {
         handshaked = true;
         this.lastPort = port;
         this.endpoint = { url: `http://127.0.0.1:${port}/mcp`, token: this.token };
+        this.resolveInitial();
         this.logger.info(`[mcp-http] host serving on ${this.endpoint.url}`);
         const [code] = (await once(child, 'exit')) as [number | null, NodeJS.Signals | null];
         exitCode = code;
@@ -83,6 +102,7 @@ class McpHttpHostSupervisor {
         }
         exitCode = this.child?.exitCode ?? null;
       }
+      this.resolveInitial();
       this.endpoint = null;
       this.child = null;
       if (this.stopping) {
@@ -111,6 +131,8 @@ class McpHttpHostSupervisor {
 
   async stop(): Promise<void> {
     this.stopping = true;
+    this.detachCoreListener?.();
+    this.detachCoreListener = null;
     this.wakeBackoffSleep?.();
     const child = this.child;
     if (!child || child.exitCode !== null) {
@@ -129,18 +151,23 @@ class McpHttpHostSupervisor {
   }
 
   private spawnChild(cliEntrypoint: string): ChildProcess {
+    const coreEndpoint = getMollyCoreConfiguredEndpoint();
+    const env = { ...process.env };
+    delete env.MOLLY_CORE_IPC_TOKEN;
     const child = spawn(process.execPath, [cliEntrypoint, '__internal', 'molly-mcp-http-host'], {
-      // stdin held open as the daemon-death signal; fd 3 is the handshake
-      // pipe. The token goes through the environment (owner-readable only),
-      // never through argv.
       stdio: ['pipe', 'ignore', 'pipe', 'pipe'],
       env: {
-        ...process.env,
+        ...env,
         [MCP_HTTP_TOKEN_ENV]: this.token,
         [MCP_HTTP_PREFERRED_PORT_ENV]: String(this.lastPort),
       },
       windowsHide: true,
     });
+    child.stdin?.on('error', () => child.kill());
+    child.stdin?.write(
+      JSON.stringify({ type: 'molly/mcp-host-hello', mcpToolAuthToken, mollyCore: coreEndpoint }) +
+        '\n'
+    );
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', (chunk: string) => {
       const text = chunk.trim();
@@ -225,11 +252,11 @@ export async function startMollyMcpHttpServer(options: { logger: Logger }): Prom
   }
   const supervisor = new McpHttpHostSupervisor(options.logger);
   supervisorInstance = supervisor;
-  // Deliberately not awaited: the daemon's local-ready path must not wait for
-  // a child CLI bundle to boot. Sessions racing the handshake get stdio.
   supervisorLoop = supervisor.run().catch((error: unknown) => {
     options.logger.error(`[mcp-http] supervisor crashed: ${formatErrorMessage(error)}`);
   });
+  if (process.env.MOLLY_SUPERVISOR_TRANSPORT === 'stdin')
+    await Promise.race([supervisor.initialAttempt, supervisorLoop]);
 }
 
 export async function stopMollyMcpHttpServer(): Promise<void> {

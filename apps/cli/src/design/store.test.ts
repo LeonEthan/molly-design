@@ -7,6 +7,8 @@ import { DESIGN_LOCK_FILENAME } from './lock';
 import {
   designOperation,
   pendingDesigns,
+  pendingDesignAssociations,
+  repairDesignProjection,
   acknowledgeDesign,
   readDesignCandidate,
   type DesignPayload,
@@ -320,4 +322,90 @@ test('rejects unrenderable smooth curves before replacing the current artwork', 
     designOperation(root, { operation: 'read', sessionId: association.sessionId })
   ).rejects.toThrow(/synthetic-stroke.*smooth/);
   expect(await readFile(file, 'utf8')).toBe(historical);
+});
+
+test('pages canonical associations without repairing and verifies projection before clearing markers', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'design-recovery-'));
+  roots.push(root);
+  const pending = path.join(root, 'design-pending');
+  expect(await pendingDesignAssociations(root, { readOnly: true })).toEqual({
+    items: [],
+    nextCursor: null,
+  });
+  await expect(lstat(pending)).rejects.toMatchObject({ code: 'ENOENT' });
+  const ids = [randomUUID(), randomUUID(), randomUUID()].sort();
+  const association = (sessionId: string) => ({
+    sessionId,
+    machineId: 'machine',
+    userId: 'user',
+    name: 'test',
+    createdAt: '2026-09-09T00:00:00.000Z',
+  });
+  const [first, second] = await Promise.all(
+    ids
+      .slice(0, 2)
+      .map((sessionId) =>
+        designOperation(root, { operation: 'create', association: association(sessionId) })
+      )
+  );
+  await writeFile(path.join(pending, ids[2]), '');
+  const projection = path.join(root, 'chats', ids[0], 'design-current');
+  await rm(projection, { recursive: true });
+  await expect(
+    designOperation(root, { operation: 'read', sessionId: ids[0], readOnly: true })
+  ).rejects.toThrow('DESIGN_PROJECTION_NOT_READY');
+  expect(await pendingDesignAssociations(root, { readOnly: true, limit: 1 })).toEqual({
+    items: [
+      {
+        sessionId: ids[0],
+        association: first.association,
+        revisionId: first.revisionId,
+        projectionStale: true,
+      },
+    ],
+    nextCursor: ids[0],
+  });
+  expect(await pendingDesignAssociations(root, { readOnly: true, cursor: ids[0] })).toEqual({
+    items: [
+      {
+        sessionId: ids[1],
+        association: second.association,
+        revisionId: second.revisionId,
+        projectionStale: false,
+      },
+    ],
+    nextCursor: null,
+  });
+  await expect(lstat(projection)).rejects.toMatchObject({ code: 'ENOENT' });
+  await symlink(root, projection, 'dir');
+  const save = {
+    operation: 'save',
+    sessionId: ids[0],
+    baseRevisionId: first.revisionId,
+    content: { doc: first.doc, assets: {} },
+    name: 'changed',
+  };
+  const canonical = path.join(root, 'chats', ids[0], 'design.json');
+  await expect(designOperation(root, save)).rejects.toMatchObject({
+    code: 'DESIGN_PROJECTION_PENDING',
+  });
+  const revisionId = createHash('sha256')
+    .update(await readFile(canonical))
+    .digest('hex');
+  await expect(designOperation(root, save)).rejects.toMatchObject({
+    code: 'DESIGN_PROJECTION_PENDING',
+    revisionId,
+  });
+  await expect(acknowledgeDesign(root, ids[0], { verifyProjection: true })).rejects.toThrow();
+  expect((await lstat(path.join(pending, ids[0]))).isFile()).toBe(true);
+  await rm(projection);
+  expect(await repairDesignProjection(root, ids[0])).toEqual({ sessionId: ids[0], revisionId });
+  await rm(projection, { recursive: true });
+  await acknowledgeDesign(root, ids[0], { verifyProjection: true });
+  expect((await lstat(projection)).isDirectory()).toBe(true);
+  await expect(lstat(path.join(pending, ids[0]))).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await repairDesignProjection(root, ids[2])).toEqual({ sessionId: ids[2], missing: true });
+  await acknowledgeDesign(root, ids[2], { verifyProjection: true });
+  await expect(lstat(path.join(pending, ids[2]))).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(lstat(path.join(root, 'chats', ids[2]))).rejects.toMatchObject({ code: 'ENOENT' });
 });

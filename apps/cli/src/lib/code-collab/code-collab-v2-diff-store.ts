@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -9,7 +9,7 @@ import {
   type TurnDiffStoreStats,
 } from '@molly/turn-diff-store';
 import { getServerNow, type FileDiff, type SessionId, type WorkspaceId } from '@molly/shared';
-import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+import { getMollyDataDir, resolveIsolatedSqlitePath } from '@molly/shared/node/installation-profile';
 
 import { getLogger } from '@/utils/logger';
 
@@ -48,10 +48,15 @@ export class CodeCollabV2DiffStore {
       readonly now?: () => number;
     } = {}
   ) {
-    const dbPath = options.dbPath ?? getCodeCollabV2DiffStoreDbPath(workspaceId.toString());
-    mkdirSync(path.dirname(dbPath), { recursive: true });
+    let dbPath = options.dbPath ?? getCodeCollabV2DiffStoreDbPath(workspaceId.toString());
+    if (options.dbPath !== undefined && process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT === '1') {
+      const root = getMollyDataDir('local');
+      dbPath = resolveIsolatedSqlitePath(root, path.relative(root, dbPath));
+    }
+
     const storeOptions: TurnDiffStoreOptions = {
       dbPath,
+      ...(process.env.MOLLY_ISOLATED_DATA_ROOT_STRICT === '1' && { isolatedDataRoot: process.env.MOLLY_DATA_DIR ?? '' }),
       retentionDays: normalizeRetentionDays(options.retentionDays),
       ...(options.maxStorageBytes === undefined
         ? {}
@@ -169,7 +174,7 @@ function resolveWorkerOptions(options: {
 }
 
 export function getCodeCollabV2DiffStoreDbPath(workspaceId: string): string {
-  return path.join(
+  return resolveIsolatedSqlitePath(
     getMollyDataDir('local'),
     'code-collab-v2',
     safeWorkspaceSegment(workspaceId),

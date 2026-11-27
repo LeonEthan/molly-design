@@ -1,3 +1,5 @@
+import { readPrivateHello } from '../lib/local-supervisor-control';
+import { acceptMcpHostHello } from './molly-core-ipc';
 import http from 'node:http';
 import { writeSync } from 'node:fs';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -91,6 +93,7 @@ export async function runMollyMcpHttpHost(): Promise<void> {
     process.exitCode = 3;
     return;
   }
+  acceptMcpHostHello(await readPrivateHello(process.stdin));
   const preferredPortRaw =
     process.env[MCP_HTTP_PREFERRED_PORT_ENV] ?? process.env.LODY_MCP_HTTP_PREFERRED_PORT;
   const preferredPort = preferredPortRaw ? Number.parseInt(preferredPortRaw, 10) : 0;
@@ -116,6 +119,10 @@ export async function runMollyMcpHttpHost(): Promise<void> {
       setTimeout(() => resolve(), 3_000).unref();
     };
     // The daemon holds our stdin open; its death is our exit signal.
+    if (process.stdin.readableEnded || process.stdin.destroyed) {
+      shutdown('stdin closed');
+      return;
+    }
     process.stdin.resume();
     process.stdin.on('end', () => shutdown('stdin closed'));
     process.stdin.on('close', () => shutdown('stdin closed'));

@@ -41,7 +41,11 @@ async function listSourceFiles() {
   return stdout
     .split('\n')
     .map((entry) => entry.trim())
-    .filter((entry) => /^(?:apps\/cli|packages\/components)\/src\/.*\.tsx?$/u.test(entry));
+    .filter(
+      (entry) =>
+        /^(?:apps\/cli|packages\/components)\/src\/.*\.tsx?$/u.test(entry) ||
+        /^(?:cmd|internal)\/.*\.go$/u.test(entry),
+    );
 }
 
 function lineNumberAt(content, index) {
@@ -113,6 +117,17 @@ async function main() {
           content,
           cloudEndpointPattern,
           'CLI runtime must not read cloud endpoint globals',
+        ),
+      );
+    }
+
+    if (file.endsWith('.go') && (file.startsWith('cmd/') || file.startsWith('internal/'))) {
+      violations.push(
+        ...collectMatches(
+          file,
+          content,
+          cloudEndpointPattern,
+          'Go local core must not read cloud endpoint globals',
         ),
       );
     }

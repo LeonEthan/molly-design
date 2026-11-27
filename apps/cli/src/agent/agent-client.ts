@@ -1,3 +1,4 @@
+import { STRICT_STDIO_ARGUMENT, stdioProfileEnvironment } from '../mcp/stdio-profile';
 import { readRunIdentity, readRunResponseMeta } from '@molly/shared/embedded-run-contract';
 import {
   HARNESS_MEMORY_METHOD,
@@ -56,7 +57,10 @@ import {
   ACP_INIT_TIMEOUT_MS as DEFAULT_ACP_INIT_TIMEOUT_MS,
   ACP_NEW_SESSION_TIMEOUT_MS as DEFAULT_ACP_NEW_SESSION_TIMEOUT_MS,
 } from '@molly/shared';
-import { getLocalControlSocketPath } from '@molly/shared/node/local-ipc';
+import {
+  getLocalControlSocketPath,
+  getLocalLoroDataPlaneSocketPath,
+} from '@molly/shared/node/local-ipc';
 import { getMollyMcpHttpEndpoint } from '@/mcp/molly-mcp-http-server';
 import {
   MOLLY_BROWSER_MCP_SERVER_NAME,
@@ -910,7 +914,11 @@ export class AgentClient implements acp.Client {
     if (!cliEntrypoint) {
       return [];
     }
+    const profile = stdioProfileEnvironment();
+    const isolated = profile.MOLLY_ISOLATED_DATA_ROOT_STRICT === '1';
+    const runtimeArgs = isolated ? [STRICT_STDIO_ARGUMENT] : [];
     const env = [
+      ...Object.entries(profile).map(([name, value]) => ({ name, value })),
       { name: 'MOLLY_MCP_SESSION_ID', value: this.options.sessionId },
       { name: 'MOLLY_MCP_WORKSPACE_ID', value: this.options.workspaceId },
       { name: 'MOLLY_MCP_MACHINE_ID', value: this.options.machineId },
@@ -918,6 +926,8 @@ export class AgentClient implements acp.Client {
       { name: 'MOLLY_MCP_WORKDIR', value: workdir },
     ];
 
+    if (isolated)
+      env.push({ name: 'MOLLY_MCP_LORO_SOCKET_PATH', value: getLocalLoroDataPlaneSocketPath() });
     if (this.options.designHookLaunchId)
       env.push({ name: 'MOLLY_DESIGN_LAUNCH_ID', value: this.options.designHookLaunchId });
 
@@ -946,14 +956,14 @@ export class AgentClient implements acp.Client {
       {
         name: 'molly',
         command: process.execPath,
-        args: [cliEntrypoint, '__internal', 'molly-mcp-server'],
+        args: [...runtimeArgs, cliEntrypoint, '__internal', 'molly-mcp-server'],
         env,
       },
       ...(designSession
         ? DESIGN_MCP_SERVERS.map(({ name, stdioCommand }) => ({
             name,
             command: process.execPath,
-            args: [cliEntrypoint, '__internal', stdioCommand],
+            args: [...runtimeArgs, cliEntrypoint, '__internal', stdioCommand],
             env,
           }))
         : []),

@@ -1,5 +1,6 @@
 import { verifyBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { verifyAgentBrowser } from './agent-browser-resources.mjs'
+import { verifyMollyCore } from './molly-core-resources.mjs'
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript packaging hook. */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -157,6 +158,12 @@ export default async function signEmbeddedHarness(options) {
     verifyBrowserCookieReader,
     'manifest.json'
   )
+  const mollyCoreDirectory = path.join(path.dirname(browserDirectory), 'molly-core')
+  const resealMollyCore = prepareEmbeddedHarnessSigning(
+    mollyCoreDirectory,
+    verifyMollyCore,
+    'manifest.json'
+  )
   let rootReached = false
   await signAsync({
     ...options,
@@ -169,6 +176,7 @@ export default async function signEmbeddedHarness(options) {
         reseal()
         resealBrowser()
         resealCookieReader()
+        resealMollyCore()
         rootReached = true
       }
       return perFileOptions
@@ -178,4 +186,5 @@ export default async function signEmbeddedHarness(options) {
   verifyEmbeddedHarness(directory)
   verifyAgentBrowser(browserDirectory)
   verifyBrowserCookieReader(cookieReaderDirectory)
+  verifyMollyCore(mollyCoreDirectory)
 }
